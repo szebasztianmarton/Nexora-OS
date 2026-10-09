@@ -108,7 +108,9 @@ SDL3 is not packaged for Ubuntu 24.04. Build it from source into a prefix (the S
 ```sh
 git clone --depth 1 --branch release-3.2.30 https://github.com/libsdl-org/SDL.git ~/src/SDL
 cmake -S ~/src/SDL -B ~/src/SDL/build -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local/sdl3"
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local/sdl3" \
+    -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF \
+    -DSDL_UNIX_CONSOLE_BUILD=ON   # gamepad/joystick only; skips the X11/Wayland requirement
 cmake --build ~/src/SDL/build
 cmake --install ~/src/SDL/build
 ```

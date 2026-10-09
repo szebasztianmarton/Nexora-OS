@@ -97,7 +97,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/sdl3
-          key: sdl3-${{ env.SDL3_TAG }}-ubuntu-24.04
+          key: sdl3-${{ env.SDL3_TAG }}-console-ubuntu-24.04
 
       - name: Build SDL3 ${{ env.SDL3_TAG }}
         if: steps.sdl3-cache.outputs.cache-hit != 'true'
@@ -105,7 +105,8 @@ jobs:
           git clone --depth 1 --branch "$SDL3_TAG" https://github.com/libsdl-org/SDL.git "$RUNNER_TEMP/sdl-src"
           cmake -S "$RUNNER_TEMP/sdl-src" -B "$RUNNER_TEMP/sdl-build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/sdl3" \
-            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_EXAMPLES=OFF -DSDL_TESTS=OFF
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_EXAMPLES=OFF -DSDL_TESTS=OFF \
+            -DSDL_UNIX_CONSOLE_BUILD=ON
           cmake --build "$RUNNER_TEMP/sdl-build"
           cmake --install "$RUNNER_TEMP/sdl-build"
 
