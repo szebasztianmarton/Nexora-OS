@@ -171,6 +171,7 @@ graph LR
 - **Selection.** `InputController::start()` accepts `auto` (SDL3 if built and it starts, else evdev, else keyboard-only — `auto` never fails), `evdev`, `sdl3` or `none`. Only one backend runs at a time.
 - **GamepadNavigator** maps South → Accept, East → Back, Start/Select/Guide → Menu, D-pad/hat/left stick → directions. West and North are unused. Axes use hysteresis (press at |v| ≥ 0.5, release below 0.3) and support flicking to the opposite side. Directions auto-repeat (400 ms, then 120 ms); only the most recently pressed direction repeats, and Accept/Back/Menu never repeat.
 - **InputController** turns each `NavAction` into a posted key press + release (`Up/Down/Left/Right`, `Return`, `Escape`, `Menu`) on `QGuiApplication::focusWindow()`. If no Nexora window has focus, the action is dropped. QML therefore only implements keyboard handling. The controller supports a `suspended` flag that drops actions; `AppController` sets it while an emulator process is active (Starting/Running/Stopping), so pressing A in a game cannot trigger the launcher's "Stop emulator" action.
+- **Return-to-launcher chord**: `GamepadNavigator` tracks Select and Start separately from navigation. Holding both for 1 s (`chordHoldDuration()`) emits `returnToLauncherRequested()` once per hold; `InputController` forwards it even while suspended, and `AppController::returnToLauncher()` stops the emulator if one is Starting/Running (graceful stop with the usual SIGKILL escalation).
 
 ## Logging
 
@@ -189,7 +190,7 @@ graph LR
 
 - Buildroot external tree and a bootable x86-64 image; packaging of the application and its dependencies.
 - Kiosk start-up (e.g. EGLFS or a minimal compositor), boot directly into the UI.
-- A "return to launcher" hotkey/guide-button chord while an emulator is in the foreground (controller input is currently suspended while an emulator runs).
+- A configurable "return to launcher" combination (MVP 1 uses a fixed Select + Start hold).
 - Per-device navigation state for multiple simultaneous gamepads; caching non-gamepad devices between evdev rescans.
 - Persistent settings and configurable controls (SQLite where structured persistence is needed).
 - Per-emulator profiles, game library scanning and metadata.

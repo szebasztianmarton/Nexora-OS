@@ -34,6 +34,8 @@ void AppController::setInputController(input::InputController *input)
     m_input = input;
     if (m_input) {
         connect(m_input, &input::InputController::statusChanged, this, &AppController::inputChanged);
+        connect(m_input, &input::InputController::returnToLauncherRequested, this,
+                &AppController::returnToLauncher);
         m_input->setSuspended(m_manager.isActive());
     }
     emit inputChanged();
@@ -102,6 +104,16 @@ bool AppController::launch(const QString &emulatorId)
 
 bool AppController::stop()
 {
+    return m_manager.stop();
+}
+
+bool AppController::returnToLauncher()
+{
+    if (m_manager.state() != emulator::ProcessState::Starting
+        && m_manager.state() != emulator::ProcessState::Running) {
+        return false;
+    }
+    qCInfo(lcUi).noquote() << "Returning to the launcher: stopping" << m_activeName;
     return m_manager.stop();
 }
 

@@ -25,6 +25,10 @@ InputController::InputController(QObject *parent)
     , m_statusOverride(QStringLiteral("Controller input not started"))
 {
     connect(m_navigator, &GamepadNavigator::actionTriggered, this, &InputController::injectAction);
+    connect(m_navigator, &GamepadNavigator::returnToLauncherRequested, this, [this] {
+        qCInfo(lcInput) << "Return-to-launcher chord (Select + Start) detected";
+        emit returnToLauncherRequested();
+    });
 }
 
 InputController::~InputController()

@@ -1,5 +1,6 @@
 // AppController wired to a temporary configuration that uses the fake emulator.
 #include "AppController.h"
+#include "input/GamepadNavigator.h"
 #include "input/InputController.h"
 
 #include <QFile>
@@ -139,6 +140,27 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("exited"), Timeout);
         QVERIFY(!input.isSuspended());
         QCOMPARE(app.inputBackend(), QStringLiteral("none"));
+    }
+
+    void controllerChordReturnsToLauncher()
+    {
+        QTemporaryDir dir;
+        writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
+                    QStringLiteral("\"--sleep-ms\",\"30000\""));
+        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        nexora::input::InputController input;
+        QVERIFY(input.start(QStringLiteral("none")));
+        input.navigator()->setChordHoldDuration(std::chrono::milliseconds(30));
+        app.setInputController(&input);
+
+        QVERIFY(!app.returnToLauncher()); // nothing running
+        QVERIFY(app.launch(QStringLiteral("long")));
+        QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("running"), Timeout);
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Select, true);
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Start, true);
+        QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("exited"), Timeout);
+        QVERIFY(app.statusMessage().contains(QStringLiteral("stopped")));
+        QVERIFY(!input.isSuspended());
     }
 
     void stopAndBusyGuards()

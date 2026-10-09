@@ -48,6 +48,9 @@ private slots:
     void resetStopsRepeat();
     void resetClearsAxisState();
     void defaultRepeatDelays();
+    void chordFiresAfterHold();
+    void chordCancelledByEarlyRelease();
+    void chordNeedsBothButtons();
 #ifdef NEXORA_HAVE_EVDEV
     void evdevKeyMapping();
     void evdevAbsMapping();
@@ -297,6 +300,54 @@ void TestGamepadNavigator::normalizeAxisValues()
     QCOMPARE(normalizeAxis(5, 10, 3), 0.0);
 }
 #endif
+
+void TestGamepadNavigator::chordFiresAfterHold()
+{
+    GamepadNavigator nav;
+    QCOMPARE(nav.chordHoldDuration(), 1000ms);
+    nav.setChordHoldDuration(50ms);
+    QSignalSpy chord(&nav, &GamepadNavigator::returnToLauncherRequested);
+    nav.buttonEvent(GamepadButton::Select, true);
+    nav.buttonEvent(GamepadButton::Start, true);
+    QCOMPARE(chord.size(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000);
+    QTest::qWait(150);
+    QCOMPARE(chord.size(), 1); // once per hold
+
+    nav.buttonEvent(GamepadButton::Start, false);
+    nav.buttonEvent(GamepadButton::Start, true);
+    QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 2, 2000);
+}
+
+void TestGamepadNavigator::chordCancelledByEarlyRelease()
+{
+    GamepadNavigator nav;
+    nav.setChordHoldDuration(150ms);
+    QSignalSpy chord(&nav, &GamepadNavigator::returnToLauncherRequested);
+    nav.buttonEvent(GamepadButton::Start, true);
+    nav.buttonEvent(GamepadButton::Select, true);
+    QTest::qWait(30);
+    nav.buttonEvent(GamepadButton::Select, false);
+    QTest::qWait(300);
+    QCOMPARE(chord.size(), 0);
+
+    nav.buttonEvent(GamepadButton::Select, true);
+    nav.reset(); // e.g. device disconnected
+    QTest::qWait(300);
+    QCOMPARE(chord.size(), 0);
+}
+
+void TestGamepadNavigator::chordNeedsBothButtons()
+{
+    GamepadNavigator nav;
+    nav.setChordHoldDuration(20ms);
+    QSignalSpy chord(&nav, &GamepadNavigator::returnToLauncherRequested);
+    nav.buttonEvent(GamepadButton::Start, true);
+    nav.buttonEvent(GamepadButton::Guide, true);
+    nav.buttonEvent(GamepadButton::South, true);
+    QTest::qWait(150);
+    QCOMPARE(chord.size(), 0);
+}
 
 QTEST_GUILESS_MAIN(TestGamepadNavigator)
 #include "tst_gamepadnavigator.moc"

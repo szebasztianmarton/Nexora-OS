@@ -60,7 +60,7 @@ Implemented:
 - **Safety defaults**: refuses to run as root unless explicitly allowed; the launched emulator receives SIGTERM if the launcher dies.
 - **Testing**: Qt Test / CTest unit and integration tests, including a QML smoke test, driven by a fake emulator executable.
 
-Planned (not in MVP 1): the Buildroot-based bootable image, kiosk/EGLFS start-up, a "return to launcher" hotkey while an emulator is in the foreground, persistent settings (SQLite where needed), game library scanning and metadata, configurable controls. See [docs/architecture.md](docs/architecture.md#future-work).
+Planned (not in MVP 1): the Buildroot-based bootable image, kiosk/EGLFS start-up, persistent settings (SQLite where needed), game library scanning and metadata, configurable controls. See [docs/architecture.md](docs/architecture.md#future-work).
 
 ## Current limitations
 
@@ -68,7 +68,7 @@ Planned (not in MVP 1): the Buildroot-based bootable image, kiosk/EGLFS start-up
 - Only one emulator process can run at a time.
 - No real emulator has been tested; the shipped `example.json` just runs `/bin/true`, and the development configurations run the bundled fake emulator.
 - No real gamepad hardware has been tested (neither evdev nor SDL3).
-- Controller navigation is suspended while an emulator runs (devices are never grabbed, so the emulator keeps receiving the pad). The running overlay can therefore only be stopped with the keyboard (Enter) or by quitting the emulator itself; a controller "return to launcher" chord is future work.
+- Controller navigation is suspended while an emulator runs (devices are never grabbed, so the emulator keeps receiving the pad). With a controller, a running emulator is left by holding **Select + Start** for one second (or by quitting the emulator itself). Emulators that bind the same combination will also see it.
 - Several connected gamepads share one navigation state, so simultaneous input from two pads can interfere.
 - Configuration is read at start-up and on manual reload from the diagnostics screen; there is no file watching and no in-app editing.
 - Controls are fixed (not remappable). Settings are not persisted.
@@ -222,7 +222,7 @@ The generated files contain absolute paths into the build tree; they are for dev
 | Back | Esc / Backspace | B (east button) |
 | Scroll (diagnostics) | ↑ / ↓ | D-pad, left stick |
 | Reload configuration (diagnostics) | Enter | A |
-| Stop running emulator (overlay) | Enter / Space | — (controller input is paused while an emulator runs) |
+| Stop running emulator (overlay) | Enter / Space | Hold Select + Start for 1 s |
 | Quit (development only) | Ctrl+Q | — |
 
 Back on the library screen does nothing (the UI never quits on Back). While an emulator is running, every key except the Stop action is ignored. Held directions auto-repeat (400 ms initial delay, then every 120 ms). The left stick triggers at 50 % deflection and releases below 30 %. Buttons are named by position: "A" is the south button (Cross on PlayStation layouts), "B" the east button. The mouse also works: click selects a card, double-click launches, and the Stop and Reload buttons are clickable.

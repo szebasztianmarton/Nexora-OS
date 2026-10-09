@@ -60,7 +60,9 @@ FocusScope {
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "The library returns automatically when the emulator exits."
+            text: "The library returns automatically when the emulator exits.\n"
+                  + "Controller: hold Select + Start to stop the emulator and return."
+            horizontalAlignment: Text.AlignHCenter
             color: Theme.textMuted
             font.pixelSize: Theme.fontSmall
         }

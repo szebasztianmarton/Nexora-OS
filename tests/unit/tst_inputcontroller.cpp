@@ -51,6 +51,7 @@ class TestInputController : public QObject
     Q_OBJECT
 
 private slots:
+    void chordWorksWhileSuspended();
     void acceptSendsReturn();
     void actionMapping_data();
     void actionMapping();
@@ -218,6 +219,22 @@ void TestInputController::restartReplacesBackend()
     QVERIFY(controller.start(QStringLiteral("none")));
     QCOMPARE(controller.backendName(), QStringLiteral("none"));
     QCOMPARE(controller.findChildren<nexora::input::InputBackend *>().size(), 0);
+}
+
+void TestInputController::chordWorksWhileSuspended()
+{
+    InputController controller;
+    RecordingWindow window;
+    controller.setTargetWindowProvider([&window] { return &window; });
+    controller.navigator()->setChordHoldDuration(std::chrono::milliseconds(20));
+    QSignalSpy chord(&controller, &InputController::returnToLauncherRequested);
+
+    controller.setSuspended(true);
+    controller.navigator()->buttonEvent(GamepadButton::Select, true);
+    controller.navigator()->buttonEvent(GamepadButton::Start, true);
+    QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000);
+    QCoreApplication::processEvents();
+    QVERIFY(window.events.isEmpty()); // navigation (Menu) still dropped
 }
 
 QTEST_MAIN(TestInputController)

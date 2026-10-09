@@ -27,15 +27,15 @@ Test executables are written to `build/<preset>/tests/`.
 | `tst_processstate` | `nexora_emulator_manager` | Full transition table (data-driven), active states, state names, error messages. |
 | `tst_launchvalidation` | `nexora_emulator_manager` | `validateExecutable()` (empty, relative, missing, directory, not executable, valid), synchronous failure of invalid launches, disabled configs, empty ids, `stop()` without a process. |
 | `tst_emulatorlistmodel` | `nexora_ui` | Model roles, status updates and reset, lookup by id. |
-| `tst_gamepadnavigator` | `nexora_input` | Button → action mapping, release behaviour, ignored buttons, axis thresholds and hysteresis, directions, flipping to the opposite side, hat axes, auto-repeat (start, stop on release, latest direction wins, no repeat for Accept/Back/Menu), `reset()`, default repeat delays. When the evdev backend is built (`NEXORA_HAVE_EVDEV`): evdev key/abs mapping and axis normalization. |
-| `tst_inputcontroller` (GUI) | `nexora_input` | Action → key mapping, synthesized press/release delivery to a target window, navigator → window path, suspension, dropped events without a target window, `start("none")`, unknown backend failure, `auto` never failing, backend restart. |
+| `tst_gamepadnavigator` | `nexora_input` | Button → action mapping, release behaviour, ignored buttons, axis thresholds and hysteresis, directions, flipping to the opposite side, hat axes, auto-repeat (start, stop on release, latest direction wins, no repeat for Accept/Back/Menu), `reset()`, default repeat delays, Select + Start hold chord (fires once per hold, cancelled by early release/reset, needs both buttons). When the evdev backend is built (`NEXORA_HAVE_EVDEV`): evdev key/abs mapping and axis normalization. |
+| `tst_inputcontroller` (GUI) | `nexora_input` | Action → key mapping, synthesized press/release delivery to a target window, navigator → window path, suspension, dropped events without a target window, `start("none")`, unknown backend failure, `auto` never failing, backend restart, chord still reported while suspended. |
 
 ### Integration (`-L integration`)
 
 | Test | Links | Covers |
 | --- | --- | --- |
 | `tst_emulatormanager` | `nexora_emulator_manager` + fake emulator | Normal exit, non-zero exit, crash (`segv` and `abort`), missing executable, failure to start, stdout/stderr capture, output bound, delayed start-up, controlled stop (state sequence `Starting → Running → Stopping → Exited`), SIGKILL escalation with a short stop timeout, rejection of a second launch, relaunch after exit and from the `processFinished` slot, recovery after failures, destroying the manager while a process runs. |
-| `tst_appcontroller` | `nexora_ui` + fake emulator | Config loading and issue reporting, missing directory, launch-and-return, failure reporting and recovery, stop and busy guards (e.g. no reload while running). |
+| `tst_appcontroller` | `nexora_ui` + fake emulator | Config loading and issue reporting, missing directory, launch-and-return, failure reporting and recovery, stop and busy guards (e.g. no reload while running), controller input suspended while an emulator runs, Select + Start chord stops the running emulator. |
 | `tst_qmlsmoke` (GUI) | `nexora_uiplugin`, `nexora_ui` + fake emulator | Loads the real `Main.qml` via `loadMainWindow()`: initial focus, ←/→ navigation, F1 → diagnostics, Esc → back, Esc on the root is a no-op, Enter launches and shows the running overlay with focus on Stop, Esc ignored while running, Enter stops and returns focus to the library, empty-configuration state. Fails on any QML warning. |
 
 ## Fake emulator

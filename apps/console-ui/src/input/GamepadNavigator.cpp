@@ -10,6 +10,8 @@ GamepadNavigator::GamepadNavigator(QObject *parent)
 {
     m_repeatTimer.setTimerType(Qt::PreciseTimer);
     connect(&m_repeatTimer, &QTimer::timeout, this, &GamepadNavigator::onRepeatTimeout);
+    m_chordTimer.setSingleShot(true);
+    connect(&m_chordTimer, &QTimer::timeout, this, &GamepadNavigator::returnToLauncherRequested);
 }
 
 void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed)
@@ -44,6 +46,11 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed)
         return;
     case GamepadButton::Start:
     case GamepadButton::Select:
+        (button == GamepadButton::Start ? m_startHeld : m_selectHeld) = pressed;
+        updateChord();
+        if (pressed)
+            emit actionTriggered(NavAction::Menu);
+        return;
     case GamepadButton::Guide:
         if (pressed)
             emit actionTriggered(NavAction::Menu);
@@ -93,8 +100,26 @@ void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized)
     }
 }
 
+void GamepadNavigator::updateChord()
+{
+    if (m_selectHeld && m_startHeld) {
+        if (!m_chordTimer.isActive())
+            m_chordTimer.start(m_chordHold);
+    } else {
+        m_chordTimer.stop();
+    }
+}
+
+void GamepadNavigator::setChordHoldDuration(std::chrono::milliseconds duration)
+{
+    m_chordHold = std::max(duration, std::chrono::milliseconds{1});
+}
+
 void GamepadNavigator::reset()
 {
+    m_selectHeld = false;
+    m_startHeld = false;
+    m_chordTimer.stop();
     m_repeatTimer.stop();
     m_repeatSource = -1;
     m_held.fill(std::nullopt);

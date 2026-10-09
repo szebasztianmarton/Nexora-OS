@@ -269,9 +269,8 @@ void EvdevGamepadBackend::updateStatus()
     } else {
         status = QStringLiteral("No gamepad detected; waiting for one to be connected");
     }
-    if (m_permissionDeniedCount > 0 && !names.isEmpty())
-        status += QStringLiteral(" (%1 input device(s) not readable: permission denied)")
-                      .arg(m_permissionDeniedCount);
+    // Unreadable nodes are only worth mentioning while no gamepad works: once one is open,
+    // they are almost always keyboards/mice the launcher never needs.
 
     if (status == m_status && names == m_lastNames)
         return;

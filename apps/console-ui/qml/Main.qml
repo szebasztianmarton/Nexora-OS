@@ -18,7 +18,8 @@ ApplicationWindow {
     header: Header { app: window.app }
     footer: HintBar {
         hints: window.app.busy
-               ? [{ button: "Enter", action: "Stop emulator (controller paused while running)" }]
+               ? [{ button: "Enter", action: "Stop emulator" },
+                  { button: "Select + Start (hold)", action: "Return to launcher" }]
                : stack.depth > 1
                  ? [{ button: "A / Enter", action: "Reload config" },
                     { button: "↑ ↓", action: "Scroll" },

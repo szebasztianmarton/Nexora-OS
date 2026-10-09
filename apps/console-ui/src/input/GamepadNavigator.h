@@ -18,6 +18,10 @@ namespace nexora::input {
 // to directions. Axes are edge-triggered with hysteresis (press at |v| >= 0.5, release at
 // |v| < 0.3). A held direction auto-repeats (initial delay, then interval); only the most
 // recently pressed direction repeats. Accept/Back/Menu never repeat.
+//
+// Holding Select + Start together for chordHoldDuration() emits returnToLauncherRequested()
+// once per hold. The chord is tracked independently of navigation, so it keeps working
+// while the InputController drops navigation actions (emulator in the foreground).
 class GamepadNavigator : public QObject
 {
     Q_OBJECT
@@ -36,6 +40,8 @@ public:
     void reset();
 
     void setRepeatDelays(std::chrono::milliseconds initial, std::chrono::milliseconds interval);
+    void setChordHoldDuration(std::chrono::milliseconds duration);
+    std::chrono::milliseconds chordHoldDuration() const { return m_chordHold; }
     std::chrono::milliseconds initialRepeatDelay() const { return m_initialDelay; }
     std::chrono::milliseconds repeatInterval() const { return m_interval; }
 
@@ -44,6 +50,7 @@ public:
 
 signals:
     void actionTriggered(nexora::input::NavAction action);
+    void returnToLauncherRequested();
 
 private:
     // Independent sources that can hold a direction.
@@ -53,6 +60,7 @@ private:
     void pressDirection(int source, NavAction action);
     void releaseSource(int source);
     void onRepeatTimeout();
+    void updateChord();
 
     std::array<std::optional<NavAction>, SourceCount> m_held{};
     std::array<int, 4> m_axisState{}; // -1, 0, +1 per GamepadAxis
@@ -60,6 +68,10 @@ private:
     QTimer m_repeatTimer;
     std::chrono::milliseconds m_initialDelay{400};
     std::chrono::milliseconds m_interval{120};
+    bool m_selectHeld = false;
+    bool m_startHeld = false;
+    QTimer m_chordTimer;
+    std::chrono::milliseconds m_chordHold{1000};
 };
 
 } // namespace nexora::input

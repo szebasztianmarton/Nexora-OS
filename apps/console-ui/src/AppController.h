@@ -81,6 +81,8 @@ public:
 
     Q_INVOKABLE bool launch(const QString &emulatorId);
     Q_INVOKABLE bool stop();
+    // Controller "return to launcher" chord: stops the running emulator, if any.
+    Q_INVOKABLE bool returnToLauncher();
     Q_INVOKABLE bool reloadConfig();
     Q_INVOKABLE QStringList recentLog() const;
 

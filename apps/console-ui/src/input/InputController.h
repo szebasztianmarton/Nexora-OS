@@ -61,6 +61,9 @@ signals:
     void suspendedChanged();
     // Emitted for every action that was delivered to a window.
     void actionDelivered(nexora::input::NavAction action);
+    // The "return to launcher" chord (hold Select + Start) was completed. Emitted even while
+    // suspended: this is how a controller-only user leaves a running emulator.
+    void returnToLauncherRequested();
 
 private:
     bool startBackend(std::unique_ptr<InputBackend> backend);
