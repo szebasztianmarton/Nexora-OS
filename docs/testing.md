@@ -134,7 +134,7 @@ The test presets additionally set `QT_QPA_PLATFORM=offscreen`, print output on f
 
 On failure, `LastTest.log` is uploaded as an artifact.
 
-**Status: CI configured; status not yet verified.**
+**Status:** all four jobs passed on `feature/mvp1` ([run \#2](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/37954884460), 2026-10-09). The first run failed only in the SDL3 job (SDL refused to configure without X11/Wayland headers), fixed by building SDL as a console-only library.
 
 ## Not covered by automated tests
 

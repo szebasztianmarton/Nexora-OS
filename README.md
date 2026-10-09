@@ -38,7 +38,7 @@ Current stage: **MVP 1 desktop prototype** (version 0.1.0, roadmap phases 1–3 
 | --- | --- |
 | Build (CMake presets, Ninja, Qt 6.4.2 on Ubuntu 24.04, GCC 13) | Verified locally; `ci` preset builds cleanly with `-Werror` |
 | Test suite (7 unit + 3 integration test executables) | 10/10 passing locally (offscreen; GCC + Clang, Debug + Release; also as a non-root user) |
-| GitHub Actions CI | Configured; status not yet verified |
+| GitHub Actions CI | Passing on `feature/mvp1` ([run \#2](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/37954884460)): GCC Debug -Werror, Clang Debug -Werror, GCC Release, GCC + SDL3 3.2.30 |
 | Optional SDL3 gamepad backend | Compiles and links against SDL 3.2.30 built from source; never tested with a real controller |
 | evdev gamepad backend | Mapping and navigation logic unit-tested; never tested with real controller hardware |
 | Real emulators | None tested; no compatibility with any real emulator is claimed |
@@ -86,7 +86,7 @@ Planned (not in MVP 1): the Buildroot-based bootable image, kiosk/EGLFS start-up
 | Configuration | JSON files (`QJsonDocument`) |
 | Logging | Qt logging categories (`nexora.*`) |
 | Testing | Qt Test and CTest, plus a fake emulator executable |
-| CI | GitHub Actions (configured; status not yet verified) |
+| CI | GitHub Actions on ubuntu-24.04 (passing, see Project Status) |
 
 Planned: Buildroot-based Linux image; SQLite where structured persistence is needed.
 
