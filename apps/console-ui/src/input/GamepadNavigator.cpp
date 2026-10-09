@@ -14,13 +14,13 @@ GamepadNavigator::GamepadNavigator(QObject *parent)
     connect(&m_chordTimer, &QTimer::timeout, this, &GamepadNavigator::returnToLauncherRequested);
 }
 
-void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed)
+void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 device)
 {
     auto directional = [&](int source, NavAction action) {
         if (pressed)
-            pressDirection(source, action);
+            pressDirection(device, source, action);
         else
-            releaseSource(source);
+            releaseSource(device, source);
     };
 
     switch (button) {
@@ -45,12 +45,14 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed)
             emit actionTriggered(NavAction::Back);
         return;
     case GamepadButton::Start:
-    case GamepadButton::Select:
-        (button == GamepadButton::Start ? m_startHeld : m_selectHeld) = pressed;
+    case GamepadButton::Select: {
+        DeviceState &state = m_devices[device];
+        (button == GamepadButton::Start ? state.startHeld : state.selectHeld) = pressed;
         updateChord();
         if (pressed)
             emit actionTriggered(NavAction::Menu);
         return;
+    }
     case GamepadButton::Guide:
         if (pressed)
             emit actionTriggered(NavAction::Menu);
@@ -61,7 +63,7 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed)
     }
 }
 
-void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized)
+void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized, quint32 device)
 {
     if (!std::isfinite(normalized))
         return;
@@ -76,7 +78,8 @@ void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized)
     case GamepadAxis::HatY: source = SrcHatY; horizontal = false; break;
     }
 
-    const int previous = m_axisState[index];
+    DeviceState &state = m_devices[device];
+    const int previous = state.axisState[index];
     const double magnitude = std::abs(normalized);
     int next = previous;
     if (previous == 0) {
@@ -91,22 +94,31 @@ void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized)
     if (next == previous)
         return;
 
-    m_axisState[index] = next;
-    releaseSource(source);
+    state.axisState[index] = next;
+    releaseSource(device, source);
     if (next != 0) {
         const NavAction action = horizontal ? (next < 0 ? NavAction::Left : NavAction::Right)
                                             : (next < 0 ? NavAction::Up : NavAction::Down);
-        pressDirection(source, action);
+        pressDirection(device, source, action);
     }
 }
 
 void GamepadNavigator::updateChord()
 {
-    if (m_selectHeld && m_startHeld) {
-        if (!m_chordTimer.isActive())
-            m_chordTimer.start(m_chordHold);
-    } else {
+    // Keep a running chord as long as its device still holds both buttons.
+    if (m_chordDevice) {
+        const auto it = m_devices.find(*m_chordDevice);
+        if (it != m_devices.end() && it->second.selectHeld && it->second.startHeld)
+            return;
         m_chordTimer.stop();
+        m_chordDevice.reset();
+    }
+    for (const auto &[device, state] : m_devices) {
+        if (state.selectHeld && state.startHeld) {
+            m_chordDevice = device;
+            m_chordTimer.start(m_chordHold);
+            return;
+        }
     }
 }
 
@@ -117,13 +129,21 @@ void GamepadNavigator::setChordHoldDuration(std::chrono::milliseconds duration)
 
 void GamepadNavigator::reset()
 {
-    m_selectHeld = false;
-    m_startHeld = false;
+    m_devices.clear();
     m_chordTimer.stop();
+    m_chordDevice.reset();
     m_repeatTimer.stop();
-    m_repeatSource = -1;
-    m_held.fill(std::nullopt);
-    m_axisState.fill(0);
+    m_repeat.reset();
+}
+
+void GamepadNavigator::resetDevice(quint32 device)
+{
+    m_devices.erase(device);
+    if (m_repeat && m_repeat->device == device) {
+        m_repeat.reset();
+        m_repeatTimer.stop();
+    }
+    updateChord();
 }
 
 void GamepadNavigator::setRepeatDelays(std::chrono::milliseconds initial,
@@ -135,28 +155,33 @@ void GamepadNavigator::setRepeatDelays(std::chrono::milliseconds initial,
 
 std::optional<NavAction> GamepadNavigator::repeatingAction() const
 {
-    if (m_repeatSource < 0)
+    if (!m_repeat)
         return std::nullopt;
-    return m_held[static_cast<std::size_t>(m_repeatSource)];
+    const auto it = m_devices.find(m_repeat->device);
+    if (it == m_devices.end())
+        return std::nullopt;
+    return it->second.held[static_cast<std::size_t>(m_repeat->source)];
 }
 
-void GamepadNavigator::pressDirection(int source, NavAction action)
+void GamepadNavigator::pressDirection(quint32 device, int source, NavAction action)
 {
-    m_held[static_cast<std::size_t>(source)] = action;
-    m_repeatSource = source; // latest press wins
+    m_devices[device].held[static_cast<std::size_t>(source)] = action;
+    m_repeat = SourceRef{device, source}; // latest press wins, across all devices
     emit actionTriggered(action);
     // A slot may have called reset() in response; only arm the timer if still held.
-    if (m_repeatSource == source && m_held[static_cast<std::size_t>(source)])
+    if (repeatingAction())
         m_repeatTimer.start(m_initialDelay);
 }
 
-void GamepadNavigator::releaseSource(int source)
+void GamepadNavigator::releaseSource(quint32 device, int source)
 {
-    m_held[static_cast<std::size_t>(source)] = std::nullopt;
-    if (m_repeatSource == source) {
+    const auto it = m_devices.find(device);
+    if (it != m_devices.end())
+        it->second.held[static_cast<std::size_t>(source)] = std::nullopt;
+    if (m_repeat && m_repeat->device == device && m_repeat->source == source) {
         // Like keyboard auto-repeat: releasing the repeating key stops repetition even if
         // an older direction is still held.
-        m_repeatSource = -1;
+        m_repeat.reset();
         m_repeatTimer.stop();
     }
 }

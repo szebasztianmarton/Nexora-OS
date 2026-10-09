@@ -194,7 +194,6 @@ void EvdevGamepadBackend::readDevice(int fd)
             qCInfo(lcInput).noquote() << "Gamepad disconnected:" << device.name
                                       << '(' + errnoString(errno) + ')';
             closeDevice(device);
-            navigator()->reset(); // drop anything held on the vanished device
             removeClosedDevices();
             updateStatus();
             return;
@@ -209,7 +208,7 @@ void EvdevGamepadBackend::readDevice(int fd)
                 if (ev.code == SYN_DROPPED) {
                     // Kernel buffer overflowed: state is unknown until the next report.
                     device.dropping = true;
-                    navigator()->reset();
+                    navigator()->resetDevice(static_cast<quint32>(fd));
                 } else if (ev.code == SYN_REPORT) {
                     device.dropping = false;
                 }
@@ -221,11 +220,12 @@ void EvdevGamepadBackend::readDevice(int fd)
                 if (ev.value == 2)
                     continue; // kernel autorepeat; the navigator does its own
                 if (const auto button = evdevKeyToButton(ev.code))
-                    navigator()->buttonEvent(*button, ev.value != 0);
+                    navigator()->buttonEvent(*button, ev.value != 0, static_cast<quint32>(fd));
             } else if (ev.type == EV_ABS) {
                 if (const auto axis = evdevAbsToAxis(ev.code)) {
                     const auto &range = device.ranges[static_cast<std::size_t>(*axis)];
-                    navigator()->axisEvent(*axis, normalizeAxis(ev.value, range.min, range.max));
+                    navigator()->axisEvent(*axis, normalizeAxis(ev.value, range.min, range.max),
+                                            static_cast<quint32>(fd));
                 }
             }
         }
@@ -240,6 +240,8 @@ void EvdevGamepadBackend::closeDevice(Device &device)
         device.notifier = nullptr;
     }
     if (device.fd >= 0) {
+        // Drop whatever the device held; its fd number may be reused by the next device.
+        navigator()->resetDevice(static_cast<quint32>(device.fd));
         ::close(device.fd);
         device.fd = -1;
     }

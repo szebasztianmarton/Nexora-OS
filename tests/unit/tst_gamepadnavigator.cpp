@@ -51,6 +51,9 @@ private slots:
     void chordFiresAfterHold();
     void chordCancelledByEarlyRelease();
     void chordNeedsBothButtons();
+    void devicesDoNotInterfere();
+    void chordIsPerDevice();
+    void resetDeviceDropsOnlyThatDevice();
 #ifdef NEXORA_HAVE_EVDEV
     void evdevKeyMapping();
     void evdevAbsMapping();
@@ -347,6 +350,48 @@ void TestGamepadNavigator::chordNeedsBothButtons()
     nav.buttonEvent(GamepadButton::South, true);
     QTest::qWait(150);
     QCOMPARE(chord.size(), 0);
+}
+
+void TestGamepadNavigator::devicesDoNotInterfere()
+{
+    GamepadNavigator nav;
+    nav.setRepeatDelays(30ms, 15ms);
+    QSignalSpy spy(&nav, &GamepadNavigator::actionTriggered);
+    nav.axisEvent(GamepadAxis::LeftX, 1.0, 1); // pad 1 holds right
+    QCOMPARE(actions(spy), QList<NavAction>{NavAction::Right});
+    nav.axisEvent(GamepadAxis::LeftX, 0.05, 2); // pad 2 stick noise near centre
+    QCOMPARE(nav.repeatingAction(), std::optional<NavAction>(NavAction::Right));
+    QTRY_VERIFY_WITH_TIMEOUT(spy.size() >= 3, 2000); // still repeating
+    nav.axisEvent(GamepadAxis::LeftX, 0.0, 1);
+    QVERIFY(!nav.repeatingAction());
+}
+
+void TestGamepadNavigator::chordIsPerDevice()
+{
+    GamepadNavigator nav;
+    nav.setChordHoldDuration(20ms);
+    QSignalSpy chord(&nav, &GamepadNavigator::returnToLauncherRequested);
+    nav.buttonEvent(GamepadButton::Select, true, 1);
+    nav.buttonEvent(GamepadButton::Start, true, 2); // different pads: not a chord
+    QTest::qWait(120);
+    QCOMPARE(chord.size(), 0);
+    nav.buttonEvent(GamepadButton::Start, true, 1);
+    QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000);
+}
+
+void TestGamepadNavigator::resetDeviceDropsOnlyThatDevice()
+{
+    GamepadNavigator nav;
+    nav.setChordHoldDuration(60ms);
+    QSignalSpy chord(&nav, &GamepadNavigator::returnToLauncherRequested);
+    nav.buttonEvent(GamepadButton::DpadUp, true, 1);
+    nav.buttonEvent(GamepadButton::Select, true, 2);
+    nav.buttonEvent(GamepadButton::Start, true, 2);
+    nav.resetDevice(1);
+    QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000); // pad 2's chord survives
+    nav.buttonEvent(GamepadButton::DpadDown, true, 2);
+    nav.resetDevice(2);
+    QVERIFY(!nav.repeatingAction());
 }
 
 QTEST_GUILESS_MAIN(TestGamepadNavigator)

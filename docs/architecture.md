@@ -191,7 +191,7 @@ graph LR
 - Buildroot external tree and a bootable x86-64 image; packaging of the application and its dependencies.
 - Kiosk start-up (e.g. EGLFS or a minimal compositor), boot directly into the UI.
 - A configurable "return to launcher" combination (MVP 1 uses a fixed Select + Start hold).
-- Per-device navigation state for multiple simultaneous gamepads; caching non-gamepad devices between evdev rescans.
+- Caching non-gamepad devices between evdev rescans (every `/dev/input` change currently re-probes all event nodes).
 - Persistent settings and configurable controls (SQLite where structured persistence is needed).
 - Per-emulator profiles, game library scanning and metadata.
 - Validation with real controllers and real emulators on target hardware.

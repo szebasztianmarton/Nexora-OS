@@ -69,7 +69,6 @@ Planned (not in MVP 1): the Buildroot-based bootable image, kiosk/EGLFS start-up
 - No real emulator has been tested; the shipped `example.json` just runs `/bin/true`, and the development configurations run the bundled fake emulator.
 - No real gamepad hardware has been tested (neither evdev nor SDL3).
 - Controller navigation is suspended while an emulator runs (devices are never grabbed, so the emulator keeps receiving the pad). With a controller, a running emulator is left by holding **Select + Start** for one second (or by quitting the emulator itself). Emulators that bind the same combination will also see it.
-- Several connected gamepads share one navigation state, so simultaneous input from two pads can interfere.
 - Configuration is read at start-up and on manual reload from the diagnostics screen; there is no file watching and no in-app editing.
 - Controls are fixed (not remappable). Settings are not persisted.
 - `Ctrl+Q` quits the prototype (a development convenience the console build will not expose).

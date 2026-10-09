@@ -126,21 +126,21 @@ void Sdl3GamepadBackend::pump()
             qCInfo(lcInput).noquote() << "Gamepad disconnected:" << it->second.name;
             SDL_CloseGamepad(it->second.gamepad);
             m_pads.erase(it);
-            navigator()->reset();
+            navigator()->resetDevice(event.gdevice.which);
             devicesChanged = true;
             break;
         }
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
         case SDL_EVENT_GAMEPAD_BUTTON_UP:
             if (const auto button = sdlButtonToButton(event.gbutton.button))
-                navigator()->buttonEvent(*button, event.gbutton.down);
+                navigator()->buttonEvent(*button, event.gbutton.down, event.gbutton.which);
             break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
             const double value = std::clamp(event.gaxis.value / 32767.0, -1.0, 1.0);
             if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX)
-                navigator()->axisEvent(GamepadAxis::LeftX, value);
+                navigator()->axisEvent(GamepadAxis::LeftX, value, event.gaxis.which);
             else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY)
-                navigator()->axisEvent(GamepadAxis::LeftY, value);
+                navigator()->axisEvent(GamepadAxis::LeftY, value, event.gaxis.which);
             break;
         }
         default:

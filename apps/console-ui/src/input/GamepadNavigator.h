@@ -8,6 +8,7 @@
 
 #include <array>
 #include <chrono>
+#include <map>
 #include <optional>
 
 namespace nexora::input {
@@ -19,9 +20,13 @@ namespace nexora::input {
 // |v| < 0.3). A held direction auto-repeats (initial delay, then interval); only the most
 // recently pressed direction repeats. Accept/Back/Menu never repeat.
 //
-// Holding Select + Start together for chordHoldDuration() emits returnToLauncherRequested()
-// once per hold. The chord is tracked independently of navigation, so it keeps working
-// while the InputController drops navigation actions (emulator in the foreground).
+// Holding Select + Start together on one device for chordHoldDuration() emits
+// returnToLauncherRequested() once per hold. The chord is tracked independently of
+// navigation, so it keeps working while the InputController drops navigation actions
+// (emulator in the foreground).
+//
+// State is kept per |device| (any backend-chosen id, e.g. an fd or SDL instance id), so
+// several connected pads do not release or override each other's held directions.
 class GamepadNavigator : public QObject
 {
     Q_OBJECT
@@ -32,18 +37,19 @@ public:
 
     explicit GamepadNavigator(QObject *parent = nullptr);
 
-    void buttonEvent(GamepadButton button, bool pressed);
-    void axisEvent(GamepadAxis axis, double normalized);
+    void buttonEvent(GamepadButton button, bool pressed, quint32 device = 0);
+    void axisEvent(GamepadAxis axis, double normalized, quint32 device = 0);
 
-    // Forgets all held state and stops auto-repeat (e.g. after dropped events, a device
-    // disconnect or when input is suspended).
+    // Forgets all held state and stops auto-repeat (e.g. when input is suspended).
     void reset();
+    // Forgets the state of one device (disconnect, dropped events).
+    void resetDevice(quint32 device);
 
     void setRepeatDelays(std::chrono::milliseconds initial, std::chrono::milliseconds interval);
-    void setChordHoldDuration(std::chrono::milliseconds duration);
-    std::chrono::milliseconds chordHoldDuration() const { return m_chordHold; }
     std::chrono::milliseconds initialRepeatDelay() const { return m_initialDelay; }
     std::chrono::milliseconds repeatInterval() const { return m_interval; }
+    void setChordHoldDuration(std::chrono::milliseconds duration);
+    std::chrono::milliseconds chordHoldDuration() const { return m_chordHold; }
 
     // The direction currently auto-repeating, if any.
     std::optional<NavAction> repeatingAction() const;
@@ -57,20 +63,32 @@ private:
     enum Source { SrcDpadUp, SrcDpadDown, SrcDpadLeft, SrcDpadRight, SrcLeftX, SrcLeftY,
                   SrcHatX, SrcHatY, SourceCount };
 
-    void pressDirection(int source, NavAction action);
-    void releaseSource(int source);
+    struct DeviceState
+    {
+        std::array<std::optional<NavAction>, SourceCount> held{};
+        std::array<int, 4> axisState{}; // -1, 0, +1 per GamepadAxis
+        bool selectHeld = false;
+        bool startHeld = false;
+    };
+
+    struct SourceRef
+    {
+        quint32 device = 0;
+        int source = -1;
+    };
+
+    void pressDirection(quint32 device, int source, NavAction action);
+    void releaseSource(quint32 device, int source);
     void onRepeatTimeout();
     void updateChord();
 
-    std::array<std::optional<NavAction>, SourceCount> m_held{};
-    std::array<int, 4> m_axisState{}; // -1, 0, +1 per GamepadAxis
-    int m_repeatSource = -1;
+    std::map<quint32, DeviceState> m_devices;
+    std::optional<SourceRef> m_repeat;
     QTimer m_repeatTimer;
     std::chrono::milliseconds m_initialDelay{400};
     std::chrono::milliseconds m_interval{120};
-    bool m_selectHeld = false;
-    bool m_startHeld = false;
     QTimer m_chordTimer;
+    std::optional<quint32> m_chordDevice;
     std::chrono::milliseconds m_chordHold{1000};
 };
 
