@@ -41,11 +41,19 @@ struct ConfigLoadResult
 //               directory (no PATH lookup)
 //   arguments   array of strings, optional (default [])
 //   enabled     bool, optional (default true)
+//   workingDirectory  string, optional; relative to the config file's directory
+//   extensions  array of ".ext" strings, optional; game files this emulator handles
+//   stopTimeoutMs     integer 500..60000, optional; graceful-stop timeout before SIGKILL
+//   profiles    array of {id, name, emulator?, arguments?, workingDirectory?, enabled?},
+//               optional; ids unique per emulator, "emulator" must equal the emulator id
 // Unknown keys produce a warning and are otherwise ignored.
 class ConfigLoader
 {
 public:
     static constexpr qint64 MaxFileSize = 256 * 1024;
+    static constexpr int MinStopTimeoutMs = 500;
+    static constexpr int MaxStopTimeoutMs = 60000;
+    static constexpr int MaxProfiles = 32;
 
     static ConfigLoadResult loadDirectory(const QString &directory);
 

@@ -1,6 +1,7 @@
 // Drives the real EmulatorManager against the nexora-fake-emulator process.
 #include "nexora/emulator/EmulatorManager.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -16,7 +17,7 @@ constexpr int Timeout = 10000;
 
 EmulatorConfig fake(const QStringList &arguments, const QString &id = QStringLiteral("fake"))
 {
-    return {id, QStringLiteral("Fake Emulator"), QStringLiteral(NEXORA_FAKE_EMULATOR), arguments, true, {}};
+    return EmulatorConfig::make(id, QStringLiteral("Fake Emulator"), QStringLiteral(NEXORA_FAKE_EMULATOR), arguments);
 }
 
 QList<ProcessState> statesOf(const QSignalSpy &spy)
@@ -274,6 +275,60 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 3, Timeout);
         QCOMPARE(manager.state(), ProcessState::Exited);
         QCOMPARE(manager.lastOutcome().error, EmulatorError::None);
+    }
+
+    void launchWithProfileAndGame()
+    {
+        QTemporaryDir dir;
+        const QString game = dir.filePath(QStringLiteral("My Game (EU).sfc"));
+        QFile f(game);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.close();
+
+        EmulatorConfig config = fake({QStringLiteral("--echo-args"), QStringLiteral("{file}")});
+        nexora::shared::LaunchProfile profile;
+        profile.id = QStringLiteral("cwd");
+        profile.name = QStringLiteral("Print cwd");
+        profile.emulatorId = config.id;
+        profile.hasArguments = true;
+        profile.arguments = {QStringLiteral("--print-cwd"), QStringLiteral("--echo-args"),
+                             QStringLiteral("game={file}")};
+        profile.workingDirectory = dir.path();
+        config.profiles.append(profile);
+
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(LaunchRequest{config, {}, game, QStringLiteral("My Game")}).accepted);
+        QCOMPARE(manager.activeEmulatorId(), QStringLiteral("fake"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        // The path is passed as one argument, spaces and parentheses intact (no shell).
+        QVERIFY2(manager.capturedStdout().contains(QStringLiteral("arg: ") + game + u'\n'),
+                 qPrintable(manager.capturedStdout()));
+
+        QVERIFY(manager.launch(LaunchRequest{config, QStringLiteral("cwd"), game, {}}).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, Timeout);
+        QCOMPARE(manager.state(), ProcessState::Exited);
+        const QString out = manager.capturedStdout();
+        QVERIFY2(out.contains(QStringLiteral("cwd: ") + QFileInfo(dir.path()).canonicalFilePath()), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("arg: game=") + game), qPrintable(out));
+        QVERIFY(!out.contains(QStringLiteral("{file}")));
+    }
+
+    void configStopTimeoutIsUsed()
+    {
+        EmulatorConfig config = fake({QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"),
+                                      QStringLiteral("30000")});
+        config.stopTimeoutMs = 500;
+        EmulatorManager manager; // default timeout stays at 5 s
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(config).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(manager.lastOutcome().killed);
+        QVERIFY2(timer.elapsed() < 4000, qPrintable(QString::number(timer.elapsed())));
     }
 
     void destroyWhileRunning()

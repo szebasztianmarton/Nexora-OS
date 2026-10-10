@@ -12,6 +12,8 @@
 #include <QJsonParseError>
 #include <QRegularExpression>
 
+#include <cmath>
+
 namespace nexora::shared {
 
 namespace {
@@ -20,7 +22,9 @@ const QStringList &knownKeys()
 {
     static const QStringList keys{QStringLiteral("id"), QStringLiteral("name"),
                                   QStringLiteral("executable"), QStringLiteral("arguments"),
-                                  QStringLiteral("enabled")};
+                                  QStringLiteral("enabled"), QStringLiteral("workingDirectory"),
+                                  QStringLiteral("extensions"), QStringLiteral("stopTimeoutMs"),
+                                  QStringLiteral("profiles")};
     return keys;
 }
 
@@ -104,47 +108,138 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json,
     else
         config.name = name.toString().trimmed();
 
+    const QString baseDir = sourceFile.isEmpty() ? QDir::currentPath()
+                                                 : QFileInfo(sourceFile).absolutePath();
+    // Relative paths are resolved against the config file's directory; never via PATH.
+    auto resolvePath = [&](const QString &raw) {
+        return QDir::cleanPath(QDir::isRelativePath(raw) ? QDir(baseDir).filePath(raw) : raw);
+    };
+    auto parseStringArray = [&](const QJsonValue &value, const QString &label, QStringList *out) {
+        if (!value.isArray()) {
+            fail(QStringLiteral("%1 must be an array of strings (got %2)").arg(label, jsonTypeName(value)));
+            return;
+        }
+        const QJsonArray array = value.toArray();
+        for (qsizetype i = 0; i < array.size(); ++i) {
+            if (!array.at(i).isString()) {
+                fail(QStringLiteral("%1[%2] must be a string (got %3)")
+                         .arg(label)
+                         .arg(i)
+                         .arg(jsonTypeName(array.at(i))));
+                continue;
+            }
+            out->append(array.at(i).toString());
+        }
+    };
+    auto parseOptionalPath = [&](const QJsonObject &o, const QString &label, QString *out) {
+        if (!o.contains(QStringLiteral("workingDirectory")))
+            return;
+        const QJsonValue v = o.value(QStringLiteral("workingDirectory"));
+        if (!v.isString() || v.toString().trimmed().isEmpty())
+            fail(QStringLiteral("%1 must be a non-empty string").arg(label));
+        else
+            *out = resolvePath(v.toString().trimmed());
+    };
+    auto parseOptionalBool = [&](const QJsonObject &o, const QString &label, bool *out) {
+        if (!o.contains(QStringLiteral("enabled")))
+            return;
+        const QJsonValue v = o.value(QStringLiteral("enabled"));
+        if (!v.isBool())
+            fail(QStringLiteral("%1 must be a boolean (got %2)").arg(label, jsonTypeName(v)));
+        else
+            *out = v.toBool();
+    };
+
     const QJsonValue executable = obj.value(QStringLiteral("executable"));
     if (!executable.isString()) {
         fail(QStringLiteral("\"executable\" must be a string (got %1)").arg(jsonTypeName(executable)));
     } else if (executable.toString().trimmed().isEmpty()) {
         fail(QStringLiteral("\"executable\" must not be empty"));
     } else {
-        const QString raw = executable.toString().trimmed();
-        QString resolved = raw;
-        if (QDir::isRelativePath(raw)) {
-            const QString baseDir = sourceFile.isEmpty() ? QDir::currentPath()
-                                                         : QFileInfo(sourceFile).absolutePath();
-            resolved = QDir(baseDir).filePath(raw);
-        }
-        config.executable = QDir::cleanPath(resolved);
+        config.executable = resolvePath(executable.toString().trimmed());
     }
 
-    if (obj.contains(QStringLiteral("arguments"))) {
-        const QJsonValue arguments = obj.value(QStringLiteral("arguments"));
-        if (!arguments.isArray()) {
-            fail(QStringLiteral("\"arguments\" must be an array of strings (got %1)")
-                     .arg(jsonTypeName(arguments)));
+    if (obj.contains(QStringLiteral("arguments")))
+        parseStringArray(obj.value(QStringLiteral("arguments")), QStringLiteral("\"arguments\""),
+                         &config.arguments);
+    parseOptionalBool(obj, QStringLiteral("\"enabled\""), &config.enabled);
+    parseOptionalPath(obj, QStringLiteral("\"workingDirectory\""), &config.workingDirectory);
+
+    if (obj.contains(QStringLiteral("extensions"))) {
+        static const QRegularExpression extPattern(QStringLiteral("^\\.[a-z0-9]{1,16}$"));
+        QStringList raw;
+        parseStringArray(obj.value(QStringLiteral("extensions")), QStringLiteral("\"extensions\""), &raw);
+        for (const QString &e : std::as_const(raw)) {
+            const QString ext = e.trimmed().toLower();
+            if (!extPattern.match(ext).hasMatch())
+                fail(QStringLiteral("\"extensions\" entry \"%1\" must look like \".ext\"").arg(e));
+            else if (!config.extensions.contains(ext))
+                config.extensions.append(ext);
+        }
+    }
+
+    if (obj.contains(QStringLiteral("stopTimeoutMs"))) {
+        const QJsonValue v = obj.value(QStringLiteral("stopTimeoutMs"));
+        const double ms = v.toDouble(-1);
+        if (!v.isDouble() || ms != std::floor(ms) || ms < MinStopTimeoutMs || ms > MaxStopTimeoutMs)
+            fail(QStringLiteral("\"stopTimeoutMs\" must be an integer between %1 and %2")
+                     .arg(MinStopTimeoutMs)
+                     .arg(MaxStopTimeoutMs));
+        else
+            config.stopTimeoutMs = int(ms);
+    }
+
+    if (obj.contains(QStringLiteral("profiles"))) {
+        const QJsonValue profiles = obj.value(QStringLiteral("profiles"));
+        if (!profiles.isArray()) {
+            fail(QStringLiteral("\"profiles\" must be an array of objects (got %1)").arg(jsonTypeName(profiles)));
         } else {
-            const QJsonArray array = arguments.toArray();
-            for (qsizetype i = 0; i < array.size(); ++i) {
-                if (!array.at(i).isString()) {
-                    fail(QStringLiteral("\"arguments\"[%1] must be a string (got %2)")
-                             .arg(i)
-                             .arg(jsonTypeName(array.at(i))));
+            static const QStringList profileKeys{QStringLiteral("id"), QStringLiteral("name"),
+                                                 QStringLiteral("emulator"), QStringLiteral("arguments"),
+                                                 QStringLiteral("workingDirectory"), QStringLiteral("enabled")};
+            const QJsonArray array = profiles.toArray();
+            if (array.size() > MaxProfiles)
+                fail(QStringLiteral("\"profiles\" must not contain more than %1 entries").arg(MaxProfiles));
+            for (qsizetype i = 0; i < array.size() && i < MaxProfiles; ++i) {
+                const QString label = QStringLiteral("\"profiles\"[%1]").arg(i);
+                if (!array.at(i).isObject()) {
+                    fail(QStringLiteral("%1 must be an object").arg(label));
                     continue;
                 }
-                config.arguments.append(array.at(i).toString());
+                const QJsonObject p = array.at(i).toObject();
+                LaunchProfile profile;
+                profile.emulatorId = config.id;
+                const QJsonValue pid = p.value(QStringLiteral("id"));
+                if (!pid.isString() || !isValidId(pid.toString()))
+                    fail(QStringLiteral("%1.id must be a valid id (lowercase letters, digits, '-', '_')").arg(label));
+                else if (config.profile(pid.toString()))
+                    fail(QStringLiteral("%1.id \"%2\" is used by another profile").arg(label, pid.toString()));
+                else
+                    profile.id = pid.toString();
+                const QJsonValue pname = p.value(QStringLiteral("name"));
+                if (!pname.isString() || pname.toString().trimmed().isEmpty())
+                    fail(QStringLiteral("%1.name must be a non-empty string").arg(label));
+                else
+                    profile.name = pname.toString().trimmed();
+                if (p.contains(QStringLiteral("emulator"))
+                    && p.value(QStringLiteral("emulator")).toString() != config.id) {
+                    fail(QStringLiteral("%1.emulator must match the emulator id \"%2\"").arg(label, config.id));
+                }
+                if (p.contains(QStringLiteral("arguments"))) {
+                    profile.hasArguments = true;
+                    parseStringArray(p.value(QStringLiteral("arguments")), label + QStringLiteral(".arguments"),
+                                     &profile.arguments);
+                }
+                parseOptionalPath(p, label + QStringLiteral(".workingDirectory"), &profile.workingDirectory);
+                parseOptionalBool(p, label + QStringLiteral(".enabled"), &profile.enabled);
+                for (auto it = p.constBegin(); it != p.constEnd(); ++it) {
+                    if (!profileKeys.contains(it.key()) && warnings)
+                        warnings->append(QStringLiteral("unknown key \"%1\" in %2 ignored").arg(it.key(), label));
+                }
+                if (!profile.id.isEmpty())
+                    config.profiles.append(profile);
             }
         }
-    }
-
-    if (obj.contains(QStringLiteral("enabled"))) {
-        const QJsonValue enabled = obj.value(QStringLiteral("enabled"));
-        if (!enabled.isBool())
-            fail(QStringLiteral("\"enabled\" must be a boolean (got %1)").arg(jsonTypeName(enabled)));
-        else
-            config.enabled = enabled.toBool();
     }
 
     for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {

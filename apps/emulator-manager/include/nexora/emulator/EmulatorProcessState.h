@@ -29,6 +29,10 @@ enum class EmulatorError {
     FailedToStart,
     NonZeroExit,
     Crashed,
+    ProfileNotFound,
+    ProfileDisabled,
+    InvalidWorkingDirectory,
+    GameFileMissing,
 };
 Q_ENUM_NS(EmulatorError)
 

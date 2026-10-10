@@ -9,7 +9,10 @@
 //   --sleep-ms N           stay alive for N ms (capped at 10 minutes)
 //   --crash segv|abort     terminate abnormally via SIGSEGV or SIGABRT (no core dump)
 //   --exit-code N          exit with status N (default 0)
-// Unknown options exit with status 64.
+//   --print-cwd            print "cwd: <dir>" after "ready"
+//   --echo-args            print "arg: <value>" for every argument after "ready"
+// Arguments that are not options (e.g. a game file path) are accepted and ignored.
+// Unknown options (anything else starting with "--") exit with status 64.
 
 #include <chrono>
 #include <csignal>
@@ -21,6 +24,7 @@
 #include <vector>
 
 #include <sys/resource.h>
+#include <unistd.h>
 
 namespace {
 
@@ -70,6 +74,8 @@ int main(int argc, char **argv)
     long sleepForMs = 0;
     int exitCode = 0;
     bool ignoreSigterm = false;
+    bool printCwd = false;
+    bool echoArgs = false;
     std::string crashMode;
     std::vector<std::string> stdoutLines;
     std::vector<std::string> stderrLines;
@@ -93,11 +99,15 @@ int main(int argc, char **argv)
             stderrLines.emplace_back(value());
         else if (arg == "--ignore-sigterm")
             ignoreSigterm = true;
+        else if (arg == "--print-cwd")
+            printCwd = true;
+        else if (arg == "--echo-args")
+            echoArgs = true;
         else if (arg == "--crash") {
             crashMode = value();
             if (crashMode != "segv" && crashMode != "abort")
                 usageError("--crash expects segv or abort");
-        } else
+        } else if (arg.rfind("--", 0) == 0)
             usageError(std::string("unknown option ") + std::string(arg));
     }
 
@@ -106,6 +116,15 @@ int main(int argc, char **argv)
         std::signal(SIGTERM, SIG_IGN);
 
     std::fputs("ready\n", stdout);
+    if (printCwd) {
+        char cwd[4096];
+        if (::getcwd(cwd, sizeof(cwd)))
+            std::fprintf(stdout, "cwd: %s\n", cwd);
+    }
+    if (echoArgs) {
+        for (int i = 1; i < argc; ++i)
+            std::fprintf(stdout, "arg: %s\n", argv[i]);
+    }
     std::fflush(stdout);
 
     for (const auto &line : stdoutLines)

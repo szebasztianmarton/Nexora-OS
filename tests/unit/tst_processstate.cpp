@@ -79,6 +79,13 @@ private slots:
                                   << QStringLiteral("Emulator is disabled in its configuration: /x");
         QTest::newRow("config") << EmulatorError::InvalidConfig
                                 << QStringLiteral("Invalid emulator configuration: /x");
+        QTest::newRow("profile") << EmulatorError::ProfileNotFound << QStringLiteral("Launch profile not found: /x");
+        QTest::newRow("profile off") << EmulatorError::ProfileDisabled
+                                     << QStringLiteral("Launch profile is disabled: /x");
+        QTest::newRow("workdir") << EmulatorError::InvalidWorkingDirectory
+                                 << QStringLiteral("Working directory does not exist: /x");
+        QTest::newRow("game") << EmulatorError::GameFileMissing
+                              << QStringLiteral("Game file is missing or unreadable: /x");
     }
 
     void errorMessages()

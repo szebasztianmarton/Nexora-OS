@@ -52,6 +52,10 @@ QString nameOf(EmulatorError error)
     case EmulatorError::FailedToStart: return QStringLiteral("FailedToStart");
     case EmulatorError::NonZeroExit: return QStringLiteral("NonZeroExit");
     case EmulatorError::Crashed: return QStringLiteral("Crashed");
+    case EmulatorError::ProfileNotFound: return QStringLiteral("ProfileNotFound");
+    case EmulatorError::ProfileDisabled: return QStringLiteral("ProfileDisabled");
+    case EmulatorError::InvalidWorkingDirectory: return QStringLiteral("InvalidWorkingDirectory");
+    case EmulatorError::GameFileMissing: return QStringLiteral("GameFileMissing");
     }
     return QStringLiteral("Unknown");
 }
@@ -72,6 +76,11 @@ QString describe(EmulatorError error, const QString &detail)
     case EmulatorError::FailedToStart: return withDetail(QStringLiteral("Emulator failed to start"));
     case EmulatorError::NonZeroExit: return withDetail(QStringLiteral("Emulator exited with an error code"));
     case EmulatorError::Crashed: return withDetail(QStringLiteral("Emulator crashed"));
+    case EmulatorError::ProfileNotFound: return withDetail(QStringLiteral("Launch profile not found"));
+    case EmulatorError::ProfileDisabled: return withDetail(QStringLiteral("Launch profile is disabled"));
+    case EmulatorError::InvalidWorkingDirectory:
+        return withDetail(QStringLiteral("Working directory does not exist"));
+    case EmulatorError::GameFileMissing: return withDetail(QStringLiteral("Game file is missing or unreadable"));
     }
     return withDetail(QStringLiteral("Unknown error"));
 }

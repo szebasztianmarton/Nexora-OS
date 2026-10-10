@@ -14,8 +14,8 @@ class TestEmulatorListModel : public QObject
 private:
     static QList<EmulatorConfig> sample()
     {
-        return {{QStringLiteral("a"), QStringLiteral("Alpha"), QStringLiteral("/bin/true"), {}, true, {}},
-                {QStringLiteral("b"), QStringLiteral("Beta"), QStringLiteral("/missing"), {}, true, {}}};
+        return {EmulatorConfig::make(QStringLiteral("a"), QStringLiteral("Alpha"), QStringLiteral("/bin/true")),
+                EmulatorConfig::make(QStringLiteral("b"), QStringLiteral("Beta"), QStringLiteral("/missing"))};
     }
 
 private slots:

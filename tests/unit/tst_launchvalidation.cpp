@@ -29,7 +29,7 @@ private:
 
     static EmulatorConfig config(const QString &executable, bool enabled = true)
     {
-        return {QStringLiteral("test"), QStringLiteral("Test Emulator"), executable, {}, enabled, {}};
+        return EmulatorConfig::make(QStringLiteral("test"), QStringLiteral("Test Emulator"), executable, {}, enabled);
     }
 
 private slots:

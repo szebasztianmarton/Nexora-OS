@@ -47,8 +47,80 @@ EmulatorError EmulatorManager::validateExecutable(const QString &path, QString *
     return EmulatorError::None;
 }
 
-LaunchResult EmulatorManager::launch(const shared::EmulatorConfig &config)
+std::optional<ResolvedLaunch> EmulatorManager::resolve(const LaunchRequest &request,
+                                                      EmulatorError *error, QString *detail)
 {
+    const shared::EmulatorConfig &config = request.emulator;
+    auto reject = [&](EmulatorError e, const QString &d) -> std::optional<ResolvedLaunch> {
+        if (error)
+            *error = e;
+        if (detail)
+            *detail = d;
+        return std::nullopt;
+    };
+    const QString emulatorName = config.name.isEmpty() ? config.id : config.name;
+
+    if (config.id.isEmpty())
+        return reject(EmulatorError::InvalidConfig, QStringLiteral("missing id"));
+    if (!config.enabled)
+        return reject(EmulatorError::Disabled, emulatorName);
+    QString exeDetail;
+    if (const EmulatorError e = validateExecutable(config.executable, &exeDetail); e != EmulatorError::None)
+        return reject(e, exeDetail);
+
+    ResolvedLaunch resolved;
+    resolved.program = config.executable;
+    resolved.arguments = config.arguments;
+    resolved.workingDirectory = config.workingDirectory.isEmpty()
+                                    ? QFileInfo(config.executable).absolutePath()
+                                    : config.workingDirectory;
+    if (config.stopTimeoutMs)
+        resolved.stopTimeout = std::chrono::milliseconds(*config.stopTimeoutMs);
+    resolved.displayName = request.displayName.isEmpty() ? emulatorName : request.displayName;
+
+    if (!request.profileId.isEmpty()) {
+        const shared::LaunchProfile *profile = config.profile(request.profileId);
+        if (!profile)
+            return reject(EmulatorError::ProfileNotFound,
+                          QStringLiteral("%1 / %2").arg(emulatorName, request.profileId));
+        if (!profile->enabled)
+            return reject(EmulatorError::ProfileDisabled, QStringLiteral("%1 / %2").arg(emulatorName, profile->name));
+        if (profile->hasArguments)
+            resolved.arguments = profile->arguments;
+        if (!profile->workingDirectory.isEmpty())
+            resolved.workingDirectory = profile->workingDirectory;
+    }
+
+    const QFileInfo workDir(resolved.workingDirectory);
+    if (!workDir.isAbsolute() || !workDir.isDir())
+        return reject(EmulatorError::InvalidWorkingDirectory, resolved.workingDirectory);
+
+    static const QString placeholder = QStringLiteral("{file}");
+    if (request.gamePath.isEmpty()) {
+        resolved.arguments.removeIf([](const QString &a) { return a.contains(placeholder); });
+    } else {
+        const QFileInfo game(request.gamePath);
+        if (!game.isAbsolute() || !game.isFile() || !game.isReadable())
+            return reject(EmulatorError::GameFileMissing, request.gamePath);
+        const QString path = game.absoluteFilePath();
+        bool substituted = false;
+        for (QString &a : resolved.arguments) {
+            if (a.contains(placeholder)) {
+                a.replace(placeholder, path);
+                substituted = true;
+            }
+        }
+        if (!substituted)
+            resolved.arguments.append(path);
+    }
+    if (error)
+        *error = EmulatorError::None;
+    return resolved;
+}
+
+LaunchResult EmulatorManager::launch(const LaunchRequest &request)
+{
+    const shared::EmulatorConfig &config = request.emulator;
     if (isActive()) {
         const QString message = describe(EmulatorError::AlreadyActive, m_activeName);
         qCWarning(lcProcess) << "Launch of" << config.id << "rejected:" << message;
@@ -56,7 +128,9 @@ LaunchResult EmulatorManager::launch(const shared::EmulatorConfig &config)
     }
 
     m_activeId = config.id;
-    m_activeName = config.name.isEmpty() ? config.id : config.name;
+    m_activeName = !request.displayName.isEmpty() ? request.displayName
+                   : config.name.isEmpty()        ? config.id
+                                                  : config.name;
     m_stopRequested = false;
     m_killed = false;
     m_stdout.clear();
@@ -64,7 +138,10 @@ LaunchResult EmulatorManager::launch(const shared::EmulatorConfig &config)
     m_stdoutDecoder.resetState();
     m_stderrDecoder.resetState();
 
-    auto rejectValidation = [&](EmulatorError error, const QString &detail) {
+    EmulatorError error = EmulatorError::None;
+    QString detail;
+    const auto resolved = resolve(request, &error, &detail);
+    if (!resolved) {
         ProcessOutcome outcome;
         outcome.finalState = ProcessState::Failed;
         outcome.error = error;
@@ -72,23 +149,14 @@ LaunchResult EmulatorManager::launch(const shared::EmulatorConfig &config)
         qCWarning(lcProcess).noquote() << "Cannot launch" << config.id << "-" << outcome.message;
         finish(outcome);
         return LaunchResult{false, error, outcome.message};
-    };
-
-    if (config.id.isEmpty())
-        return rejectValidation(EmulatorError::InvalidConfig, QStringLiteral("missing id"));
-    if (!config.enabled)
-        return rejectValidation(EmulatorError::Disabled, m_activeName);
-    QString detail;
-    if (const EmulatorError error = validateExecutable(config.executable, &detail);
-        error != EmulatorError::None) {
-        return rejectValidation(error, detail);
     }
+    m_activeStopTimeout = resolved->stopTimeout.value_or(m_stopTimeout);
 
     auto *process = new QProcess(this);
-    process->setProgram(config.executable);
-    process->setArguments(config.arguments);
+    process->setProgram(resolved->program);
+    process->setArguments(resolved->arguments);
     process->setProcessChannelMode(QProcess::SeparateChannels);
-    process->setWorkingDirectory(QFileInfo(config.executable).absolutePath());
+    process->setWorkingDirectory(resolved->workingDirectory);
     // Make sure the emulator does not outlive a crashed launcher (Linux only).
     process->setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
 
@@ -102,8 +170,10 @@ LaunchResult EmulatorManager::launch(const shared::EmulatorConfig &config)
 
     m_process = process;
     setState(ProcessState::Starting);
-    qCInfo(lcProcess).noquote() << "Starting" << config.id << "->" << config.executable
-                                << "with" << config.arguments.size() << "argument(s)";
+    qCInfo(lcProcess).noquote() << "Starting" << config.id
+                                << (request.profileId.isEmpty() ? QString() : QStringLiteral("profile ") + request.profileId)
+                                << "->" << resolved->program << "with" << resolved->arguments.size()
+                                << "argument(s), cwd" << resolved->workingDirectory;
     process->start(QIODevice::ReadOnly);
     return {true, EmulatorError::None, QStringLiteral("Starting %1").arg(m_activeName)};
 }
@@ -117,9 +187,9 @@ bool EmulatorManager::stop()
 
     m_stopRequested = true;
     setState(ProcessState::Stopping);
-    qCInfo(lcProcess) << "Stopping" << m_activeId << "(timeout" << m_stopTimeout.count() << "ms)";
+    qCInfo(lcProcess) << "Stopping" << m_activeId << "(timeout" << m_activeStopTimeout.count() << "ms)";
     m_process->terminate();
-    m_killTimer.start(m_stopTimeout);
+    m_killTimer.start(m_activeStopTimeout);
     return true;
 }
 
@@ -259,7 +329,7 @@ void EmulatorManager::onStopTimeout()
 {
     if (!m_process || m_state != ProcessState::Stopping)
         return;
-    qCWarning(lcProcess) << m_activeId << "did not exit within" << m_stopTimeout.count()
+    qCWarning(lcProcess) << m_activeId << "did not exit within" << m_activeStopTimeout.count()
                          << "ms, sending SIGKILL";
     m_killed = true;
     m_process->kill();

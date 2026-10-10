@@ -27,6 +27,30 @@ struct ProcessOutcome
     QString message;               // user-facing summary
 };
 
+// What to start: an emulator, optionally one of its launch profiles and a game file.
+//
+// Arguments: the profile's arguments replace the emulator's when the profile defines
+// them. With a game file, every argument containing "{file}" has it replaced by the
+// absolute game path; if no argument contains it, the path is appended as the last
+// argument. Without a game file, arguments containing "{file}" are dropped. The game file
+// is only ever passed as an argument; it is never executed.
+struct LaunchRequest
+{
+    shared::EmulatorConfig emulator;
+    QString profileId;   // empty = emulator defaults
+    QString gamePath;    // empty = start the emulator without a game
+    QString displayName; // empty = emulator name
+};
+
+struct ResolvedLaunch
+{
+    QString program;
+    QStringList arguments;
+    QString workingDirectory;
+    std::optional<std::chrono::milliseconds> stopTimeout;
+    QString displayName;
+};
+
 struct LaunchResult
 {
     bool accepted = false;
@@ -50,7 +74,13 @@ public:
     // Validates |config| and starts its process. Rejected with AlreadyActive (state
     // unchanged) while another process is active. Validation failures move the state to
     // Failed synchronously and emit processFinished.
-    LaunchResult launch(const shared::EmulatorConfig &config);
+    LaunchResult launch(const LaunchRequest &request);
+    LaunchResult launch(const shared::EmulatorConfig &config) { return launch(LaunchRequest{config, {}, {}, {}}); }
+
+    // Validates |request| and computes the exact program, arguments and working directory.
+    // Performs filesystem checks but starts nothing.
+    static std::optional<ResolvedLaunch> resolve(const LaunchRequest &request, EmulatorError *error,
+                                                 QString *detail);
 
     // Requests a graceful stop (SIGTERM), escalating to SIGKILL after stopTimeout().
     // Returns false if no process is active.
@@ -99,6 +129,7 @@ private:
     QString m_activeName;
     QTimer m_killTimer;
     std::chrono::milliseconds m_stopTimeout{5000};
+    std::chrono::milliseconds m_activeStopTimeout{5000};
     bool m_stopRequested = false;
     bool m_killed = false;
     ProcessOutcome m_lastOutcome;
