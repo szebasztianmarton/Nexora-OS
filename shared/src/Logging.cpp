@@ -15,6 +15,8 @@ Q_LOGGING_CATEGORY(lcProcess, "nexora.process")
 Q_LOGGING_CATEGORY(lcProcessOutput, "nexora.process.output")
 Q_LOGGING_CATEGORY(lcInput, "nexora.input")
 Q_LOGGING_CATEGORY(lcUi, "nexora.ui")
+Q_LOGGING_CATEGORY(lcLibrary, "nexora.library")
+Q_LOGGING_CATEGORY(lcSystem, "nexora.system")
 
 namespace nexora::shared {
 

@@ -25,7 +25,7 @@ set(NEXORA_WITH_SDL3 "AUTO" CACHE STRING "Build the optional SDL3 gamepad backen
 set_property(CACHE NEXORA_WITH_SDL3 PROPERTY STRINGS AUTO ON OFF)
 
 set(NEXORA_QT_MIN_VERSION 6.4)
-set(NEXORA_QT_COMPONENTS Core Gui Qml Quick QuickControls2)
+set(NEXORA_QT_COMPONENTS Core Gui Qml Quick QuickControls2 Sql)
 if(BUILD_TESTING)
     list(APPEND NEXORA_QT_COMPONENTS Test)
 endif()
@@ -35,7 +35,7 @@ if(NOT Qt6_FOUND)
     message(FATAL_ERROR
         "Qt ${NEXORA_QT_MIN_VERSION}+ with components [${NEXORA_QT_COMPONENTS}] was not found.\n"
         "On Ubuntu 24.04 install:\n"
-        "  sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \\\n"
+        "  sudo apt install qt6-base-dev qt6-declarative-dev libqt6sql6-sqlite qml6-module-qtquick \\\n"
         "       qml6-module-qtquick-controls qml6-module-qtquick-templates \\\n"
         "       qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtqml-workerscript\n"
         "For a custom Qt installation pass -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/gcc_64.")
@@ -53,6 +53,7 @@ include(cmake/NexoraCompilerWarnings.cmake)
 
 add_subdirectory(shared)
 add_subdirectory(apps/emulator-manager)
+add_subdirectory(apps/game-library)
 add_subdirectory(apps/console-ui)
 
 if(NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING)
