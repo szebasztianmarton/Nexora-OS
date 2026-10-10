@@ -51,6 +51,7 @@ class TestInputController : public QObject
     Q_OBJECT
 
 private slots:
+    void newActionsAndCapture();
     void chordWorksWhileSuspended();
     void acceptSendsReturn();
     void actionMapping_data();
@@ -235,6 +236,34 @@ void TestInputController::chordWorksWhileSuspended()
     QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000);
     QCoreApplication::processEvents();
     QVERIFY(window.events.isEmpty()); // navigation (Menu) still dropped
+}
+
+void TestInputController::newActionsAndCapture()
+{
+    InputController controller;
+    RecordingWindow window;
+    controller.setTargetWindowProvider([&window] { return &window; });
+    controller.navigator()->buttonEvent(GamepadButton::North, true);
+    controller.navigator()->buttonEvent(GamepadButton::R1, true);
+    QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Favorites), 1);
+    QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_PageDown), 1);
+
+    QSignalSpy captured(&controller, &InputController::buttonCaptured);
+    window.events.clear();
+    controller.setCapturing(true);
+    controller.navigator()->buttonEvent(GamepadButton::East, true);
+    controller.navigator()->buttonEvent(GamepadButton::DpadDown, true);
+    QCOMPARE(captured.size(), 1);
+    QCOMPARE(captured.first().first().toString(), QStringLiteral("east"));
+    QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Down), 1); // directions still navigate
+    QCOMPARE(window.count(QEvent::KeyPress, Qt::Key_Escape), 0);   // East not delivered as Back
+
+    controller.setCapturing(false);
+    auto mapping = controller.mapping();
+    mapping.bind(NavAction::Accept, GamepadButton::East);
+    controller.setMapping(mapping);
+    controller.navigator()->buttonEvent(GamepadButton::East, true);
+    QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Return), 1);
 }
 
 QTEST_MAIN(TestInputController)

@@ -20,6 +20,8 @@ std::optional<GamepadButton> evdevKeyToButton(quint16 code)
     case BTN_DPAD_DOWN: return GamepadButton::DpadDown;
     case BTN_DPAD_LEFT: return GamepadButton::DpadLeft;
     case BTN_DPAD_RIGHT: return GamepadButton::DpadRight;
+    case BTN_TL: return GamepadButton::L1;
+    case BTN_TR: return GamepadButton::R1;
     default: return std::nullopt;
     }
 }

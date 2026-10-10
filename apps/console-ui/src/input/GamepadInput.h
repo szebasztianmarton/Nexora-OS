@@ -15,6 +15,8 @@ enum class GamepadButton {
     DpadDown,
     DpadLeft,
     DpadRight,
+    L1, // left shoulder
+    R1, // right shoulder
 };
 
 // Axes relevant for navigation. Values are normalized to -1..1; negative Y is "up".

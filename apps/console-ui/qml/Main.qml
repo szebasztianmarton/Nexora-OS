@@ -6,6 +6,9 @@ ApplicationWindow {
     id: window
     objectName: "mainWindow"
     required property AppController app
+    required property LibraryController library
+    required property SettingsController settings
+    required property SystemController system
 
     width: 1280
     height: 720

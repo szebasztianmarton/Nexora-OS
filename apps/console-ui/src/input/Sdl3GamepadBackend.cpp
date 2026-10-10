@@ -28,6 +28,8 @@ std::optional<GamepadButton> sdlButtonToButton(Uint8 button)
     case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return GamepadButton::DpadDown;
     case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return GamepadButton::DpadLeft;
     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return GamepadButton::DpadRight;
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return GamepadButton::L1;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return GamepadButton::R1;
     default: return std::nullopt;
     }
 }

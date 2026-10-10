@@ -1,5 +1,6 @@
 #pragma once
 
+#include "input/ButtonMapping.h"
 #include "input/GamepadInput.h"
 #include "input/NavAction.h"
 
@@ -15,8 +16,9 @@ namespace nexora::input {
 
 // Turns raw, backend-neutral gamepad state changes into navigation actions.
 //
-// South -> Accept, East -> Back, Start/Select/Guide -> Menu; D-pad, hat and left stick map
-// to directions. Axes are edge-triggered with hysteresis (press at |v| >= 0.5, release at
+// Buttons map to actions through a configurable ButtonMapping (default: South -> Accept,
+// East -> Back, Start -> Menu, North -> Favorite, West -> Search, L1/R1 -> previous/next
+// tab); D-pad, hat and left stick always map to directions. Axes are edge-triggered with hysteresis (press at |v| >= 0.5, release at
 // |v| < 0.3). A held direction auto-repeats (initial delay, then interval); only the most
 // recently pressed direction repeats. Accept/Back/Menu never repeat.
 //
@@ -49,6 +51,8 @@ public:
     std::chrono::milliseconds initialRepeatDelay() const { return m_initialDelay; }
     std::chrono::milliseconds repeatInterval() const { return m_interval; }
     void setChordHoldDuration(std::chrono::milliseconds duration);
+    void setMapping(const ButtonMapping &mapping) { m_mapping = mapping; }
+    const ButtonMapping &mapping() const { return m_mapping; }
     std::chrono::milliseconds chordHoldDuration() const { return m_chordHold; }
 
     // The direction currently auto-repeating, if any.
@@ -57,6 +61,8 @@ public:
 signals:
     void actionTriggered(nexora::input::NavAction action);
     void returnToLauncherRequested();
+    // Every non-directional button press, before mapping (used to capture remaps).
+    void buttonPressed(nexora::input::GamepadButton button, quint32 device);
 
 private:
     // Independent sources that can hold a direction.
@@ -82,6 +88,7 @@ private:
     void onRepeatTimeout();
     void updateChord();
 
+    ButtonMapping m_mapping = ButtonMapping::defaults();
     std::map<quint32, DeviceState> m_devices;
     std::optional<SourceRef> m_repeat;
     QTimer m_repeatTimer;

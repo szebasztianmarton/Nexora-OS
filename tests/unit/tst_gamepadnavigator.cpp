@@ -70,6 +70,10 @@ void TestGamepadNavigator::buttonMapping_data()
     QTest::newRow("start") << GamepadButton::Start << NavAction::Menu;
     QTest::newRow("guide") << GamepadButton::Guide << NavAction::Menu;
     QTest::newRow("select") << GamepadButton::Select << NavAction::Menu;
+    QTest::newRow("north") << GamepadButton::North << NavAction::Favorite;
+    QTest::newRow("west") << GamepadButton::West << NavAction::Search;
+    QTest::newRow("l1") << GamepadButton::L1 << NavAction::PrevTab;
+    QTest::newRow("r1") << GamepadButton::R1 << NavAction::NextTab;
     QTest::newRow("dpad-up") << GamepadButton::DpadUp << NavAction::Up;
     QTest::newRow("dpad-down") << GamepadButton::DpadDown << NavAction::Down;
     QTest::newRow("dpad-left") << GamepadButton::DpadLeft << NavAction::Left;
@@ -100,10 +104,16 @@ void TestGamepadNavigator::releaseDoesNotTrigger()
 void TestGamepadNavigator::unmappedButtonsIgnored()
 {
     GamepadNavigator nav;
+    QVariantMap minimal{{QStringLiteral("accept"), QStringLiteral("south")},
+                        {QStringLiteral("back"), QStringLiteral("east")}};
+    nav.setMapping(*nexora::input::ButtonMapping::fromVariantMap(minimal, nullptr));
     QSignalSpy spy(&nav, &GamepadNavigator::actionTriggered);
+    QSignalSpy raw(&nav, &GamepadNavigator::buttonPressed);
     nav.buttonEvent(GamepadButton::West, true);
     nav.buttonEvent(GamepadButton::North, true);
+    nav.buttonEvent(GamepadButton::L1, true);
     QCOMPARE(spy.count(), 0);
+    QCOMPARE(raw.count(), 3); // still reported for remap capture
 }
 
 void TestGamepadNavigator::axisThresholdAndHysteresis()
@@ -271,7 +281,9 @@ void TestGamepadNavigator::evdevKeyMapping()
     QCOMPARE(evdevKeyToButton(BTN_DPAD_RIGHT), std::optional(GamepadButton::DpadRight));
     QCOMPARE(evdevKeyToButton(KEY_A), std::nullopt);
     QCOMPARE(evdevKeyToButton(BTN_LEFT), std::nullopt);
-    QCOMPARE(evdevKeyToButton(BTN_TL), std::nullopt);
+    QCOMPARE(evdevKeyToButton(BTN_TL), std::optional(GamepadButton::L1));
+    QCOMPARE(evdevKeyToButton(BTN_TR), std::optional(GamepadButton::R1));
+    QCOMPARE(evdevKeyToButton(BTN_TL2), std::nullopt);
 }
 
 void TestGamepadNavigator::evdevAbsMapping()

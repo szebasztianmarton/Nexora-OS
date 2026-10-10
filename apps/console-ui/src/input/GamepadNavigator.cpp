@@ -37,30 +37,27 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 d
         directional(SrcDpadRight, NavAction::Right);
         return;
     case GamepadButton::South:
-        if (pressed)
-            emit actionTriggered(NavAction::Accept);
-        return;
     case GamepadButton::East:
-        if (pressed)
-            emit actionTriggered(NavAction::Back);
-        return;
+    case GamepadButton::West:
+    case GamepadButton::North:
     case GamepadButton::Start:
-    case GamepadButton::Select: {
+    case GamepadButton::Select:
+    case GamepadButton::Guide:
+    case GamepadButton::L1:
+    case GamepadButton::R1:
+        break;
+    }
+
+    if (button == GamepadButton::Start || button == GamepadButton::Select) {
         DeviceState &state = m_devices[device];
         (button == GamepadButton::Start ? state.startHeld : state.selectHeld) = pressed;
         updateChord();
-        if (pressed)
-            emit actionTriggered(NavAction::Menu);
-        return;
     }
-    case GamepadButton::Guide:
-        if (pressed)
-            emit actionTriggered(NavAction::Menu);
+    if (!pressed)
         return;
-    case GamepadButton::West:
-    case GamepadButton::North:
-        return; // unused in MVP 1
-    }
+    emit buttonPressed(button, device);
+    if (const auto action = m_mapping.actionFor(button))
+        emit actionTriggered(*action);
 }
 
 void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized, quint32 device)

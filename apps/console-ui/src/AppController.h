@@ -79,7 +79,19 @@ public:
     QString logFilePath() const { return m_options.logFilePath; }
     QString version() const;
 
+    // Starts an emulator with its default profile (see setDefaultProfiles()).
     Q_INVOKABLE bool launch(const QString &emulatorId);
+    // Starts an emulator with an explicit profile ("" = emulator defaults).
+    Q_INVOKABLE bool launchProfile(const QString &emulatorId, const QString &profileId);
+    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs.
+    bool launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
+                    const QString &profileId = {});
+
+    // emulator id -> profile id used by launch(); unknown/disabled profiles are ignored.
+    void setDefaultProfiles(const QVariantMap &defaults) { m_defaultProfiles = defaults; }
+    QList<shared::EmulatorConfig> enabledEmulators() const { return m_enabled; }
+    // Empty when |emulatorId| is configured and its executable passed validation.
+    QString unavailableReason(const QString &emulatorId) const;
     Q_INVOKABLE bool stop();
     // Controller "return to launcher" chord: stops the running emulator, if any.
     Q_INVOKABLE bool returnToLauncher();
@@ -92,6 +104,8 @@ signals:
     void lastOutputChanged();
     void configChanged();
     void inputChanged();
+    // A launch request was accepted (process is starting).
+    void launchStarted(const QString &emulatorId, const QString &gamePath);
 
 private:
     void onManagerStateChanged(emulator::ProcessState state, const QString &emulatorId);
@@ -110,6 +124,10 @@ private:
     bool m_configDirectoryFound = false;
     QStringList m_configIssues;
     QStringList m_disabled;
+    QList<shared::EmulatorConfig> m_enabled;
+    QHash<QString, QString> m_unavailable;
+    QVariantMap m_defaultProfiles;
+    bool startLaunch(const emulator::LaunchRequest &request);
 };
 
 } // namespace nexora::ui

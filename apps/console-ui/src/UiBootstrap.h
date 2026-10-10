@@ -5,10 +5,10 @@ class QQuickWindow;
 
 namespace nexora::ui {
 
-class AppController;
+class UiContext;
 
-// Loads the main QML window with |controller| as its backend. Used by main() and the QML
+// Loads the main QML window with the backends of |context|. Used by main() and the QML
 // smoke test so both exercise the same start-up path. Returns nullptr on failure.
-QQuickWindow *loadMainWindow(QQmlApplicationEngine &engine, AppController *controller);
+QQuickWindow *loadMainWindow(QQmlApplicationEngine &engine, UiContext *context);
 
 } // namespace nexora::ui

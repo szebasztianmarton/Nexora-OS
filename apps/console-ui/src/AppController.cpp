@@ -83,14 +83,64 @@ QString AppController::version() const
 
 bool AppController::launch(const QString &emulatorId)
 {
+    QString profile = m_defaultProfiles.value(emulatorId).toString();
+    if (const auto config = m_model.find(emulatorId)) {
+        const auto *p = config->profile(profile);
+        if (!p || !p->enabled)
+            profile.clear(); // stale default: fall back to the emulator's own arguments
+    }
+    return launchProfile(emulatorId, profile);
+}
+
+bool AppController::launchProfile(const QString &emulatorId, const QString &profileId)
+{
     const auto config = m_model.find(emulatorId);
     if (!config) {
         setStatusMessage(QStringLiteral("Unknown emulator \"%1\"").arg(emulatorId), true);
         return false;
     }
-    if (!m_manager.isActive())
-        m_activeName = config->name.isEmpty() ? config->id : config->name;
-    const auto result = m_manager.launch(*config);
+    return startLaunch({*config, profileId, {}, {}});
+}
+
+bool AppController::launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
+                               const QString &profileId)
+{
+    const auto config = m_model.find(emulatorId);
+    if (!config) {
+        setStatusMessage(emulatorId.isEmpty() ? QStringLiteral("No emulator is configured for \"%1\"").arg(title)
+                                              : QStringLiteral("Emulator \"%1\" for \"%2\" is not configured")
+                                                    .arg(emulatorId, title),
+                         true);
+        return false;
+    }
+    QString profile = profileId;
+    if (profile.isEmpty()) {
+        profile = m_defaultProfiles.value(emulatorId).toString();
+        const auto *p = config->profile(profile);
+        if (!p || !p->enabled)
+            profile.clear();
+    }
+    const QString display = QStringLiteral("%1 (%2)").arg(title, config->name);
+    return startLaunch({*config, profile, gamePath, display});
+}
+
+QString AppController::unavailableReason(const QString &emulatorId) const
+{
+    if (!m_model.find(emulatorId))
+        return emulatorId.isEmpty() ? QStringLiteral("No emulator handles this file type")
+                                    : QStringLiteral("Emulator \"%1\" is not configured").arg(emulatorId);
+    return m_unavailable.value(emulatorId);
+}
+
+bool AppController::startLaunch(const emulator::LaunchRequest &request)
+{
+    const auto &config = request.emulator;
+    if (!m_manager.isActive()) {
+        m_activeName = !request.displayName.isEmpty() ? request.displayName
+                       : config.name.isEmpty()        ? config.id
+                                                      : config.name;
+    }
+    const auto result = m_manager.launch(request);
     if (!result.accepted) {
         // AlreadyActive leaves the running emulator untouched; validation errors were
         // already reported through processFinished().
@@ -99,6 +149,7 @@ bool AppController::launch(const QString &emulatorId)
         return false;
     }
     setStatusMessage(result.message, false);
+    emit launchStarted(config.id, request.gamePath);
     return true;
 }
 
@@ -150,6 +201,8 @@ bool AppController::reloadConfig()
         enabled.append(config);
     }
     m_model.setEmulators(enabled, unavailable);
+    m_enabled = enabled;
+    m_unavailable = unavailable;
 
     qCInfo(lcUi) << "Configuration:" << enabled.size() << "enabled," << m_disabled.size()
                  << "disabled," << unavailable.size() << "unavailable," << m_configIssues.size()

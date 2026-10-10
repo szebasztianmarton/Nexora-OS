@@ -6,6 +6,8 @@ add_library(nexora_input STATIC
     NavAction.h
     GamepadInput.h
     GamepadNavigator.h
+    ButtonMapping.h
+    ButtonMapping.cpp
     GamepadNavigator.cpp
     InputBackend.h
     InputController.h

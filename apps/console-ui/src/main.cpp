@@ -1,11 +1,16 @@
-#include "AppController.h"
 #include "UiBootstrap.h"
+#include "UiContext.h"
 #include "input/InputController.h"
 
+#include "nexora/shared/ConfigLoader.h"
 #include "nexora/shared/Logging.h"
 #include "nexora/shared/Paths.h"
+#include "nexora/shared/Settings.h"
+#include "nexora/system/SingleInstanceGuard.h"
+#include "nexora/system/UnixSignalWatcher.h"
 
 #include <QCommandLineParser>
+#include <QDir>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -13,17 +18,66 @@
 #include <QtQml/QQmlExtensionPlugin>
 
 #include <cstdio>
+#include <cstring>
 
 Q_IMPORT_QML_PLUGIN(Nexora_ConsolePlugin)
 
+namespace {
+
+// Options that only print and exit must work without a display (CI, SSH, recovery shell).
+void preferOffscreenForNonInteractiveRuns(int argc, char *argv[])
+{
+    if (qEnvironmentVariableIsSet("QT_QPA_PLATFORM") || qEnvironmentVariableIsSet("DISPLAY")
+        || qEnvironmentVariableIsSet("WAYLAND_DISPLAY")) {
+        return;
+    }
+    for (int i = 1; i < argc; ++i) {
+        for (const char *opt : {"-h", "--help", "-v", "--version", "--check-config", "--help-all"}) {
+            if (std::strcmp(argv[i], opt) == 0) {
+                qputenv("QT_QPA_PLATFORM", "offscreen");
+                return;
+            }
+        }
+    }
+}
+
+// --check-config: validate emulator definitions and settings files, print a report.
+int checkConfiguration(const QString &configDir, const nexora::shared::Settings::Paths &settingsPaths)
+{
+    using namespace nexora::shared;
+    int errors = 0;
+    const ConfigLoadResult result = ConfigLoader::loadDirectory(configDir);
+    std::printf("Emulator definitions in %s: %lld valid\n", qPrintable(configDir),
+                static_cast<long long>(result.emulators.size()));
+    for (const auto &issue : result.issues) {
+        const bool isError = issue.severity == ConfigIssue::Severity::Error;
+        errors += isError ? 1 : 0;
+        std::printf("  %s: %s\n", isError ? "error" : "warning", qPrintable(issue.toDisplayString()));
+    }
+    Settings settings(settingsPaths);
+    settings.load();
+    std::printf("Settings (user file %s): %lld issue(s)\n", qPrintable(settingsPaths.userFile),
+                static_cast<long long>(settings.issues().size()));
+    for (const QString &issue : settings.issues()) {
+        ++errors;
+        std::printf("  error: %s\n", qPrintable(issue));
+    }
+    std::printf("%s\n", errors == 0 ? "OK" : "FAILED");
+    return errors == 0 ? 0 : 1;
+}
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
+    preferOffscreenForNonInteractiveRuns(argc, argv);
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("Nexora OS"));
+    QGuiApplication::setOrganizationName(QStringLiteral("nexora"));
     QGuiApplication::setApplicationVersion(QStringLiteral(NEXORA_VERSION));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Nexora OS console interface (MVP 1 prototype)"));
+    parser.setApplicationDescription(QStringLiteral("Nexora OS console interface (MVP 2 prototype)"));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption configDirOption(
@@ -31,21 +85,48 @@ int main(int argc, char *argv[])
         QStringLiteral("Directory containing emulator *.json definitions (overrides %1).")
             .arg(QString::fromLatin1(nexora::shared::ConfigDirEnvVar)),
         QStringLiteral("dir"));
+    const QCommandLineOption settingsOption(QStringLiteral("settings-file"),
+                                            QStringLiteral("User settings file (default: %1).")
+                                                .arg(nexora::shared::Settings::defaultUserFile()),
+                                            QStringLiteral("file"));
+    const QCommandLineOption databaseOption(QStringLiteral("library-db"),
+                                            QStringLiteral("Game library database (default: %1).")
+                                                .arg(nexora::library::GameLibrary::defaultDatabasePath()),
+                                            QStringLiteral("file"));
     const QCommandLineOption logFileOption(QStringLiteral("log-file"),
-                                           QStringLiteral("Also append log output to <file>."),
+                                           QStringLiteral("Also append log output to <file> (rotated at 2 MiB)."),
                                            QStringLiteral("file"));
     const QCommandLineOption inputOption(QStringLiteral("input-backend"),
-                                         QStringLiteral("Controller backend: auto, evdev, sdl3 or none."),
-                                         QStringLiteral("backend"), QStringLiteral("auto"));
+                                         QStringLiteral("Controller backend: auto, evdev, sdl3 or none "
+                                                        "(default: the input.backend setting)."),
+                                         QStringLiteral("backend"));
     const QCommandLineOption fullscreenOption(QStringLiteral("fullscreen"),
-                                              QStringLiteral("Show the interface full screen."));
+                                              QStringLiteral("Start full screen (overrides display.mode)."));
+    const QCommandLineOption windowedOption(QStringLiteral("windowed"),
+                                            QStringLiteral("Start in a window (overrides display.mode)."));
     const QCommandLineOption allowRootOption(
         QStringLiteral("allow-root"),
         QStringLiteral("Allow running as root (not recommended; also NEXORA_ALLOW_ROOT=1)."));
-    parser.addOptions({configDirOption, logFileOption, inputOption, fullscreenOption, allowRootOption});
+    const QCommandLineOption checkConfigOption(QStringLiteral("check-config"),
+                                               QStringLiteral("Validate emulator definitions and settings, then exit."));
+    parser.addOptions({configDirOption, settingsOption, databaseOption, logFileOption, inputOption,
+                       fullscreenOption, windowedOption, allowRootOption, checkConfigOption});
     parser.process(app);
 
-    nexora::shared::installMessageHandler({parser.value(logFileOption), 500});
+    const auto configDir = nexora::shared::resolveConfigDirectory(
+        parser.value(configDirOption), qEnvironmentVariable(nexora::shared::ConfigDirEnvVar),
+        QCoreApplication::applicationDirPath());
+    const nexora::shared::Settings::Paths settingsPaths{
+        nexora::shared::Settings::defaultSystemFiles(QCoreApplication::applicationDirPath()),
+        parser.isSet(settingsOption) ? QDir(parser.value(settingsOption)).absolutePath()
+                                     : nexora::shared::Settings::defaultUserFile()};
+
+    if (parser.isSet(checkConfigOption))
+        return checkConfiguration(configDir.path, settingsPaths);
+
+    nexora::shared::LoggingOptions logging;
+    logging.logFilePath = parser.value(logFileOption);
+    nexora::shared::installMessageHandler(logging);
 
     const bool runningAsRoot = nexora::shared::isRunningAsRoot();
     if (runningAsRoot) {
@@ -59,33 +140,63 @@ int main(int argc, char *argv[])
         qCWarning(lcApp) << "Running as root (--allow-root). Emulators inherit root privileges.";
     }
 
-    const auto configDir = nexora::shared::resolveConfigDirectory(
-        parser.value(configDirOption),
-        qEnvironmentVariable(nexora::shared::ConfigDirEnvVar),
-        QCoreApplication::applicationDirPath());
+    nexora::system::SingleInstanceGuard instance;
+    if (!instance.tryAcquire()) {
+        qCCritical(lcApp) << "Nexora is already running (pid" << instance.ownerPid() << ", lock"
+                          << instance.lockPath() << ")";
+        return 3;
+    }
+
     qCInfo(lcApp).noquote() << "Nexora OS" << NEXORA_VERSION << "- configuration directory:"
                             << configDir.path << "(" << nexora::shared::toString(configDir.source) << ")";
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    nexora::ui::AppController controller({configDir.path,
-                                          nexora::shared::toString(configDir.source),
-                                          parser.value(logFileOption), runningAsRoot});
-
     nexora::input::InputController input;
-    if (!input.start(parser.value(inputOption)))
-        qCWarning(lcApp) << "Controller input unavailable; keyboard navigation still works";
-    controller.setInputController(&input);
+    nexora::ui::UiContext::Options options;
+    options.app = {configDir.path, nexora::shared::toString(configDir.source), parser.value(logFileOption),
+                   runningAsRoot};
+    options.settings = settingsPaths;
+    options.databasePath = parser.isSet(databaseOption) ? QDir(parser.value(databaseOption)).absolutePath()
+                                                        : nexora::library::GameLibrary::defaultDatabasePath();
+    options.platformOverride = qEnvironmentVariable("NEXORA_PLATFORM");
+    nexora::ui::UiContext context(options, &input);
 
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &controller,
-                     [&controller] { controller.manager()->shutdown(); });
+    const QString backend = parser.isSet(inputOption)
+                                ? parser.value(inputOption)
+                                : context.settingsStore().stringValue(nexora::shared::Settings::InputBackend);
+    if (!input.start(backend))
+        qCWarning(lcApp) << "Controller input unavailable; keyboard navigation still works";
+    context.start();
+
+    nexora::system::UnixSignalWatcher signalWatcher;
+    QObject::connect(&signalWatcher, &nexora::system::UnixSignalWatcher::signalReceived, &app, [](int sig) {
+        qCInfo(lcApp) << "Termination signal" << sig << "- shutting down";
+        QCoreApplication::quit();
+    });
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &context, [&context] { context.shutdown(); });
 
     QQmlApplicationEngine engine;
-    QQuickWindow *window = nexora::ui::loadMainWindow(engine, &controller);
+    QQuickWindow *window = nexora::ui::loadMainWindow(engine, &context);
     if (!window)
         return 1;
-    if (parser.isSet(fullscreenOption))
-        window->showFullScreen();
+
+    auto applyDisplayMode = [window](const QString &mode) {
+        if (mode == QLatin1String("fullscreen"))
+            window->showFullScreen();
+        else
+            window->showNormal();
+    };
+    if (parser.isSet(fullscreenOption) || parser.isSet(windowedOption)) {
+        applyDisplayMode(parser.isSet(fullscreenOption) ? QStringLiteral("fullscreen") : QStringLiteral("windowed"));
+    } else {
+        const QString resolution = context.settingsStore().stringValue(nexora::shared::Settings::DisplayResolution);
+        if (resolution != QLatin1String("auto"))
+            window->resize(resolution.section(u'x', 0, 0).toInt(), resolution.section(u'x', 1, 1).toInt());
+        applyDisplayMode(context.settingsStore().stringValue(nexora::shared::Settings::DisplayMode));
+        QObject::connect(context.settings(), &nexora::ui::SettingsController::displayModeChanged, window,
+                         applyDisplayMode);
+    }
 
     return app.exec();
 }

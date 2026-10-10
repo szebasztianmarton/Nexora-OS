@@ -139,7 +139,11 @@ QVariantMap defaultMapping()
 {
     return {{QStringLiteral("accept"), QStringLiteral("south")},
             {QStringLiteral("back"), QStringLiteral("east")},
-            {QStringLiteral("menu"), QStringLiteral("start")}};
+            {QStringLiteral("menu"), QStringLiteral("start")},
+            {QStringLiteral("favorite"), QStringLiteral("north")},
+            {QStringLiteral("search"), QStringLiteral("west")},
+            {QStringLiteral("prevTab"), QStringLiteral("l1")},
+            {QStringLiteral("nextTab"), QStringLiteral("r1")}};
 }
 
 } // namespace
@@ -147,7 +151,7 @@ QVariantMap defaultMapping()
 const QList<Settings::Spec> &Settings::specs()
 {
     static const QRegularExpression id(QStringLiteral("^[a-z0-9][a-z0-9_-]{0,63}$"));
-    static const QRegularExpression action(QStringLiteral("^(accept|back|menu|favorite|search)$"));
+    static const QRegularExpression action(QStringLiteral("^(accept|back|menu|favorite|search|prevTab|nextTab)$"));
     static const QRegularExpression button(
         QStringLiteral("^(south|east|west|north|start|select|guide|l1|r1)$"));
     static const QList<Spec> list{

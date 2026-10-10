@@ -26,6 +26,14 @@ QVariant EmulatorListModel::data(const QModelIndex &index, int role) const
     case StatusTextRole: return entry.statusText;
     case DetailRole: return entry.detail;
     case AvailableRole: return entry.available;
+    case ProfilesRole: {
+        QVariantList profiles;
+        for (const auto &p : entry.config.profiles)
+            profiles.append(QVariantMap{{QStringLiteral("id"), p.id}, {QStringLiteral("name"), p.name},
+                                        {QStringLiteral("enabled"), p.enabled}});
+        return profiles;
+    }
+    case ExtensionsRole: return entry.config.extensions.join(QStringLiteral(", "));
     default: return {};
     }
 }
@@ -40,6 +48,8 @@ QHash<int, QByteArray> EmulatorListModel::roleNames() const
         {StatusTextRole, "statusText"},
         {DetailRole, "detail"},
         {AvailableRole, "available"},
+        {ProfilesRole, "profiles"},
+        {ExtensionsRole, "extensions"},
     };
 }
 

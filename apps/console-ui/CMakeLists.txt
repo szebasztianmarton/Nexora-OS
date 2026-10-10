@@ -31,17 +31,24 @@ qt_add_qml_module(nexora_ui
         src/AppController.h src/AppController.cpp
         src/EmulatorListModel.h src/EmulatorListModel.cpp
         src/UiBootstrap.h src/UiBootstrap.cpp
+        src/GameListModel.h src/GameListModel.cpp
+        src/LibraryController.h src/LibraryController.cpp
+        src/SettingsController.h src/SettingsController.cpp
+        src/SystemController.h src/SystemController.cpp
+        src/UiContext.h src/UiContext.cpp
 )
 
 # qmltyperegistrar includes the QML_ELEMENT headers by bare name.
 target_include_directories(nexora_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(nexora_ui PUBLIC NEXORA_VERSION="${PROJECT_VERSION}")
 target_link_libraries(nexora_ui
-    PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick nexora_shared nexora_emulator_manager nexora_input)
+    PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick nexora_shared nexora_emulator_manager nexora_input nexora_library nexora_system)
 target_compile_definitions(nexora_ui PRIVATE
     QT_NO_NARROWING_CONVERSIONS_IN_CONNECT QT_NO_URL_CAST_FROM_STRING)
 # Warnings only for hand-written sources; qmlcachegen output is not -Wshadow clean.
-nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/UiBootstrap.cpp)
+nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/UiBootstrap.cpp
+    src/GameListModel.cpp src/LibraryController.cpp src/SettingsController.cpp src/SystemController.cpp
+    src/UiContext.cpp)
 
 # --- Application ---------------------------------------------------------------------------
 qt_add_executable(nexora-console-ui src/main.cpp)

@@ -27,6 +27,8 @@ public:
         StatusTextRole, // short human-readable status
         DetailRole,     // longer explanation (e.g. why an entry is unavailable)
         AvailableRole,  // executable passed validation at load time
+        ProfilesRole,   // [{id, name, enabled}]
+        ExtensionsRole, // ".sfc, .smc"
     };
     Q_ENUM(Role)
 

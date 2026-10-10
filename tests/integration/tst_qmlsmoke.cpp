@@ -1,6 +1,7 @@
 // Loads the real Main.qml (offscreen) and checks start-up, navigation and empty state.
 #include "AppController.h"
 #include "UiBootstrap.h"
+#include "UiContext.h"
 
 #include <QFile>
 #include <QQmlApplicationEngine>
@@ -38,7 +39,9 @@ class TestQmlSmoke : public QObject
 private:
     struct Ui
     {
-        std::unique_ptr<AppController> app;
+        std::unique_ptr<QTemporaryDir> state;
+        std::unique_ptr<nexora::ui::UiContext> context;
+        AppController *app = nullptr;
         std::unique_ptr<QQmlApplicationEngine> engine;
         QQuickWindow *window = nullptr;
         QList<QQmlError> warnings;
@@ -46,12 +49,19 @@ private:
 
     static void load(Ui &ui, const QString &configDir)
     {
-        ui.app = std::make_unique<AppController>(
-            AppController::Options{configDir, QStringLiteral("test"), {}, false});
+        ui.state = std::make_unique<QTemporaryDir>();
+        nexora::ui::UiContext::Options options;
+        options.app = {configDir, QStringLiteral("test"), {}, false};
+        options.settings = {{}, ui.state->filePath(QStringLiteral("settings.json"))};
+        options.databasePath = ui.state->filePath(QStringLiteral("library.sqlite"));
+        options.platformOverride = QStringLiteral("desktop");
+        ui.context = std::make_unique<nexora::ui::UiContext>(options);
+        ui.context->start();
+        ui.app = ui.context->app();
         ui.engine = std::make_unique<QQmlApplicationEngine>();
         QObject::connect(ui.engine.get(), &QQmlEngine::warnings, ui.engine.get(),
                          [&ui](const QList<QQmlError> &warnings) { ui.warnings.append(warnings); });
-        ui.window = nexora::ui::loadMainWindow(*ui.engine, ui.app.get());
+        ui.window = nexora::ui::loadMainWindow(*ui.engine, ui.context.get());
         QVERIFY(ui.window);
         QVERIFY(QTest::qWaitForWindowExposed(ui.window));
     }

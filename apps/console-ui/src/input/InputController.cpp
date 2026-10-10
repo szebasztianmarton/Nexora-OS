@@ -24,7 +24,17 @@ InputController::InputController(QObject *parent)
     , m_targetProvider([] { return QGuiApplication::focusWindow(); })
     , m_statusOverride(QStringLiteral("Controller input not started"))
 {
-    connect(m_navigator, &GamepadNavigator::actionTriggered, this, &InputController::injectAction);
+    connect(m_navigator, &GamepadNavigator::actionTriggered, this, [this](NavAction action) {
+        const bool directional = action == NavAction::Up || action == NavAction::Down
+                                 || action == NavAction::Left || action == NavAction::Right;
+        if (m_capturing && !directional)
+            return; // reported through buttonCaptured() instead
+        injectAction(action);
+    });
+    connect(m_navigator, &GamepadNavigator::buttonPressed, this, [this](GamepadButton button, quint32) {
+        if (m_capturing && !m_suspended)
+            emit buttonCaptured(ButtonMapping::buttonName(button));
+    });
     connect(m_navigator, &GamepadNavigator::returnToLauncherRequested, this, [this] {
         qCInfo(lcInput) << "Return-to-launcher chord (Select + Start) detected";
         emit returnToLauncherRequested();
@@ -131,6 +141,21 @@ void InputController::setSuspended(bool suspended)
     emit suspendedChanged();
 }
 
+void InputController::setMapping(const ButtonMapping &mapping)
+{
+    m_navigator->setMapping(mapping);
+}
+
+ButtonMapping InputController::mapping() const
+{
+    return m_navigator->mapping();
+}
+
+void InputController::setCapturing(bool capturing)
+{
+    m_capturing = capturing;
+}
+
 void InputController::setTargetWindowProvider(std::function<QWindow *()> provider)
 {
     m_targetProvider = std::move(provider);
@@ -155,6 +180,10 @@ int InputController::keyForAction(NavAction action)
     case NavAction::Accept: return Qt::Key_Return;
     case NavAction::Back: return Qt::Key_Escape;
     case NavAction::Menu: return Qt::Key_Menu;
+    case NavAction::Favorite: return Qt::Key_Favorites;
+    case NavAction::Search: return Qt::Key_Search;
+    case NavAction::PrevTab: return Qt::Key_PageUp;
+    case NavAction::NextTab: return Qt::Key_PageDown;
     }
     return Qt::Key_unknown;
 }

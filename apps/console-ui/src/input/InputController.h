@@ -1,5 +1,6 @@
 #pragma once
 
+#include "input/ButtonMapping.h"
 #include "input/NavAction.h"
 
 #include <QObject>
@@ -45,6 +46,15 @@ public:
     bool isSuspended() const { return m_suspended; }
     void setSuspended(bool suspended);
 
+    // Applies a button mapping (validated; see ButtonMapping).
+    void setMapping(const ButtonMapping &mapping);
+    ButtonMapping mapping() const;
+
+    // While capturing, button presses are reported through buttonCaptured() instead of
+    // being turned into actions (used by the remapping screen). Directions still navigate.
+    bool isCapturing() const { return m_capturing; }
+    void setCapturing(bool capturing);
+
     // Overrides where synthesized key events go (default: QGuiApplication::focusWindow()).
     void setTargetWindowProvider(std::function<QWindow *()> provider);
 
@@ -64,6 +74,7 @@ signals:
     // The "return to launcher" chord (hold Select + Start) was completed. Emitted even while
     // suspended: this is how a controller-only user leaves a running emulator.
     void returnToLauncherRequested();
+    void buttonCaptured(const QString &buttonName);
 
 private:
     bool startBackend(std::unique_ptr<InputBackend> backend);
@@ -75,6 +86,7 @@ private:
     std::function<QWindow *()> m_targetProvider;
     QString m_statusOverride; // used when no backend runs
     bool m_suspended = false;
+    bool m_capturing = false;
 };
 
 } // namespace nexora::input
