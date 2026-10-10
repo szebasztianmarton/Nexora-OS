@@ -11,7 +11,12 @@ Item {
     property bool showPlaceholderTitle: true
 
     readonly property bool loaded: image.status === Image.Ready
-    readonly property bool landscape: loaded && image.implicitWidth > image.implicitHeight
+    // Measured once per loaded source. Not bound to the image's live state:
+    // changing fillMode reloads a sourceSize'd image, which would otherwise
+    // form a binding loop (landscape -> fillMode -> reload -> status).
+    readonly property bool landscape: _landscape
+    property bool _landscape: false
+    onSourceChanged: _landscape = false
 
     ArtworkPlaceholder {
         anchors.fill: parent
@@ -32,5 +37,6 @@ Item {
         fillMode: artwork.landscape ? Image.PreserveAspectFit : Image.PreserveAspectCrop
         // Decode at display resolution only (memory friendly on large libraries).
         sourceSize.width: Math.ceil(artwork.width * 1.5)
+        onStatusChanged: if (status === Image.Ready) artwork._landscape = implicitWidth > implicitHeight
     }
 }

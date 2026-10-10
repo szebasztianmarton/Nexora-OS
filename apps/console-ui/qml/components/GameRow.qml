@@ -43,9 +43,14 @@ FocusScope {
         preferredHighlightEnd: width - row.cardWidth - Dimensions.focusOffset * 2
         cacheBuffer: row.cardWidth * 4
 
+        // Make sure a card is current (and therefore focused) when the row
+        // receives focus, e.g. after the model was empty at creation.
+        onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
+
         delegate: GameCard {
             required property int index
             required property var model
+            focus: ListView.isCurrentItem
             y: Dimensions.focusOffset
             width: row.cardWidth
             title: model.title

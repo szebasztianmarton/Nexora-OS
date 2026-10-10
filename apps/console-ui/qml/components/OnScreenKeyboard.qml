@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // Controller-friendly text entry. D-pad moves across keys, Confirm types,
-// Secondary (X / F) deletes, Options (Start / M) finishes, Back closes
+// Backspace / controller West deletes, Options (Start / M) finishes, Back closes
 // (keeping the text typed so far). Physical keyboards can type directly.
 ModalBase {
     id: osk
@@ -12,13 +12,30 @@ ModalBase {
     panelWidth: Dimensions.s(980)
     initialFocusItem: grid
 
-    readonly property var keys: [
-        "1","2","3","4","5","6","7","8","9","0",
-        "q","w","e","r","t","y","u","i","o","p",
-        "a","s","d","f","g","h","j","k","l","-",
-        "z","x","c","v","b","n","m",".","'",":",
-        "⌫","SPACE","CLEAR","DONE"
+    // Rows of keys; the last row has four wide keys.
+    readonly property var rows: [
+        ["1","2","3","4","5","6","7","8","9","0"],
+        ["q","w","e","r","t","y","u","i","o","p"],
+        ["a","s","d","f","g","h","j","k","l","-"],
+        ["z","x","c","v","b","n","m",".","'",":"],
+        ["⌫","SPACE","CLEAR","DONE"]
     ]
+    property int row: 0
+    property int column: 0
+
+    // Moves the cursor, mapping columns proportionally between rows of
+    // different lengths.
+    function _move(dRow, dColumn) {
+        if (dColumn !== 0) {
+            column = Math.max(0, Math.min(rows[row].length - 1, column + dColumn))
+            return
+        }
+        var target = Math.max(0, Math.min(rows.length - 1, row + dRow))
+        if (target === row) return
+        var ratio = (column + 0.5) / rows[row].length
+        row = target
+        column = Math.min(rows[row].length - 1, Math.floor(ratio * rows[row].length))
+    }
 
     function _type(k) {
         if (k === "⌫") text = text.slice(0, -1)
@@ -57,69 +74,74 @@ ModalBase {
                 elide: Text.ElideLeft
             }
         }
-        GridView {
+        Column {
             id: grid
             Layout.fillWidth: true
-            Layout.preferredHeight: cellHeight * 5
             focus: true
-            interactive: false
-            keyNavigationEnabled: true
-            cellWidth: width / 10
-            cellHeight: Dimensions.s(64)
-            model: osk.keys
-            delegate: Item {
-                id: keyItem
-                required property string modelData
-                required property int index
-                readonly property bool wide: index >= 40
-                width: wide ? grid.cellWidth * 2.5 : grid.cellWidth
-                height: grid.cellHeight
-                // Wide bottom-row keys are laid out manually across the row.
-                x: wide ? (index - 40) * grid.cellWidth * 2.5 : (index % 10) * grid.cellWidth
-                readonly property bool current: GridView.isCurrentItem && grid.activeFocus
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: Dimensions.s(4)
-                    radius: Dimensions.radiusSm
-                    color: keyItem.current ? Theme.accentPrimary
-                         : (keyItem.modelData === "DONE" ? Theme.accentPrimarySoft : Theme.backgroundHover)
-                    Text {
-                        anchors.centerIn: parent
-                        text: keyItem.modelData === "SPACE" ? qsTr("Space")
-                            : keyItem.modelData === "CLEAR" ? qsTr("Clear")
-                            : keyItem.modelData === "DONE" ? qsTr("Done") : keyItem.modelData
-                        font.family: Typography.family
-                        font.pixelSize: Typography.body
-                        font.weight: Typography.weightMedium
-                        color: keyItem.current ? Theme.onAccent : Theme.textPrimary
+            spacing: 0
+            Repeater {
+                model: osk.rows
+                delegate: Row {
+                    id: keyRow
+                    required property var modelData
+                    required property int index
+                    Repeater {
+                        model: keyRow.modelData
+                        delegate: Item {
+                            id: keyItem
+                            required property string modelData
+                            required property int index
+                            readonly property bool current: grid.activeFocus && osk.row === keyRow.index && osk.column === index
+                            width: grid.width / keyRow.modelData.length
+                            height: Dimensions.s(64)
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: Dimensions.s(4)
+                                radius: Dimensions.radiusSm
+                                color: keyItem.current ? Theme.accentPrimary
+                                     : (keyItem.modelData === "DONE" ? Theme.accentPrimarySoft : Theme.backgroundHover)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: keyItem.modelData === "SPACE" ? qsTr("Space")
+                                        : keyItem.modelData === "CLEAR" ? qsTr("Clear")
+                                        : keyItem.modelData === "DONE" ? qsTr("Done") : keyItem.modelData
+                                    font.family: Typography.family
+                                    font.pixelSize: Typography.body
+                                    font.weight: Typography.weightMedium
+                                    color: keyItem.current ? Theme.onAccent : Theme.textPrimary
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: { osk.row = keyRow.index; osk.column = keyItem.index; osk._type(keyItem.modelData) }
+                                }
+                            }
+                        }
                     }
-                    MouseArea { anchors.fill: parent; onClicked: { grid.currentIndex = keyItem.index; osk._type(keyItem.modelData) } }
                 }
             }
-            // The bottom row has 4 wide keys; map horizontal moves accordingly.
             Keys.onPressed: function(event) {
-                var i = currentIndex
-                if (Input.isConfirm(event) && !event.isAutoRepeat) { osk._type(osk.keys[i]); event.accepted = true }
-                else if (Input.isSecondary(event) && event.key !== Qt.Key_F) { osk._type("⌫"); event.accepted = true }
-                else if (event.key === Qt.Key_Menu) { osk._finish(); event.accepted = true }
-                else if (event.key === Qt.Key_Down && i >= 30 && i < 40) { currentIndex = 40 + Math.min(3, Math.floor((i - 30) / 2.5)); event.accepted = true }
-                else if (event.key === Qt.Key_Up && i >= 40) { currentIndex = 30 + Math.round((i - 40) * 2.5); event.accepted = true }
-                else if (event.key === Qt.Key_Right && i >= 40) { if (i < 43) currentIndex = i + 1; event.accepted = true }
-                else if (event.key === Qt.Key_Left && i >= 40) { if (i > 40) currentIndex = i - 1; event.accepted = true }
-                else if (event.key === Qt.Key_Down && i >= 40) { event.accepted = true }
-                else if (event.text.length === 1 && event.text >= " " && !event.isAutoRepeat
-                         && event.key !== Qt.Key_Space && !Input.isConfirm(event)) {
+                if (event.key === Qt.Key_Up) { osk._move(-1, 0); event.accepted = true }
+                else if (event.key === Qt.Key_Down) { osk._move(1, 0); event.accepted = true }
+                else if (event.key === Qt.Key_Left) { osk._move(0, -1); event.accepted = true }
+                else if (event.key === Qt.Key_Right) { osk._move(0, 1); event.accepted = true }
+                else if (Input.isConfirm(event)) {
+                    if (!event.isAutoRepeat) osk._type(osk.rows[osk.row][osk.column])
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Menu) { osk._finish(); event.accepted = true }
+                else if (event.key === Qt.Key_Backspace
+                         || (event.key === Qt.Key_F && event.text === "")) {   // controller West
+                    osk._type("⌫"); event.accepted = true
+                }
+                else if (event.text.length === 1 && event.text > " " && !event.isAutoRepeat) {
                     // Physical keyboard typing goes straight into the text.
                     osk.text += event.text; osk.textEdited(osk.text); event.accepted = true
-                } else if (event.key === Qt.Key_Backspace) {
-                    osk._type("⌫"); event.accepted = true
                 }
             }
         }
         Text {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignRight
-            text: qsTr("Confirm types · Back closes · Start/M finishes")
+            text: qsTr("Confirm types · West button deletes · Start finishes · Back closes")
             font.family: Typography.family
             font.pixelSize: Typography.caption
             color: Theme.textMuted

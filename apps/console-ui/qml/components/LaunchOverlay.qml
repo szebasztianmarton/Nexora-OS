@@ -24,8 +24,13 @@ FocusScope {
             var w = overlay.Window.window
             returnFocusItem = w ? w.activeFocusItem : null
             stopButton.forceActiveFocus()
-        } else if (returnFocusItem) {
-            returnFocusItem.forceActiveFocus()
+        } else {
+            // The stored item can have been destroyed meanwhile (its JS wrapper
+            // then has no methods); fall back to the current page's focus.
+            if (returnFocusItem && typeof returnFocusItem.forceActiveFocus === "function")
+                returnFocusItem.forceActiveFocus()
+            else
+                Router.focusContent()
             returnFocusItem = null
         }
     }

@@ -34,8 +34,17 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        if (!returnFocusItem && Window.window)
+        if (!returnFocusItem && Window.window) {
             returnFocusItem = Window.window.activeFocusItem
+            // Opened from a modal that is closing (e.g. menu -> confirmation):
+            // return to what that modal would have returned to instead.
+            for (var p = returnFocusItem; p; p = p.parent) {
+                if (p !== modal && p._closing === true && p.returnFocusItem !== undefined) {
+                    returnFocusItem = p.returnFocusItem
+                    break
+                }
+            }
+        }
         openAnim.start()
         modal.forceActiveFocus()
         Qt.callLater(focusInitial)   // delegates (e.g. Repeater buttons) exist by then
@@ -78,7 +87,6 @@ FocusScope {
             anchors.fill: parent
             anchors.margins: Dimensions.spacingXl
             implicitHeight: childrenRect.height
-            clip: true
         }
     }
 
@@ -97,10 +105,18 @@ FocusScope {
         ScriptAction {
             script: {
                 var target = modal.returnFocusItem
+                // Don't steal focus from a modal opened meanwhile (menu -> dialog).
+                var current = modal.Window.window ? modal.Window.window.activeFocusItem : null
+                var focusElsewhere = false
+                for (var p = current; p; p = p.parent) {
+                    if (p === modal) { focusElsewhere = false; break }
+                    if (p._closing === false && p.returnFocusItem !== undefined) { focusElsewhere = true; break }
+                }
                 modal.closed()
                 modal.focus = false
                 modal.visible = false
-                if (target) target.forceActiveFocus()
+                if (target && !focusElsewhere && typeof target.forceActiveFocus === "function")
+                    target.forceActiveFocus()
                 modal.destroy()
             }
         }
