@@ -241,7 +241,7 @@ FocusScope {
                     readonly property bool capturing: screen.settings.capturingAction === modelData.action
                     objectName: "mapping_" + modelData.action
                     label: modelData.label
-                    description: capturing ? "Press a button on your controller… (5 s)  ·  B / Esc cancels"
+                    description: capturing ? "Press a button on your controller… (5 s)  ·  Esc or Confirm again cancels"
                                : noController ? "No controller input available — use ← → to choose a button"
                                : mappingRow.activeFocus ? "A / Enter: press a button to assign · ← →: choose" : ""
                     value: capturing ? "Waiting…" : Theme.buttonLabel(modelData.button)

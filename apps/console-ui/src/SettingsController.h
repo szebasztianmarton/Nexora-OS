@@ -38,6 +38,7 @@ class SettingsController : public QObject
     Q_PROPERTY(QString inputBackend READ inputBackend WRITE setInputBackend NOTIFY changed)
     Q_PROPERTY(QVariantList mappingRows READ mappingRows NOTIFY changed)
     Q_PROPERTY(QString capturingAction READ capturingAction NOTIFY capturingChanged)
+    Q_PROPERTY(bool controllerAvailable READ controllerAvailable NOTIFY changed)
     Q_PROPERTY(QStringList issues READ issues NOTIFY changed)
     Q_PROPERTY(QString userFile READ userFile CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY changed)
@@ -65,6 +66,8 @@ public:
     void setInputBackend(const QString &value) { set(QStringLiteral("input.backend"), value); }
     QVariantList mappingRows() const;
     QString capturingAction() const { return m_capturing; }
+    // A gamepad backend is running (remap capture is only offered then).
+    bool controllerAvailable() const;
     QStringList issues() const;
     QString userFile() const;
     QString lastError() const { return m_lastError; }

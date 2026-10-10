@@ -38,6 +38,10 @@ public:
     // start (the controller then runs with backend "none").
     bool start(const QString &backend = QStringLiteral("auto"));
 
+    // Starts a caller-provided backend (tests, future platform backends). It must feed
+    // navigator(). Any running backend is stopped first.
+    bool start(std::unique_ptr<InputBackend> backend);
+
     QString backendName() const;
     QString statusText() const;
     QStringList devices() const;

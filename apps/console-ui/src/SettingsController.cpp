@@ -52,8 +52,10 @@ SettingsController::SettingsController(shared::Settings *settings, input::InputC
     m_captureTimeout.setSingleShot(true);
     m_captureTimeout.setInterval(5000);
     connect(&m_captureTimeout, &QTimer::timeout, this, &SettingsController::cancelRemap);
-    if (m_input)
+    if (m_input) {
         connect(m_input, &input::InputController::buttonCaptured, this, &SettingsController::onCaptured);
+        connect(m_input, &input::InputController::statusChanged, this, &SettingsController::changed);
+    }
     connect(m_settings, &Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == Settings::InputMapping)
             applyMapping();
@@ -158,9 +160,14 @@ void SettingsController::cycle(const QString &key, int step)
     set(key, choices.at(next));
 }
 
+bool SettingsController::controllerAvailable() const
+{
+    return m_input && m_input->backendName() != QLatin1String("none");
+}
+
 bool SettingsController::beginRemap(const QString &action)
 {
-    if (!input::ButtonMapping::actionFromName(action) || !m_input)
+    if (!input::ButtonMapping::actionFromName(action) || !controllerAvailable())
         return false;
     m_capturing = action;
     m_input->setCapturing(true);

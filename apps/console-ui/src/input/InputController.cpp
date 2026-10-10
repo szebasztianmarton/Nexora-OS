@@ -91,6 +91,12 @@ bool InputController::start(const QString &backend)
     return finishNone(QStringLiteral("Unknown input backend '%1'").arg(backend), false);
 }
 
+bool InputController::start(std::unique_ptr<InputBackend> backend)
+{
+    stopBackend();
+    return startBackend(std::move(backend));
+}
+
 bool InputController::startBackend(std::unique_ptr<InputBackend> backend)
 {
     connect(backend.get(), &InputBackend::statusChanged, this, &InputController::statusChanged);

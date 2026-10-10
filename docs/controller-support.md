@@ -49,7 +49,7 @@ Selected by `--input-backend` or, if not given, the `input.backend` setting (def
 | `sdl3` | SDL3 only. Fails if not built in or SDL cannot initialise the gamepad subsystem. |
 | `none` | Controller input disabled. |
 
-Only one backend runs at a time. The diagnostics screen shows the backend name, its status text and the connected devices.
+Only one backend runs at a time. The Diagnostics tab shows the backend name, its status text and the connected devices.
 
 ### evdev (default on Linux)
 
@@ -111,18 +111,18 @@ Known risk (unverified): the kernel defines `BTN_NORTH` and `BTN_WEST` as aliase
 
 Synthesized keys are fixed; the button for each remappable action comes from `input.mapping`.
 
-| Action | Default button | Xbox / PlayStation / Nintendo label | Synthesized key | Typical UI meaning |
+| Action | Default button | Xbox / PlayStation / Nintendo label | Synthesized key | In the dashboard |
 | --- | --- | --- | --- | --- |
-| `accept` | `south` | A / ✕ / B | `Return` | Confirm / launch |
-| `back` | `east` | B / ○ / A | `Escape` | Back |
-| `menu` | `start` | Menu / Options / + | `Menu` | Menu / diagnostics |
-| `favorite` | `north` | Y / △ / X | `Favorites` | Toggle favorite |
-| `search` | `west` | X / □ / Y | `Search` | Search |
-| `prevTab` | `l1` | LB / L1 / L | `PageUp` | Previous tab |
+| `accept` | `south` | A / ✕ / B | `Return` | Select / launch / confirm (destructive actions such as power off need a second press) |
+| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker, cancel a pending confirmation or remap capture; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
+| `menu` | `start` | Menu / Options / + | `Menu` | Open the Diagnostics tab |
+| `favorite` | `north` | Y / △ / X | `Favorites` | Toggle favorite of the focused game (Home rows, Games grid) |
+| `search` | `west` | X / □ / Y | `Search` | Open the Games tab with the search field focused |
+| `prevTab` | `l1` | LB / L1 / L | `PageUp` | Previous tab (Home, Games, Emulators, Settings, Diagnostics) |
 | `nextTab` | `r1` | RB / R1 / R | `PageDown` | Next tab |
-| Up/Down/Left/Right | D-pad, hat, left stick | (fixed) | arrow keys | Move focus |
+| Up/Down/Left/Right | D-pad, hat, left stick | (fixed) | arrow keys | Move focus; Up at the top of a page moves to the tab bar; Left/Right change values on Settings rows |
 
-What each key does on a given screen is decided by the QML, which is being reworked for MVP 2; the "typical meaning" column is not a guarantee.
+The dashboard behaviour is defined in `apps/console-ui/qml/` and covered by `tst_qmlsmoke` with key events. The hint bar at the bottom shows the keys that apply to the focused element.
 
 ## Configurable mapping
 
@@ -149,8 +149,9 @@ An ignored mapping falls back to the **default** mapping; the settings screen li
 
 ### Remapping from the UI
 
-- `SettingsController.beginRemap(action)` starts capture: the next **non-directional** button press (any of the nine buttons above) becomes the binding. Directions keep navigating during capture; the captured press is not delivered as an action. Capture ends after the press or after 5 s (`cancelRemap()`), and is ignored while input is suspended.
-- `SettingsController.remap(action, button)` binds directly (also used without a controller).
+- On the Settings tab, each action has a row under "Controller". **Left/Right** cycles the button directly (works with keyboard only). **Accept** starts capture (`SettingsController.beginRemap(action)`): the next **non-directional** button press (any of the nine buttons above) becomes the binding. Directions keep navigating during capture; the captured press is not delivered as an action. Capture ends after the press or after 5 s (`cancelRemap()`), and is ignored while input is suspended.
+- Note: during capture *every* face button, including the one bound to `back`, is captured as the new binding; the keyboard's Esc, pressing Confirm on the row again, or the 5 s timeout cancels (the row hint says so). Capture is only offered while a gamepad backend is running (`settings.controllerAvailable`); with backend `none` the row tells keyboard users to pick a button with ← →.
+- `SettingsController.remap(action, button)` binds directly (used by Left/Right and by tests).
 - Binding a button that another action already uses **swaps** them: the other action gets the old button of the remapped action, so every action stays reachable (example: binding `accept` to `east` moves `back` to `south`).
 - Each change is validated and saved immediately. "Reset to defaults" restores the default mapping together with all other settings.
 
@@ -179,7 +180,19 @@ The keyboard always works, with or without a controller backend. Because gamepad
 | Menu (context-menu key) | `menu` |
 | Page Up / Page Down | `prevTab` / `nextTab` |
 
-`Favorites` and `Search` are media keys most keyboards lack. At the time of writing the QML (still being reworked for MVP 2, so this may change) also accepts: `F1` (diagnostics, like Menu), `F` on a game (favorite), `/` or `Ctrl+F` (search), `Ctrl+Tab` / `Ctrl+Shift+Tab` (next/previous tab), `Backspace` (back) and `Ctrl+Q` (quit; development convenience).
+`Favorites` and `Search` are media keys most keyboards lack, so the dashboard also accepts these keyboard-only keys:
+
+| Key | Effect |
+| --- | --- |
+| `F1` | Diagnostics tab (like Menu) |
+| `F` (no modifier) on a focused game | Toggle favorite |
+| `/` or `Ctrl+F` | Search on the Games tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `Backspace` | Same as Esc |
+| `Space` | Activates buttons and rows like Enter |
+| `Ctrl+Q` | Quit (development convenience) |
+
+Text entry (search, adding a library folder) needs a keyboard: there is no on-screen keyboard.
 
 ## While an emulator runs
 
@@ -209,13 +222,13 @@ The keyboard always works, with or without a controller backend. Because gamepad
 
 ## Manual test checklist
 
-Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --windowed --input-backend evdev`, later `sdl3` if built) and on the image in QEMU with USB pass-through ([buildroot.md](buildroot.md#running-in-qemu)). Watch the log (`nexora.input` category) and the diagnostics screen. Record controller model, connection (USB/Bluetooth), driver (`cat /proc/bus/input/devices`), backend and result for each item.
+Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --windowed --input-backend evdev`, later `sdl3` if built) and on the image in QEMU with USB pass-through ([buildroot.md](buildroot.md#running-in-qemu)). Watch the log (`nexora.input` category) and the Diagnostics tab. Record controller model, connection (USB/Bluetooth), driver (`cat /proc/bus/input/devices`), backend and result for each item.
 
-1. **Detection:** with the pad connected before start, the diagnostics screen shows the backend, "1 gamepad connected" and the pad's name.
+1. **Detection:** with the pad connected before start, the Diagnostics tab shows the backend, "1 gamepad connected" and the pad's name.
 2. **Permissions:** as a user without `input` group membership, the status explains the permission problem; after adding the group and logging in again, the pad is detected.
 3. **Hotplug:** unplug → "Gamepad disconnected" in the log and device list updates; plug in again → detected within about a second.
 4. **Face buttons by position:** bottom = confirm, right = back, top = favorite, left = search. Note any swapped pair (especially west/north on Xbox pads under evdev).
-5. **Start / Select / Guide:** Start opens the menu; Guide and Select open the menu while unbound.
+5. **Start / Select / Guide:** Start opens the Diagnostics tab (menu action); Guide and Select do the same while unbound.
 6. **Shoulders:** L1/R1 switch to the previous/next tab.
 7. **Directions:** D-pad, left stick and (if the pad reports one) the hat all move focus; a held direction repeats; releasing stops immediately; resting stick does not drift.
 8. **Remap:** remap `favorite` to L1 from the settings screen; check that `prevTab` moved to the old favorite button, the new binding works, it survives a restart, and an unpressed capture times out after 5 s.

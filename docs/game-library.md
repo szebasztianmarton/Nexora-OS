@@ -18,7 +18,7 @@ Code: `apps/game-library/` (`LibraryScanner`, `GameDatabase`, `LibraryQuery`, `G
 
 ## Configuring directories and file types
 
-**Directories** come from the `library.directories` setting ([settings.md](settings.md#keys)): absolute paths, at most 64, `/` refused. They can be added from the UI (`LibraryController.addDirectory()`, which additionally requires the directory to exist) or written to the settings file (existence is then only checked by the scan).
+**Directories** come from the `library.directories` setting ([settings.md](settings.md#keys)): absolute paths, at most 64, `/` refused. They can be added and removed on the Settings tab under "Library folders" (typing the path requires a keyboard; `LibraryController.addDirectory()` additionally requires the directory to exist) or written to the settings file (existence is then only checked by the scan).
 
 **File types** come from two places:
 
@@ -55,7 +55,7 @@ Extension matching is case-insensitive and uses the text after the **last** dot 
 ### Symbolic links
 
 - Default (`library.followSymlinks: false`): every symbolic link inside a library directory is skipped and counted as "skipped link". (A configured root that is itself a symlink is resolved and scanned.)
-- `library.followSymlinks: true`: a link is followed only if its canonical target lies inside the **same** root. Links that point elsewhere (and broken links) are skipped with the issue "symbolic link points outside the library directory; skipped". Directory loops are detected and not followed twice.
+- `library.followSymlinks: true`: a link is followed only if its canonical target lies inside the **same** root. Links that point elsewhere are skipped with the issue "symbolic link points outside the library directory; skipped"; broken links are skipped with "broken symbolic link; skipped". Both count as skipped links. Directory loops are detected and not followed twice.
 
 ### Asynchronous scanning
 
@@ -71,7 +71,7 @@ Extension matching is case-insensitive and uses the text after the **last** dot 
 | Start-up | Only if the **scan signature** changed since the last completed scan, or nothing was scanned yet. The signature is a SHA-256 over the sorted directories, the extension → emulator map and the symlink option, stored in the database (`meta` key `scan-signature`). |
 | Emulator definitions reloaded | Only if the signature changed (e.g. an emulator gained an extension). |
 | `library.directories`, `library.extensions` or `library.followSymlinks` changed | Only if the signature changed. |
-| Manual refresh (`LibraryController.refresh()`) | Always. |
+| Manual refresh ("Rescan library" on the Settings tab, "Rescan library" on the Home tab and in the Games tab's empty state; `LibraryController.refresh()`) | Always, exactly one scan (the scan options are updated first without starting a second scan). |
 
 New, removed or renamed files inside an already configured directory do **not** change the signature. There is no file system watching: use the manual refresh after copying games.
 
@@ -122,14 +122,19 @@ Entries are never deleted by a scan; they are marked not present (`present = 0`)
 | Scan truncated (file limit) or cancelled | Only entries whose directory is no longer configured are marked missing. |
 | Game deleted after the last scan | Still listed until the next scan; launching is refused with "Game file is missing" and the UI stays usable. |
 
-**Purge:** `LibraryController.purgeMissing()` permanently deletes all entries with `present = 0`, including their favorites and history. It only runs as an explicit user action.
+**Purge:** `LibraryController.purgeMissing()` permanently deletes all entries with `present = 0`, including their favorites and history. It only runs as an explicit user action and is not yet reachable from the dashboard (API only).
 
 ## Search, filters and sorting
+
+In the dashboard:
+
+- **Home tab:** quick actions (browse games, rescan, settings), a "Continue playing" row (recently played) and a "Favorites" row; a getting-started panel while the library is empty.
+- **Games tab:** search field (`/`, `Ctrl+F` or the Search button/key), filter chips (All, Favorites, Recent), sort selector and the game grid. Accept launches the selected game, the Favorite button (north / `F`) toggles the favorite. Empty states explain what to do (no folders → open Settings; no games → rescan; no results → clear search).
 
 Implemented in `LibraryQuery` (pure, unit-tested):
 
 - Missing entries are never shown.
-- **Search:** the text is split at spaces; every term must occur (case-insensitive substring) in the title **or** the file name. Example: `mario usa` matches `Super Mario World (USA).sfc`. The library list is rebuilt 150 ms after the last keystroke.
+- **Search:** the text is split at whitespace (spaces, tabs); every term must occur (case-insensitive substring) in the title **or** the file name. Example: `mario usa` matches `Super Mario World (USA).sfc`. The library list is rebuilt 150 ms after the last keystroke.
 - **Filters:** `all`, `favorites`, `recent` (only games launched at least once). The `recent` filter always orders by most recently played and keeps the newest 20 entries by default; the `recentGames` list that `LibraryController` exposes to the UI keeps 12. An emulator filter (games whose candidates include an emulator id) exists in the query API.
 - **Sort orders:**
 
@@ -140,7 +145,7 @@ Implemented in `LibraryQuery` (pure, unit-tested):
 | `emulator` | Effective emulator id, then title |
 | `added` | Newest `added_at` first, then title |
 
-The initial order comes from `library.sortOrder`; the library screen can change it for the session.
+The order comes from `library.sortOrder`. Choosing a sort order on the Games tab saves it as that setting, and changing the setting on the Settings tab re-sorts the list.
 
 ## Emulator assignment
 
@@ -173,5 +178,6 @@ Starting an emulator **without** a game (from the emulator list) drops every arg
 - No ROMs, BIOS files or emulators are provided; you must supply legally obtained files and install emulators yourself.
 - No automatic detection of new files (manual refresh), no archive inspection (a `.zip` is one file), no multi-disc grouping.
 - Renamed/moved files lose their favorite and history.
-- Per-game emulator override has no UI yet.
-- Not tested with very large real collections; the 100 000-file limit and depth limit are enforced, but performance was only checked with the small test fixtures.
+- Per-game emulator override and purging missing entries have no UI yet.
+- Adding a folder requires typing its path; there is no on-screen keyboard or folder browser.
+- Not tested with real collections. A synthetic measurement (Release build, 4-core container, 10 000 files): scan ≈0.2 s on the worker thread, first database merge 138 ms, unchanged-rescan merge 77 ms, loading the entries 30 ms, search + sort 8 ms. The 100 000-file and depth limits are enforced.

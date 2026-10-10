@@ -2,6 +2,7 @@
 // temporary settings/database files and a temporary game directory.
 #include "UiContext.h"
 #include "input/GamepadNavigator.h"
+#include "input/InputBackend.h"
 #include "input/InputController.h"
 
 #include <QDir>
@@ -26,6 +27,17 @@ void write(const QString &path, const QByteArray &content)
 }
 
 } // namespace
+
+// Stands in for a gamepad backend so remap capture can be exercised without hardware.
+class FakeBackend : public input::InputBackend
+{
+public:
+    using InputBackend::InputBackend;
+    bool start() override { return true; }
+    QString name() const override { return QStringLiteral("fake"); }
+    QString statusText() const override { return QStringLiteral("fake pad"); }
+    QStringList deviceNames() const override { return {QStringLiteral("Fake Pad")}; }
+};
 
 class TestUiContext : public QObject
 {
@@ -140,6 +152,10 @@ private slots:
     void remapCapturesNextButton()
     {
         input::InputController input;
+        ui::UiContext noPad(options(), &input);
+        QVERIFY(!noPad.settings()->controllerAvailable()); // backend "none": capture not offered
+        QVERIFY(!noPad.settings()->beginRemap(QStringLiteral("favorite")));
+        QVERIFY(input.start(std::make_unique<FakeBackend>(input.navigator())));
         ui::UiContext ctx(options(), &input);
         ctx.start();
         QVERIFY(ctx.settings()->beginRemap(QStringLiteral("favorite")));

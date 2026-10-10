@@ -72,7 +72,7 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | Key | Type | Default | Allowed values | Effect | Applied |
 | --- | --- | --- | --- | --- | --- |
 | `ui.language` | string | `"en"` | `"en"` | Interface language. Only English exists; there are no translations. | Stored only. |
-| `ui.showHints` | bool | `true` | `true`, `false` | Show the control hint bar. | Immediately: exposed to QML as `settings.showHints`; the current MVP 2 QML (still being reworked) binds the hint bar's visibility to it. |
+| `ui.showHints` | bool | `true` | `true`, `false` | Show the control hint bar. | Immediately: the hint bar at the bottom of the dashboard is shown only while this is `true`. |
 | `display.mode` | string | `"fullscreen"` | `"fullscreen"`, `"windowed"` | Window mode. | At start-up, and immediately when changed while running. `--fullscreen` / `--windowed` override it for the session; with either flag, changes are not applied until the next start. |
 | `display.resolution` | string | `"auto"` | `"auto"` or `WIDTHxHEIGHT` (each 3–5 digits, no leading zero), e.g. `"1920x1080"`. The settings UI cycles `auto`, `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`. | Initial **window size** only. It does **not** change the display mode/monitor resolution; in full-screen mode the window covers the screen regardless. | At start-up only, and only when neither `--fullscreen` nor `--windowed` is given. |
 | `audio.volume` | int | `80` | integer 0–100 (JSON `40.0` is accepted as 40) | Master volume. | **Embedded platform only**, and only if `/usr/bin/amixer` is executable: runs `amixer -q sset Master <n>%`, falling back to the `PCM` control if `Master` fails; asynchronous; applied at start-up and on every change. On the **desktop** platform the value is stored as a preference only and the desktop mixer is left alone. |
@@ -81,7 +81,7 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | `library.directories` | string array | `[]` | absolute paths, max 64 entries; `"/"` refused; paths are cleaned (`/srv/games/` → `/srv/games`) and de-duplicated | Directories scanned for games. | Immediately; triggers a rescan. |
 | `library.extensions` | string array | `[]` | `".ext"` with 1–16 lower-case letters/digits, max 128 entries; normalised to lower case and a missing leading dot is added (`"ZIP"` → `".zip"`) | Extra extensions treated as games in addition to those declared by emulator definitions. Files found only through this list have no emulator. | Immediately; triggers a rescan. |
 | `library.followSymlinks` | bool | `false` | `true`, `false` | Follow symbolic links that stay inside the same library directory ([game-library.md](game-library.md#symbolic-links)). | Immediately; triggers a rescan. |
-| `library.sortOrder` | string | `"title"` | `"title"`, `"recent"`, `"emulator"`, `"added"` | Default sort order of the library list. | Read when the library controller is created (start-up). Changing the setting while running does not re-sort the current list; changing the sort order from the library screen does not write this setting. |
+| `library.sortOrder` | string | `"title"` | `"title"`, `"recent"`, `"emulator"`, `"added"` | Default sort order of the library list. | Immediately. The setting and the sort selector on the Games tab are kept in sync: changing the setting (Settings tab, "Default game sort") re-sorts the list, and choosing a sort order on the Games tab saves it as the new default. |
 | `emulators.defaultProfiles` | object | `{}` | emulator id → profile id; both must match `^[a-z0-9][a-z0-9_-]{0,63}$` | Launch profile used when an emulator or a game is started without an explicit profile. | Immediately. A profile that does not exist or is disabled is ignored at launch time (the emulator's own arguments are used). |
 
 Default `input.mapping`:
@@ -91,7 +91,7 @@ Default `input.mapping`:
  "search": "west", "prevTab": "l1", "nextTab": "r1"}
 ```
 
-The value is replaced as a whole, not merged with the defaults: actions left out are unbound. When the mapping is applied, `ButtonMapping::fromVariantMap()` additionally rejects a button bound to two actions and a mapping without `accept` or `back`. Such a mapping passes the settings check, but the controller then uses the **default** mapping and the settings screen reports "Controller mapping ignored (...); using defaults". Remapping from the UI repairs it. Details: [controller-support.md](controller-support.md#configurable-mapping).
+The value is replaced as a whole, not merged with the defaults: actions left out are unbound. When the mapping is applied, `ButtonMapping::fromVariantMap()` additionally rejects a button bound to two actions and a mapping without `accept` or `back`. Such a mapping is accepted by the settings store (and reported by [`--check-config`](#checking-a-configuration---check-config)); the controller then uses the **default** mapping and the settings screen reports "Controller mapping ignored (...); using defaults". Remapping from the UI repairs it. Details: [controller-support.md](controller-support.md#configurable-mapping).
 
 ## Validation and recovery
 
@@ -102,7 +102,7 @@ Every value is validated on load and on every change (`Settings::setValue()`).
 | Unknown key in a file | Ignored; issue `unknown setting "<key>" ignored`. |
 | Invalid value in a file | That entry is dropped and the layered default is used; issue `"<key>" <reason>; using the default`. The other entries are kept. |
 | Invalid value set from the UI | Rejected; the previous value stays; the error is shown (`SettingsController.lastError`). |
-| User file not parsable (invalid JSON, not an object, missing/wrong `version`, `settings` not an object, larger than 256 KiB, unreadable) | The file is renamed to `settings.json.corrupt-<yyyyMMdd-HHmmss>` (kept for inspection, never deleted), all user overrides are dropped and defaults apply. Nothing is written until the next change. |
+| User file not parsable (invalid JSON, not an object, missing/wrong `version`, `settings` not an object, larger than 256 KiB, unreadable) | When the application starts (not with `--check-config`), the file is renamed to `settings.json.corrupt-<yyyyMMdd-HHmmss>` (kept for inspection, never deleted), all user overrides are dropped and defaults apply. Nothing is written until the next change. |
 | System defaults file not parsable | That whole file is ignored (an issue is recorded); it is never renamed or modified. |
 | Reset to defaults (`SettingsController.resetToDefaults()`) | All user overrides are dropped; the current user file is renamed to `settings.json.bak` (replacing an older `.bak`). Restore by renaming it back while Nexora is not running. |
 
@@ -133,8 +133,9 @@ OK
 
 - Exit status 0 when there are no errors, 1 otherwise.
 - Emulator definition warnings (e.g. unknown keys) are printed but do not fail the check; every settings issue (including an unknown key or a problem in a system defaults file) counts as an error.
+- `input.mapping` is additionally checked with the controller's rules (no button bound twice, `accept` and `back` bound); each violation is printed as `error: input.mapping: ...` and fails the check.
 - The executables named in emulator definitions are not checked for existence here; the UI reports them as unavailable at run time.
-- **Side effect:** it uses the same loading code as the application, so an unparsable user settings file is renamed to `settings.json.corrupt-<timestamp>` by the check as well.
+- It is read-only: settings are loaded in `Settings::LoadMode::Inspect`, so an unparsable user file is reported but **not** renamed, and nothing is written.
 
 CI runs this for `config/emulators` and `config/examples/emulators` with `config/examples/settings.json` ([testing.md](testing.md#continuous-integration)).
 
@@ -179,5 +180,4 @@ Not implemented in MVP 2:
 - Further languages (`ui.language` accepts only `en`).
 - Applying `display.resolution` as a real display mode (KMS mode setting).
 - Switching the controller backend without a restart.
-- Persisting the sort order chosen on the library screen.
 - Migration of future settings format versions (currently a different `version` is treated as unusable).
