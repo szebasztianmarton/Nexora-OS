@@ -13,9 +13,12 @@
 //   emulatorList, emptyState, statusLine, profilePicker, profileList             (Emulators)
 //   settingLanguage, settingHints, settingSort, settingDisplayMode, settingResolution,
 //   settingVolume, settingBackend, mapping_<action>, libraryDir_<n>, addDirField,
-//   addDirButton, rescanRow, resetRow, rebootRow, powerOffRow, settingsIssues     (Settings)
+//   addDirButton, rescanRow, resetRow, rebootRow, powerOffRow, settingsIssues,
+//   tutorialRow                                                                   (Settings)
 //   reloadButton                                                                  (Diagnostics)
 //   runningOverlay, stopButton, runningTitle                                      (overlay)
+//   tutorialOverlay, tutorialTitle, tutorialProgress, tutorialSkip, tutorialBack,
+//   tutorialNext                                                                  (tutorial)
 //   stateChip, scanChip, rootChip, clock, hintBar, toast                          (chrome)
 #include "AppController.h"
 #include "LibraryController.h"
@@ -77,7 +80,9 @@ private:
         QList<QQmlError> warnings;
     };
 
-    static void load(Ui &ui, const QString &configDir)
+    // |firstStart| keeps ui.tutorialCompleted unset so the tutorial overlay is shown; the
+    // other tests start with it already finished.
+    static void load(Ui &ui, const QString &configDir, bool firstStart = false)
     {
         ui.state = std::make_unique<QTemporaryDir>();
         nexora::ui::UiContext::Options options;
@@ -87,6 +92,8 @@ private:
         options.platformOverride = QStringLiteral("desktop");
         ui.context = std::make_unique<nexora::ui::UiContext>(options);
         ui.context->start();
+        if (!firstStart)
+            ui.context->settings()->setTutorialCompleted(true);
         ui.app = ui.context->app();
         ui.engine = std::make_unique<QQmlApplicationEngine>();
         QObject::connect(ui.engine.get(), &QQmlEngine::warnings, ui.engine.get(),
@@ -168,6 +175,85 @@ private:
 
 private slots:
     void initTestCase() { QQuickStyle::setStyle(QStringLiteral("Basic")); }
+
+    void tutorialOnFirstStart()
+    {
+        QTemporaryDir dir;
+        writeConfig(dir, QStringLiteral("alpha"));
+        Ui ui;
+        load(ui, dir.path(), true);
+        if (QTest::currentTestFailed())
+            return;
+        auto *settings = ui.context->settings();
+        auto *tutorial = find(ui, "tutorialOverlay");
+        auto *title = find(ui, "tutorialTitle");
+        auto *next = find(ui, "tutorialNext");
+        QVERIFY(tutorial && title && next);
+        QVERIFY(!settings->tutorialCompleted());
+        QVERIFY(tutorial->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(next->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Welcome to Nexora"));
+
+        // Tab switches, Diagnostics and search do nothing underneath.
+        key(ui, Qt::Key_PageDown);
+        key(ui, Qt::Key_F1);
+        key(ui, Qt::Key_Slash);
+        key(ui, Qt::Key_Up);
+        QCOMPARE(currentTab(ui), int(Home));
+        QVERIFY(next->hasActiveFocus());
+        // Back on the first step stays there.
+        key(ui, Qt::Key_Escape);
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Welcome to Nexora"));
+
+        // Accept moves forward, Back returns; Left reaches the Back button.
+        key(ui, Qt::Key_Return);
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Moving around"));
+        key(ui, Qt::Key_Return);
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Tabs"));
+        key(ui, Qt::Key_Escape);
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Moving around"));
+        key(ui, Qt::Key_Left);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "tutorialBack")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return); // "Back" to the first step: focus returns to Next
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Welcome to Nexora"));
+        QTRY_VERIFY2_WITH_TIMEOUT(next->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        // Walk to the end; without a library folder "Get started" opens Settings.
+        for (int i = 0; i < 10 && next->property("text").toString() != QStringLiteral("Get started"); ++i)
+            key(ui, Qt::Key_Return);
+        QCOMPARE(find(ui, "tutorialProgress")->property("text").toString(), QStringLiteral("STEP 6 OF 6"));
+        QVERIFY(!find(ui, "tutorialSkip")->isVisible());
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY_WITH_TIMEOUT(!tutorial->isVisible(), Timeout);
+        QVERIFY(settings->tutorialCompleted());
+        QCOMPARE(currentTab(ui), int(Settings));
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "addDirField")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        // Saved: the next start skips the tutorial.
+        QFile file(ui.state->filePath(QStringLiteral("settings.json")));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.readAll().contains("\"ui.tutorialCompleted\": true"));
+
+        // Settings → "Show tutorial" opens it again; Skip closes it and keeps the tab.
+        auto *row = find(ui, "tutorialRow");
+        QVERIFY(row);
+        for (int i = 0; i < 40 && !row->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Up);
+        QVERIFY2(row->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY_WITH_TIMEOUT(tutorial->isVisible(), Timeout);
+        QVERIFY(!settings->tutorialCompleted());
+        QCOMPARE(title->property("text").toString(), QStringLiteral("Welcome to Nexora"));
+        QTRY_VERIFY2_WITH_TIMEOUT(next->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Left);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "tutorialSkip")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY_WITH_TIMEOUT(!tutorial->isVisible(), Timeout);
+        QVERIFY(settings->tutorialCompleted());
+        QCOMPARE(currentTab(ui), int(Settings));
+        QTRY_VERIFY2_WITH_TIMEOUT(row->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        CHECK_NO_WARNINGS();
+    }
 
     void startsOnHomeAndSwitchesTabs()
     {

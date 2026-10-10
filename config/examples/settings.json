@@ -3,6 +3,7 @@
   "settings": {
     "ui.language": "en",
     "ui.showHints": true,
+    "ui.tutorialCompleted": false,
     "display.mode": "fullscreen",
     "display.resolution": "auto",
     "audio.volume": 80,

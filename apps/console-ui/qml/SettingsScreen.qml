@@ -175,6 +175,13 @@ FocusScope {
                 onAccepted: screen.settings.showHints = !screen.settings.showHints
             }
             SettingRow {
+                objectName: "tutorialRow"
+                label: "Show tutorial"
+                description: "The short introduction shown on the first start"
+                actionText: "Start"
+                onAccepted: screen.settings.tutorialCompleted = false
+            }
+            SettingRow {
                 objectName: "settingSort"
                 label: "Default game sort"
                 description: "Used when Nexora starts"

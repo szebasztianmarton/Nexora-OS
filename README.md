@@ -69,8 +69,9 @@ Implemented (runs as an ordinary Qt application on desktop Linux; the same binar
   - **Home:** quick actions, "Continue playing" and "Favorites" rows, getting-started help while the library is empty.
   - **Games:** search, filters (All / Favorites / Recent), sort order, game grid, launch and favorite.
   - **Emulators:** all configured emulators, launch directly or pick a launch profile.
-  - **Settings:** language, hints, default sort, display mode, window size, volume, controller backend, button remapping, library folders, rescan, reset, restart/power off (image only, with confirmation).
+  - **Settings:** language, hints, tutorial, default sort, display mode, window size, volume, controller backend, button remapping, library folders, rescan, reset, restart/power off (image only, with confirmation).
   - **Diagnostics:** version, configuration and its issues, emulator state and last output, input backend and devices, system status, library and settings issues, recent log.
+  - A first-start tutorial (six short steps: navigation, tabs, adding games, playing); can be skipped and watched again from Settings.
   - A running-emulator overlay, a context-sensitive hint bar and transient notices.
 - **Game library:** scans configured folders on a worker thread for the file extensions your emulators declare, stores games, favorites and play history in SQLite, keeps them across rescans and temporarily missing drives. Never executes or opens game files. → [docs/game-library.md](docs/game-library.md)
 - **Emulator manager:** one supervised process at a time via `QProcess` (never a shell), launch profiles, game path substitution with `{file}`, per-emulator working directory and stop timeout, crash/exit/failure handling, SIGTERM then SIGKILL on stop.

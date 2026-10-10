@@ -90,6 +90,10 @@ ApplicationWindow {
             overlay.forceActiveFocus()
             return
         }
+        if (tutorial.visible) {
+            tutorial.forceActiveFocus()
+            return
+        }
         const saved = focusBeforeOverlay
         focusBeforeOverlay = null
         if (saved && saved.visible)
@@ -129,6 +133,7 @@ ApplicationWindow {
         hints: window.app.busy
                ? [{ button: "A / Enter", action: "Stop emulator" },
                   { button: "Select + Start (hold)", action: "Return to Nexora" }]
+               : tutorial.visible ? tutorial.hints
                : tabBar.activeFocus
                  ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
                     { button: "L1 / R1", action: "Switch tab" }]
@@ -280,6 +285,27 @@ ApplicationWindow {
         }
     }
 
+    // First-start tour; above the pages, below the running-emulator overlay.
+    TutorialOverlay {
+        id: tutorial
+        anchors.fill: parent
+        z: 9
+        library: window.library
+        visible: !window.settings.tutorialCompleted
+        onVisibleChanged: {
+            if (visible)
+                tutorial.restart()
+            else
+                Qt.callLater(window.restoreFocus)
+        }
+        // Hiding restores the focus of the current tab (see onVisibleChanged).
+        onDone: (openSettings) => {
+            window.settings.tutorialCompleted = true
+            if (openSettings)
+                window.navigate("settings")
+        }
+    }
+
     RunningOverlay {
         id: overlay
         anchors.fill: parent
@@ -304,5 +330,9 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
 
-    Component.onCompleted: focusPage()
+    Component.onCompleted: {
+        focusPage()
+        if (tutorial.visible)
+            tutorial.restart()
+    }
 }
