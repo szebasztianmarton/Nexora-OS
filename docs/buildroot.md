@@ -2,7 +2,7 @@
 
 This document describes the `BR2_EXTERNAL` tree in [`buildroot-external/`](../buildroot-external) that turns the Nexora source tree into a bootable x86-64 disk image: Linux + BusyBox init + Mesa + Qt 6 (EGLFS/KMS) + `nexora-console-ui`.
 
-> **Status:** the configuration is validated (Kconfig symbol survival, kernel fragment, `check-package`; see [What was validated](#what-was-validated)). A complete image build had been started but **had not finished** when this document was written. No image has been booted yet, in QEMU or on hardware.
+> **Status:** the configuration is validated (Kconfig symbol survival, kernel fragment, `check-package`) and a **complete image was built** from `nexora_x86_64_defconfig` (2026-10-10, `disk.img` 2.2 GB) and **booted in QEMU** (UEFI/OVMF, TCG, virtio-gpu 2D + llvmpipe) into the console UI; see [What was validated](#what-was-validated). It has **not** been booted on real hardware, and GPU drivers other than virtio-gpu, gamepads and audio remain untested.
 
 ## Contents
 
@@ -132,7 +132,9 @@ qemu-system-x86_64 \
     -serial mon:stdio
 ```
 
-Without host GL (Mesa then renders with llvmpipe on top of the KMS device): replace `-device virtio-vga-gl -display gtk,gl=on` with `-device virtio-vga -display gtk` (virtio-gpu 2D) or `-vga std` (bochs-drm). Without KVM, drop `accel=kvm` and `-cpu host` (very slow). Use `-audiodev alsa,...` or `-audiodev none,...` if PulseAudio/PipeWire-Pulse is not available.
+Without host GL (Mesa then renders with llvmpipe on top of the KMS device): replace `-device virtio-vga-gl -display gtk,gl=on` with `-device virtio-vga -display gtk` (virtio-gpu 2D) or `-vga std` (bochs-drm). Without KVM, drop `accel=kvm` and replace `-cpu host` with `-cpu qemu64` (very slow).
+
+> **Do not use `-cpu max` without KVM.** Under TCG emulation with `-cpu max`, llvmpipe renders incorrectly: antialiased rounded-rectangle borders and whole items (the tab bar, the hint bar, the logo frame) are missing, with no warning in the log. The same image renders correctly with `-cpu qemu64`. This was observed only under TCG; it is an emulation artefact, not an image or application defect, but it was not investigated further. Use `-audiodev alsa,...` or `-audiodev none,...` if PulseAudio/PipeWire-Pulse is not available.
 
 A USB game controller can be passed through with `-device usb-host,vendorid=0x045e,productid=0x028e` (example IDs: Xbox 360 pad; needs permissions on the host's `/dev/bus/usb` node).
 
@@ -275,11 +277,24 @@ Done in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 20
 | Supervisor logic | `nexora-session` run under BusyBox `sh` with a fake application (paths substituted) | correct arguments/environment; the app is a session leader with the VT as stdin; restart with 1/2/4 s backoff; gives up after the configured number of rapid failures; SIGTERM stops supervisor and app |
 | Power daemon logic | `nexora-powerd` under BusyBox `sh` with stubbed `poweroff`/`reboot`/`logger` | rejected `hello world`, `$(touch /tmp/pwn)` (not executed), a 200-byte line, `rebootx`; accepted `poweroff` → `sync` + `poweroff` |
 
+Full build and boot (same container, 2026-10-10):
+
+| Check | How | Result |
+| --- | --- | --- |
+| Complete image build | `make` with `nexora_x86_64_defconfig` (cold, about 6 h on 4 cores including host/target LLVM, Qt 6.9.1, Mesa) | succeeded: `images/disk.img` (2.2 GB GPT: 64 MiB EFI vfat + 2 GiB ext4), `bzImage` 12 MB; `nexora-os` compiles against cross-compiled Qt 6.9.1 |
+| Image contents | `debugfs` on `rootfs.ext2` | user `nexora` (1000) in `input`, `video`, `render`, `audio`; inittab getty on ttyS0 and tty2; `/etc/nexora-release` says `NEXORA_PLATFORM=embedded` |
+| Boot in QEMU | `qemu-system-x86_64 -machine q35 -cpu qemu64 -m 2048`, OVMF, virtio-blk, `virtio-vga`, TCG (no KVM) | GRUB → Linux 6.12.91 → BusyBox init → `nexora-session`; the UI starts under EGLFS/KMS on virtio-gpu with llvmpipe and shows the dashboard (screenshots taken with the QEMU monitor) |
+| Privilege split | `ps` on the running system | `nexora-console-ui` runs as `nexora`; only `nexora-session` and `nexora-powerd` run as root; `/run/nexora/power-request` is `prw--w---- root:nexora` |
+| Keyboard under EGLFS | QEMU `sendkey` (PS/2 keyboard) | PageDown/PageUp switch tabs, arrows move focus, Enter activates: the window has focus without further action |
+| Emulator launch | Enter on the shipped "Example" emulator (`/bin/true`) | log: `Starting` → `Running` → `exited normally` |
+| Power round trip | as user `nexora`: `echo rm-rf` and then `echo poweroff` into the FIFO | the invalid request is ignored; `poweroff` remounts the root read-only and powers the VM down (ACPI S5) |
+| Volume | automatic at UI start | fails as expected in a VM without a sound card (`no usable mixer control`), and the UI continues |
+
 **Not validated (yet):**
 
-- A full image build had been started (see the status note at the top) but had not completed; whether every package (in particular `nexora-os` against Qt 6.9.1 cross-compiled, Mesa with LLVM, GRUB, genimage) builds is unproven.
-- Booting the image in QEMU or on any PC; EGLFS/KMS start-up of the UI; GPU drivers; input devices (keyboard, gamepads) under EGLFS; audio; the power-request round trip with the real C++ client; VT switching while the UI runs.
-- The GitHub Actions workflow has not run on GitHub.
+- Real hardware: booting from USB/SATA/NVMe on a PC; the i915, xe and amdgpu drivers; Mesa iris/radeonsi.
+- Gamepads under the image (no controller was attached to the VM); audio output; the UI's own Restart/Power off buttons (the FIFO protocol was exercised from a shell, and the client is covered by unit tests); VT switching while the UI runs; KVM/virgl acceleration.
+- The image job of the GitHub Actions workflow has not run on GitHub.
 
 ## Known limitations
 
@@ -297,7 +312,7 @@ Done in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 20
 
 Checked against the application sources at the time of writing; items marked *open* are not (yet) handled on the C++/QML side:
 
-1. **Platform:** runs with `QT_QPA_PLATFORM=eglfs` + `eglfs_kms`, OpenGL ES 2 (no desktop GL), no window manager; every window is full-screen and only one top-level window should be shown. *Open:* `InputController` posts key events to `QGuiApplication::focusWindow()`; verify on EGLFS that the window has focus after `showFullScreen()` (call `requestActivate()` if not).
+1. **Platform:** runs with `QT_QPA_PLATFORM=eglfs` + `eglfs_kms`, OpenGL ES 2 (no desktop GL), no window manager; every window is full-screen and only one top-level window should be shown. `InputController` posts key events to `QGuiApplication::focusWindow()`; the window calls `requestActivate()` and was verified to receive keyboard input under EGLFS in QEMU.
 2. **Keyboard:** Qt's built-in evdev keyboard/mouse handlers read `/dev/input/event*` directly (no libinput in the image); this needs the `input` group (provided).
 3. **Fonts:** DejaVu via fontconfig; do not depend on other font families.
 4. **Embedded detection:** `NEXORA_PLATFORM=embedded` is set in the environment and in `/etc/nexora-release` (also `NEXORA_VERSION`), matching what `SystemIntegration` reads.

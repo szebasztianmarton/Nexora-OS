@@ -4,7 +4,7 @@ A Linux-based gaming operating system built for controller-first gaming.
 
 Nexora OS is intended to be a gaming operating system, built from open-source components, that provides a console-like experience on x86-64 PCs and mini PCs. Its goal is to bring compatible native Linux emulators together in a unified, controller-driven interface. (The license of Nexora OS itself has not been decided yet; see [Licensing](#licensing).)
 
-> **Status:** MVP 2 (version 0.2.0) — a controller-driven gaming dashboard with game library, settings and system integration, running as a desktop prototype. A Buildroot image definition exists, but no image has been built or booted yet. See [Project Status](#project-status).
+> **Status:** MVP 2 (version 0.2.0) — a controller-driven gaming dashboard with game library, settings and system integration, running as a desktop prototype. A Buildroot image has been built and boots into the UI in QEMU; it has not been tried on real hardware. See [Project Status](#project-status).
 
 ## Contents
 
@@ -55,7 +55,7 @@ Current stage: **MVP 2** on `feature/mvp2` (roadmap phases 1–3 largely done on
 | evdev gamepad backend | Mapping/navigation unit-tested; no real controller tested | Same, plus configurable mapping and remap capture; no real controller tested |
 | SDL3 gamepad backend (optional) | Compiles/links against SDL 3.2.30 | Unchanged; not available in the Buildroot image |
 | Real emulators | None tested | None tested; no compatibility with any real emulator is claimed |
-| Buildroot image | Not started | External tree validated with `check-package`, defconfig-symbol and kernel-fragment checks; full image build in progress and **unverified** — no image built or booted |
+| Buildroot image | Not started | Built (`disk.img`, 2026-10-10) and booted in QEMU (UEFI, TCG, virtio-gpu + llvmpipe): UI starts as user `nexora`, keyboard navigation, emulator launch and power-off through `nexora-powerd` verified. **Not tested on real hardware**; gamepads, GPU drivers and audio in the image untested |
 
 Nexora OS is experimental software. Hardware compatibility, supported emulators, and release readiness will be documented as development progresses.
 
@@ -77,13 +77,13 @@ Implemented (runs as an ordinary Qt application on desktop Linux; the same binar
 - **System integration:** desktop vs. embedded behaviour; on the image, power off/restart through a minimal root helper and volume through `amixer`; single-instance lock; clean shutdown on SIGTERM/SIGINT/SIGHUP.
 - **Logging and diagnostics:** categorized logging to stderr, an optional rotating log file (2 MiB × 3) and an in-memory buffer.
 - **Safety defaults:** refuses to run as root unless explicitly allowed; emulators receive SIGTERM if the launcher dies.
-- **Buildroot external tree** for an x86-64 UEFI image that boots into the UI (unverified; see [docs/buildroot.md](docs/buildroot.md)).
+- **Buildroot external tree** for an x86-64 UEFI image that boots into the UI (built and booted in QEMU; not yet on real hardware; see [docs/buildroot.md](docs/buildroot.md)).
 - **Testing:** 19 Qt Test / CTest executables, including a QML test that drives the dashboard with key events and a fake emulator. → [docs/testing.md](docs/testing.md)
 
 ## Known limitations
 
 - No physical controller and no real emulator has been tested; the SDL3 backend has only been compiled.
-- The Buildroot image is unverified: it has not been built completely or booted. SDL3 is not available in the image (evdev only).
+- The Buildroot image has only been booted in QEMU, not on real hardware; gamepads, GPU drivers and audio in the image are untested. SDL3 is not available in the image (evdev only).
 - No on-screen keyboard: search and adding a library folder need a keyboard.
 - The per-game emulator override and purging of missing games exist in the backend but have no UI.
 - Volume and power control work only on the embedded platform; on the desktop the volume is a stored preference and power actions are unavailable.
@@ -296,7 +296,7 @@ Tests run on the offscreen Qt platform and need no display, controller or real e
 
 Planned next (not implemented):
 
-- Build and boot the Buildroot image in QEMU and on real PCs; fix what that reveals.
+- Boot the Buildroot image on real PCs (Intel/AMD GPUs, gamepads, audio); fix what that reveals.
 - Test real controllers (Xbox, PlayStation, Nintendo, 8BitDo) and at least one real emulator end to end; record results.
 - On-screen keyboard and folder browser so no keyboard is ever needed; UI for per-game emulator choice and purging missing games.
 - UI scaling for TVs; real display-mode selection.
@@ -334,7 +334,7 @@ The initial release should demonstrate the complete basic workflow:
 
 MVP acceptance criteria: the system can boot on the selected test hardware, the UI is usable with a controller, and the emulator launch-and-return workflow passes automated tests.
 
-MVP 1 covered steps 2–6 on a desktop Linux host. MVP 2 adds the game library, settings, remapping and system integration, and the Buildroot tree for step 1, which is not yet verified.
+MVP 1 covered steps 2–6 on a desktop Linux host. MVP 2 adds the game library, settings, remapping and system integration, and the Buildroot tree for step 1, whose image boots in QEMU but is not yet verified on hardware.
 
 ### Planned technology stack
 
