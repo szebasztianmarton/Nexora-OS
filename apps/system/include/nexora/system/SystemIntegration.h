@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
+#include <QProcess>
 #include <QString>
 #include <QStringList>
 
@@ -14,12 +16,12 @@ enum class Capability { Power, Volume };
 
 struct SystemStatus
 {
-    QString platform;     // "desktop" / "embedded"
-    QString osName;       // PRETTY_NAME from os-release, if any
+    QString platform; // "desktop" / "embedded"
+    QString osName; // PRETTY_NAME from os-release, if any
     QString hostname;
-    QString kernel;       // uname release
+    QString kernel; // uname release
     qint64 uptimeSeconds = -1;
-    double load1 = -1;    // 1-minute load average
+    double load1 = -1; // 1-minute load average
     qint64 memoryTotalKiB = -1;
     qint64 memoryAvailableKiB = -1;
 };
@@ -87,7 +89,17 @@ public:
     Platform platform() const override { return Platform::Embedded; }
     bool supports(Capability capability) const override;
     bool requestPower(PowerAction action, QString *error) override;
+    // Runs amixer asynchronously, trying the "Master" control first and then "PCM" (cards
+    // such as HDMI or USB audio often lack "Master"). A newer request supersedes a pending one.
     bool applyVolume(int percent, QString *error) override;
+
+signals:
+    void volumeApplied(bool ok, const QString &control);
+
+private:
+    void runMixer(int percent, int controlIndex);
+
+    QPointer<QProcess> m_mixer;
 };
 
 } // namespace nexora::system

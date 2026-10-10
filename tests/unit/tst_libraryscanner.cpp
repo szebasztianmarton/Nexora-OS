@@ -67,8 +67,9 @@ private slots:
     {
         QTemporaryDir dir;
         touch(dir.filePath(QStringLiteral("file.sfc")));
-        const auto r = LibraryScanner::scan(options({dir.filePath(QStringLiteral("missing")), QStringLiteral("relative/dir"),
-                                                     QStringLiteral("/"), dir.filePath(QStringLiteral("file.sfc"))}));
+        const auto r
+            = LibraryScanner::scan(options({dir.filePath(QStringLiteral("missing")), QStringLiteral("relative/dir"),
+                                            QStringLiteral("/"), dir.filePath(QStringLiteral("file.sfc"))}));
         QVERIFY(r.files.isEmpty());
         QCOMPARE(r.issues.size(), 4);
         QVERIFY(r.scannedRoots.isEmpty());
@@ -80,7 +81,8 @@ private slots:
         QTemporaryDir outside;
         touch(dir.filePath(QStringLiteral("lib/real.sfc")));
         touch(outside.filePath(QStringLiteral("secret.sfc")));
-        QVERIFY(QFile::link(dir.filePath(QStringLiteral("lib/real.sfc")), dir.filePath(QStringLiteral("lib/alias.sfc"))));
+        QVERIFY(
+            QFile::link(dir.filePath(QStringLiteral("lib/real.sfc")), dir.filePath(QStringLiteral("lib/alias.sfc"))));
         QVERIFY(QFile::link(outside.path(), dir.filePath(QStringLiteral("lib/escape"))));
         const auto r = LibraryScanner::scan(options({dir.filePath(QStringLiteral("lib"))}));
         QCOMPARE(names(r), QStringList{QStringLiteral("real.sfc")});
@@ -95,7 +97,8 @@ private slots:
         touch(outside.filePath(QStringLiteral("secret.sfc")));
         QVERIFY(QFile::link(dir.filePath(QStringLiteral("lib/sub")), dir.filePath(QStringLiteral("lib/sublink"))));
         QVERIFY(QFile::link(outside.path(), dir.filePath(QStringLiteral("lib/escape"))));
-        QVERIFY(QFile::link(outside.filePath(QStringLiteral("secret.sfc")), dir.filePath(QStringLiteral("lib/secret.sfc"))));
+        QVERIFY(QFile::link(outside.filePath(QStringLiteral("secret.sfc")),
+                            dir.filePath(QStringLiteral("lib/secret.sfc"))));
         QVERIFY(QFile::link(dir.filePath(QStringLiteral("lib")), dir.filePath(QStringLiteral("lib/sub/loop"))));
         auto o = options({dir.filePath(QStringLiteral("lib"))});
         o.followSymlinks = true;
@@ -115,10 +118,11 @@ private slots:
         QTemporaryDir dir;
         touch(dir.filePath(QStringLiteral("all/snes/game.sfc")));
         QVERIFY(::link(QFile::encodeName(dir.filePath(QStringLiteral("all/snes/game.sfc"))).constData(),
-                       QFile::encodeName(dir.filePath(QStringLiteral("all/hardlink.sfc"))).constData()) == 0);
+                       QFile::encodeName(dir.filePath(QStringLiteral("all/hardlink.sfc"))).constData())
+                == 0);
         // Overlapping roots: all/ contains all/snes/.
-        const auto r = LibraryScanner::scan(options({dir.filePath(QStringLiteral("all")),
-                                                     dir.filePath(QStringLiteral("all/snes"))}));
+        const auto r = LibraryScanner::scan(
+            options({dir.filePath(QStringLiteral("all")), dir.filePath(QStringLiteral("all/snes"))}));
         QCOMPARE(r.files.size(), 1);
         QCOMPARE(r.duplicates, 2);
     }

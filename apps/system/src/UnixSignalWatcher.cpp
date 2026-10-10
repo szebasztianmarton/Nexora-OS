@@ -38,7 +38,8 @@ UnixSignalWatcher::UnixSignalWatcher(QObject *parent)
         g_pipe[0] = g_pipe[1] = -1;
         return;
     }
-    struct sigaction sa {};
+    struct sigaction sa
+    { };
     sa.sa_handler = handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
@@ -52,7 +53,8 @@ UnixSignalWatcher::~UnixSignalWatcher()
 {
     if (!m_notifier)
         return;
-    struct sigaction sa {};
+    struct sigaction sa
+    { };
     sa.sa_handler = SIG_DFL;
     sigemptyset(&sa.sa_mask);
     for (int sig : kSignals)

@@ -23,11 +23,11 @@ public:
         EmulatorIdRole = Qt::UserRole + 1,
         NameRole,
         ExecutableRole,
-        StatusRole,     // ready, unavailable, starting, running, stopping, exited, failed
+        StatusRole, // ready, unavailable, starting, running, stopping, exited, failed
         StatusTextRole, // short human-readable status
-        DetailRole,     // longer explanation (e.g. why an entry is unavailable)
-        AvailableRole,  // executable passed validation at load time
-        ProfilesRole,   // [{id, name, enabled}]
+        DetailRole, // longer explanation (e.g. why an entry is unavailable)
+        AvailableRole, // executable passed validation at load time
+        ProfilesRole, // [{id, name, enabled}]
         ExtensionsRole, // ".sfc, .smc"
     };
     Q_ENUM(Role)
@@ -42,8 +42,7 @@ public:
     // |unavailableReasons| contains its id.
     void setEmulators(const QList<shared::EmulatorConfig> &emulators,
                       const QHash<QString, QString> &unavailableReasons = {});
-    bool setStatus(const QString &id, const QString &status, const QString &statusText,
-                   const QString &detail = {});
+    bool setStatus(const QString &id, const QString &status, const QString &statusText, const QString &detail = {});
     // Resets every entry to its load-time status (ready / unavailable).
     void resetStatuses();
 

@@ -12,10 +12,8 @@ AppController::AppController(const Options &options, QObject *parent)
     : QObject(parent)
     , m_options(options)
 {
-    connect(&m_manager, &emulator::EmulatorManager::stateChanged, this,
-            &AppController::onManagerStateChanged);
-    connect(&m_manager, &emulator::EmulatorManager::processFinished, this,
-            &AppController::onProcessFinished);
+    connect(&m_manager, &emulator::EmulatorManager::stateChanged, this, &AppController::onManagerStateChanged);
+    connect(&m_manager, &emulator::EmulatorManager::processFinished, this, &AppController::onProcessFinished);
     // Coalesce output notifications: a chatty emulator must not re-render the UI per chunk.
     m_outputNotifyTimer.setSingleShot(true);
     m_outputNotifyTimer.setInterval(250);
@@ -34,8 +32,7 @@ void AppController::setInputController(input::InputController *input)
     m_input = input;
     if (m_input) {
         connect(m_input, &input::InputController::statusChanged, this, &AppController::inputChanged);
-        connect(m_input, &input::InputController::returnToLauncherRequested, this,
-                &AppController::returnToLauncher);
+        connect(m_input, &input::InputController::returnToLauncherRequested, this, &AppController::returnToLauncher);
         m_input->setSuspended(m_manager.isActive());
     }
     emit inputChanged();
@@ -107,9 +104,9 @@ bool AppController::launchGame(const QString &emulatorId, const QString &gamePat
 {
     const auto config = m_model.find(emulatorId);
     if (!config) {
-        setStatusMessage(emulatorId.isEmpty() ? QStringLiteral("No emulator is configured for \"%1\"").arg(title)
-                                              : QStringLiteral("Emulator \"%1\" for \"%2\" is not configured")
-                                                    .arg(emulatorId, title),
+        setStatusMessage(emulatorId.isEmpty()
+                             ? QStringLiteral("No emulator is configured for \"%1\"").arg(title)
+                             : QStringLiteral("Emulator \"%1\" for \"%2\" is not configured").arg(emulatorId, title),
                          true);
         return false;
     }
@@ -137,7 +134,7 @@ bool AppController::startLaunch(const emulator::LaunchRequest &request)
     const auto &config = request.emulator;
     if (!m_manager.isActive()) {
         m_activeName = !request.displayName.isEmpty() ? request.displayName
-                       : config.name.isEmpty()        ? config.id
+            : config.name.isEmpty()                   ? config.id
                                                       : config.name;
     }
     const auto result = m_manager.launch(request);
@@ -160,8 +157,7 @@ bool AppController::stop()
 
 bool AppController::returnToLauncher()
 {
-    if (m_manager.state() != emulator::ProcessState::Starting
-        && m_manager.state() != emulator::ProcessState::Running) {
+    if (m_manager.state() != emulator::ProcessState::Starting && m_manager.state() != emulator::ProcessState::Running) {
         return false;
     }
     qCInfo(lcUi).noquote() << "Returning to the launcher: stopping" << m_activeName;
@@ -171,8 +167,7 @@ bool AppController::returnToLauncher()
 bool AppController::reloadConfig()
 {
     if (m_manager.isActive()) {
-        setStatusMessage(QStringLiteral("Cannot reload the configuration while an emulator is running"),
-                         true);
+        setStatusMessage(QStringLiteral("Cannot reload the configuration while an emulator is running"), true);
         return false;
     }
 
@@ -180,9 +175,8 @@ bool AppController::reloadConfig()
     m_configDirectoryFound = result.directoryFound;
     m_configIssues.clear();
     for (const auto &issue : result.issues) {
-        const QString prefix = issue.severity == shared::ConfigIssue::Severity::Error
-                                   ? QStringLiteral("Error: ")
-                                   : QStringLiteral("Warning: ");
+        const QString prefix = issue.severity == shared::ConfigIssue::Severity::Error ? QStringLiteral("Error: ")
+                                                                                      : QStringLiteral("Warning: ");
         m_configIssues.append(prefix + issue.toDisplayString());
     }
 
@@ -204,9 +198,8 @@ bool AppController::reloadConfig()
     m_enabled = enabled;
     m_unavailable = unavailable;
 
-    qCInfo(lcUi) << "Configuration:" << enabled.size() << "enabled," << m_disabled.size()
-                 << "disabled," << unavailable.size() << "unavailable," << m_configIssues.size()
-                 << "issue(s)";
+    qCInfo(lcUi) << "Configuration:" << enabled.size() << "enabled," << m_disabled.size() << "disabled,"
+                 << unavailable.size() << "unavailable," << m_configIssues.size() << "issue(s)";
     if (!result.directoryFound)
         setStatusMessage(QStringLiteral("Configuration directory not found"), true);
     else if (enabled.isEmpty())
@@ -239,8 +232,7 @@ void AppController::onManagerStateChanged(ProcessState state, const QString &emu
         break;
     case ProcessState::Idle:
     case ProcessState::Exited:
-    case ProcessState::Failed:
-        break; // handled in onProcessFinished with the full outcome
+    case ProcessState::Failed: break; // handled in onProcessFinished with the full outcome
     }
     updateInputSuspension();
     emit stateChanged();

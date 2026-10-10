@@ -36,8 +36,7 @@ private slots:
         QCOMPARE(a.data(EmulatorListModel::AvailableRole).toBool(), true);
         QCOMPARE(b.data(EmulatorListModel::StatusRole).toString(), QStringLiteral("unavailable"));
         QCOMPARE(b.data(EmulatorListModel::AvailableRole).toBool(), false);
-        QCOMPARE(b.data(EmulatorListModel::DetailRole).toString(),
-                 QStringLiteral("Emulator executable not found"));
+        QCOMPARE(b.data(EmulatorListModel::DetailRole).toString(), QStringLiteral("Emulator executable not found"));
         QVERIFY(model.roleNames().values().contains("emulatorId"));
     }
 

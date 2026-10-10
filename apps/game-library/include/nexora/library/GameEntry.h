@@ -10,14 +10,14 @@ namespace nexora::library {
 struct GameEntry
 {
     qint64 id = 0;
-    QString path;  // canonical absolute path
+    QString path; // canonical absolute path
     QString title; // derived from the file name
     QString extension;
-    QString root;  // library directory it was found under
+    QString root; // library directory it was found under
     qint64 size = 0;
     QStringList emulatorCandidates; // emulators that handle the extension
-    QString emulatorOverride;       // user choice, may be empty
-    bool present = true;            // false: file vanished or its directory was removed
+    QString emulatorOverride; // user choice, may be empty
+    bool present = true; // false: file vanished or its directory was removed
     bool favorite = false;
     int playCount = 0;
     QDateTime lastPlayed; // invalid = never launched

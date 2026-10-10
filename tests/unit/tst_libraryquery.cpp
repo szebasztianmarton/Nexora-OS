@@ -51,8 +51,9 @@ private slots:
     void sortsByTitleCaseInsensitively()
     {
         const auto r = LibraryQuery::apply(sample(), {});
-        QCOMPARE(titles(r), QStringList({QStringLiteral("Asteroids"), QStringLiteral("mario kart"),
-                                         QStringLiteral("Metroid"), QStringLiteral("zelda")}));
+        QCOMPARE(titles(r),
+                 QStringList({QStringLiteral("Asteroids"), QStringLiteral("mario kart"), QStringLiteral("Metroid"),
+                              QStringLiteral("zelda")}));
     }
 
     void hidesMissingEntries()
@@ -87,7 +88,8 @@ private slots:
     {
         QueryOptions o;
         o.filter = LibraryFilter::Favorites;
-        QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList({QStringLiteral("Metroid"), QStringLiteral("zelda")}));
+        QCOMPARE(titles(LibraryQuery::apply(sample(), o)),
+                 QStringList({QStringLiteral("Metroid"), QStringLiteral("zelda")}));
     }
 
     void recentFilterIsLimitedAndOrdered()
@@ -96,7 +98,8 @@ private slots:
         o.filter = LibraryFilter::Recent;
         o.sort = SortOrder::Title; // ignored for the recent view
         o.recentLimit = 2;
-        QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList({QStringLiteral("Metroid"), QStringLiteral("zelda")}));
+        QCOMPARE(titles(LibraryQuery::apply(sample(), o)),
+                 QStringList({QStringLiteral("Metroid"), QStringLiteral("zelda")}));
     }
 
     void searchesAllTerms()
@@ -107,14 +110,16 @@ private slots:
         o.search = QStringLiteral("mario zelda");
         QVERIFY(LibraryQuery::apply(sample(), o).isEmpty());
         o.search = QStringLiteral("roid");
-        QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList({QStringLiteral("Asteroids"), QStringLiteral("Metroid")}));
+        QCOMPARE(titles(LibraryQuery::apply(sample(), o)),
+                 QStringList({QStringLiteral("Asteroids"), QStringLiteral("Metroid")}));
     }
 
     void filtersByEmulator()
     {
         QueryOptions o;
         o.emulatorId = QStringLiteral("snes");
-        QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList({QStringLiteral("mario kart"), QStringLiteral("zelda")}));
+        QCOMPARE(titles(LibraryQuery::apply(sample(), o)),
+                 QStringList({QStringLiteral("mario kart"), QStringLiteral("zelda")}));
     }
 
     void effectiveEmulator()

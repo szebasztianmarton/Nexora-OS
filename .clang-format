@@ -1,0 +1,39 @@
+# Formatting for C++ sources. CI runs: clang-format --dry-run --Werror (see .github/workflows/ci.yml)
+BasedOnStyle: WebKit
+Standard: c++20
+ColumnLimit: 120
+IndentWidth: 4
+AccessModifierOffset: -4
+PointerAlignment: Right
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: true
+  AfterEnum: false
+  AfterControlStatement: Never
+  BeforeElse: false
+  BeforeCatch: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerIndentWidth: 4
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+Cpp11BracedListStyle: true
+FixNamespaceComments: true
+NamespaceIndentation: None
+SpaceBeforeCpp11BracedList: false
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+QualifierAlignment: Leave
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SpaceAfterTemplateKeyword: false

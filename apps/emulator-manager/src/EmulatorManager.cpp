@@ -47,8 +47,8 @@ EmulatorError EmulatorManager::validateExecutable(const QString &path, QString *
     return EmulatorError::None;
 }
 
-std::optional<ResolvedLaunch> EmulatorManager::resolve(const LaunchRequest &request,
-                                                      EmulatorError *error, QString *detail)
+std::optional<ResolvedLaunch> EmulatorManager::resolve(const LaunchRequest &request, EmulatorError *error,
+                                                       QString *detail)
 {
     const shared::EmulatorConfig &config = request.emulator;
     auto reject = [&](EmulatorError e, const QString &d) -> std::optional<ResolvedLaunch> {
@@ -71,9 +71,8 @@ std::optional<ResolvedLaunch> EmulatorManager::resolve(const LaunchRequest &requ
     ResolvedLaunch resolved;
     resolved.program = config.executable;
     resolved.arguments = config.arguments;
-    resolved.workingDirectory = config.workingDirectory.isEmpty()
-                                    ? QFileInfo(config.executable).absolutePath()
-                                    : config.workingDirectory;
+    resolved.workingDirectory
+        = config.workingDirectory.isEmpty() ? QFileInfo(config.executable).absolutePath() : config.workingDirectory;
     if (config.stopTimeoutMs)
         resolved.stopTimeout = std::chrono::milliseconds(*config.stopTimeoutMs);
     resolved.displayName = request.displayName.isEmpty() ? emulatorName : request.displayName;
@@ -129,7 +128,7 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
 
     m_activeId = config.id;
     m_activeName = !request.displayName.isEmpty() ? request.displayName
-                   : config.name.isEmpty()        ? config.id
+        : config.name.isEmpty()                   ? config.id
                                                   : config.name;
     m_stopRequested = false;
     m_killed = false;
@@ -163,15 +162,14 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
     connect(process, &QProcess::started, this, &EmulatorManager::onStarted);
     connect(process, &QProcess::errorOccurred, this, &EmulatorManager::onErrorOccurred);
     connect(process, &QProcess::finished, this, &EmulatorManager::onFinished);
-    connect(process, &QProcess::readyReadStandardOutput, this,
-            [this] { readChannel(OutputChannel::Stdout); });
-    connect(process, &QProcess::readyReadStandardError, this,
-            [this] { readChannel(OutputChannel::Stderr); });
+    connect(process, &QProcess::readyReadStandardOutput, this, [this] { readChannel(OutputChannel::Stdout); });
+    connect(process, &QProcess::readyReadStandardError, this, [this] { readChannel(OutputChannel::Stderr); });
 
     m_process = process;
     setState(ProcessState::Starting);
     qCInfo(lcProcess).noquote() << "Starting" << config.id
-                                << (request.profileId.isEmpty() ? QString() : QStringLiteral("profile ") + request.profileId)
+                                << (request.profileId.isEmpty() ? QString()
+                                                                : QStringLiteral("profile ") + request.profileId)
                                 << "->" << resolved->program << "with" << resolved->arguments.size()
                                 << "argument(s), cwd" << resolved->workingDirectory;
     process->start(QIODevice::ReadOnly);
@@ -214,8 +212,7 @@ void EmulatorManager::setState(ProcessState state)
     if (state == m_state)
         return;
     if (!isValidTransition(m_state, state)) {
-        qCCritical(lcProcess) << "Invalid state transition" << nameOf(m_state) << "->"
-                              << nameOf(state);
+        qCCritical(lcProcess) << "Invalid state transition" << nameOf(m_state) << "->" << nameOf(state);
         Q_ASSERT_X(false, "EmulatorManager::setState", "invalid state transition");
     }
     qCDebug(lcProcess) << "State" << nameOf(m_state) << "->" << nameOf(state);
@@ -227,8 +224,8 @@ void EmulatorManager::readChannel(OutputChannel channel)
 {
     if (!m_process || sender() != m_process)
         return;
-    const QByteArray bytes = channel == OutputChannel::Stdout ? m_process->readAllStandardOutput()
-                                                              : m_process->readAllStandardError();
+    const QByteArray bytes
+        = channel == OutputChannel::Stdout ? m_process->readAllStandardOutput() : m_process->readAllStandardError();
     if (bytes.isEmpty())
         return;
     QStringDecoder &decoder = channel == OutputChannel::Stdout ? m_stdoutDecoder : m_stderrDecoder;
@@ -314,8 +311,8 @@ void EmulatorManager::onFinished(int exitCode, QProcess::ExitStatus status)
     } else if (exitCode != 0) {
         outcome.finalState = ProcessState::Failed;
         outcome.error = EmulatorError::NonZeroExit;
-        outcome.message = describe(EmulatorError::NonZeroExit,
-                                   QStringLiteral("%1 (exit code %2)").arg(m_activeName).arg(exitCode));
+        outcome.message
+            = describe(EmulatorError::NonZeroExit, QStringLiteral("%1 (exit code %2)").arg(m_activeName).arg(exitCode));
     } else {
         outcome.finalState = ProcessState::Exited;
         outcome.message = QStringLiteral("%1 exited normally").arg(m_activeName);
@@ -329,8 +326,7 @@ void EmulatorManager::onStopTimeout()
 {
     if (!m_process || m_state != ProcessState::Stopping)
         return;
-    qCWarning(lcProcess) << m_activeId << "did not exit within" << m_activeStopTimeout.count()
-                         << "ms, sending SIGKILL";
+    qCWarning(lcProcess) << m_activeId << "did not exit within" << m_activeStopTimeout.count() << "ms, sending SIGKILL";
     m_killed = true;
     m_process->kill();
 }

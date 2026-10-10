@@ -18,9 +18,11 @@ namespace nexora::input {
 //
 // Buttons map to actions through a configurable ButtonMapping (default: South -> Accept,
 // East -> Back, Start -> Menu, North -> Favorite, West -> Search, L1/R1 -> previous/next
-// tab); D-pad, hat and left stick always map to directions. Axes are edge-triggered with hysteresis (press at |v| >= 0.5, release at
-// |v| < 0.3). A held direction auto-repeats (initial delay, then interval); only the most
-// recently pressed direction repeats. Accept/Back/Menu never repeat.
+// tab); D-pad, hat and left stick always map to directions.
+//
+// Axes are edge-triggered with hysteresis (press at |v| >= 0.5, release at |v| < 0.3). A
+// held direction auto-repeats (initial delay, then interval); only the most recently
+// pressed direction repeats. Non-directional actions never repeat.
 //
 // Holding Select + Start together on one device for chordHoldDuration() emits
 // returnToLauncherRequested() once per hold. The chord is tracked independently of
@@ -66,8 +68,17 @@ signals:
 
 private:
     // Independent sources that can hold a direction.
-    enum Source { SrcDpadUp, SrcDpadDown, SrcDpadLeft, SrcDpadRight, SrcLeftX, SrcLeftY,
-                  SrcHatX, SrcHatY, SourceCount };
+    enum Source {
+        SrcDpadUp,
+        SrcDpadDown,
+        SrcDpadLeft,
+        SrcDpadRight,
+        SrcLeftX,
+        SrcLeftY,
+        SrcHatX,
+        SrcHatY,
+        SourceCount
+    };
 
     struct DeviceState
     {

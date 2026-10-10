@@ -12,8 +12,7 @@ namespace nexora::library {
 
 GameLibrary::GameLibrary(QObject *parent)
     : QObject(parent)
-{
-}
+{ }
 
 GameLibrary::~GameLibrary()
 {
@@ -75,9 +74,8 @@ bool GameLibrary::refresh()
     m_cancel = std::make_shared<std::atomic_bool>(false);
     const ScanOptions options = m_options;
     const auto cancel = m_cancel;
-    QThread *thread = QThread::create([options, result, cancel] {
-        *result = LibraryScanner::scan(options, cancel.get());
-    });
+    QThread *thread
+        = QThread::create([options, result, cancel] { *result = LibraryScanner::scan(options, cancel.get()); });
     thread->setObjectName(QStringLiteral("nexora-library-scan"));
     connect(thread, &QThread::finished, this, [this, thread, result] {
         if (m_thread == thread)

@@ -18,8 +18,7 @@ public:
     explicit InputBackend(GamepadNavigator *navigator, QObject *parent = nullptr)
         : QObject(parent)
         , m_navigator(navigator)
-    {
-    }
+    { }
 
     // Starts listening. Returns false if the backend cannot work at all on this system.
     virtual bool start() = 0;

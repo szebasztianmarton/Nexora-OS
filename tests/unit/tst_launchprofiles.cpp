@@ -17,13 +17,12 @@ class TestLaunchProfiles : public QObject
 
 private:
     QTemporaryDir m_dir;
-    QString m_exe;  // an executable file
+    QString m_exe; // an executable file
     QString m_game; // a readable game file
 
     static QByteArray quoted(QByteArray json) { return json.replace('\'', '"'); }
 
-    std::optional<EmulatorConfig> parse(const QByteArray &json, QStringList *errors,
-                                        QStringList *warnings = nullptr)
+    std::optional<EmulatorConfig> parse(const QByteArray &json, QStringList *errors, QStringList *warnings = nullptr)
     {
         return ConfigLoader::parse(quoted(json), m_dir.filePath(QStringLiteral("cfg/emu.json")), errors, warnings);
     }
@@ -35,7 +34,9 @@ private:
                            + "','arguments':['--base','{file}'],"
                              "'profiles':[{'id':'fast','name':'Fast','arguments':['--fast','--rom={file}']},"
                              "{'id':'plain','name':'Plain'},"
-                             "{'id':'here','name':'Here','workingDirectory':'" + m_dir.path().toUtf8() + "'},"
+                             "{'id':'here','name':'Here','workingDirectory':'"
+                           + m_dir.path().toUtf8()
+                           + "'},"
                              "{'id':'off','name':'Off','enabled':false},"
                              "{'id':'nowhere','name':'Nowhere','workingDirectory':'/nonexistent/dir'}]}",
                        &errors);
@@ -86,7 +87,8 @@ private slots:
     void mvp1FormatStillParses()
     {
         QStringList errors;
-        const auto c = parse("{'id':'old','name':'Old','executable':'/bin/true','arguments':[],'enabled':true}", &errors);
+        const auto c
+            = parse("{'id':'old','name':'Old','executable':'/bin/true','arguments':[],'enabled':true}", &errors);
         QVERIFY(c.has_value());
         QVERIFY(c->profiles.isEmpty());
         QVERIFY(c->extensions.isEmpty());
@@ -100,7 +102,8 @@ private slots:
         QTest::addColumn<QString>("expected");
         QTest::newRow("not array") << QByteArray("{}") << QStringLiteral("\"profiles\" must be an array");
         QTest::newRow("not object") << QByteArray("[5]") << QStringLiteral("must be an object");
-        QTest::newRow("bad id") << QByteArray("[{'id':'Bad Id','name':'x'}]") << QStringLiteral(".id must be a valid id");
+        QTest::newRow("bad id") << QByteArray("[{'id':'Bad Id','name':'x'}]")
+                                << QStringLiteral(".id must be a valid id");
         QTest::newRow("duplicate id") << QByteArray("[{'id':'a','name':'x'},{'id':'a','name':'y'}]")
                                       << QStringLiteral("is used by another profile");
         QTest::newRow("no name") << QByteArray("[{'id':'a'}]") << QStringLiteral(".name must be a non-empty string");
@@ -156,7 +159,8 @@ private slots:
 
     void substitutesGamePath()
     {
-        const auto base = EmulatorManager::resolve({config(), {}, m_game, QStringLiteral("Super Game")}, nullptr, nullptr);
+        const auto base
+            = EmulatorManager::resolve({config(), {}, m_game, QStringLiteral("Super Game")}, nullptr, nullptr);
         QVERIFY(base);
         QCOMPARE(base->arguments, QStringList({QStringLiteral("--base"), m_game}));
         QCOMPARE(base->displayName, QStringLiteral("Super Game"));

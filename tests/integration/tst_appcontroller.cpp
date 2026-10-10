@@ -15,14 +15,15 @@ namespace {
 
 constexpr int Timeout = 10000;
 
-void writeConfig(const QTemporaryDir &dir, const QString &id, const QString &executable,
-                 const QString &arguments = {}, bool enabled = true)
+void writeConfig(const QTemporaryDir &dir, const QString &id, const QString &executable, const QString &arguments = {},
+                 bool enabled = true)
 {
     QFile file(dir.filePath(id + QStringLiteral(".json")));
     QVERIFY(file.open(QIODevice::WriteOnly));
-    file.write(QStringLiteral("{\"id\":\"%1\",\"name\":\"Emu %1\",\"executable\":\"%2\",\"arguments\":[%3],\"enabled\":%4}")
-                   .arg(id, executable, arguments, enabled ? QStringLiteral("true") : QStringLiteral("false"))
-                   .toUtf8());
+    file.write(
+        QStringLiteral("{\"id\":\"%1\",\"name\":\"Emu %1\",\"executable\":\"%2\",\"arguments\":[%3],\"enabled\":%4}")
+            .arg(id, executable, arguments, enabled ? QStringLiteral("true") : QStringLiteral("false"))
+            .toUtf8());
 }
 
 QString statusOf(AppController &app, const QString &id)

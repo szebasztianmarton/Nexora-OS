@@ -12,7 +12,7 @@ namespace nexora::library {
 
 struct ScanOptions
 {
-    QStringList roots;                        // absolute directories; never "/" by default
+    QStringList roots; // absolute directories; never "/" by default
     QHash<QString, QStringList> extensionMap; // ".ext" -> emulator ids handling it
     // Symbolic links are skipped unless this is set; even then a link is only followed when
     // its target stays inside the same library root (checked on canonical paths).
@@ -43,9 +43,9 @@ struct ScanResult
     QList<ScannedFile> files;
     QList<ScanIssue> issues;
     QStringList scannedRoots; // canonical roots that existed and were readable
-    int duplicates = 0;       // same file reached twice (overlapping roots, hard/sym links)
+    int duplicates = 0; // same file reached twice (overlapping roots, hard/sym links)
     int skippedSymlinks = 0;
-    bool truncated = false;   // maxFiles reached
+    bool truncated = false; // maxFiles reached
     bool cancelled = false;
 };
 

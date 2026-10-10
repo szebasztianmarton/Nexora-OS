@@ -43,8 +43,8 @@ class SettingsController : public QObject
     Q_PROPERTY(QString lastError READ lastError NOTIFY changed)
 
 public:
-    SettingsController(shared::Settings *settings, input::InputController *input,
-                       system::SystemIntegration *system, QObject *parent = nullptr);
+    SettingsController(shared::Settings *settings, input::InputController *input, system::SystemIntegration *system,
+                       QObject *parent = nullptr);
 
     QString language() const;
     void setLanguage(const QString &value) { set(QStringLiteral("ui.language"), value); }

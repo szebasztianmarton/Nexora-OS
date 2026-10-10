@@ -62,18 +62,22 @@ private slots:
         QTest::addColumn<QString>("expected");
         const QString s = QStringLiteral("south");
         const QString e = QStringLiteral("east");
-        QTest::newRow("unknown action") << QVariantMap{{QStringLiteral("accept"), s}, {QStringLiteral("back"), e},
+        QTest::newRow("unknown action") << QVariantMap{{QStringLiteral("accept"), s},
+                                                       {QStringLiteral("back"), e},
                                                        {QStringLiteral("jump"), QStringLiteral("west")}}
                                         << QStringLiteral("unknown action");
-        QTest::newRow("unknown button") << QVariantMap{{QStringLiteral("accept"), QStringLiteral("x")}, {QStringLiteral("back"), e}}
+        QTest::newRow("unknown button") << QVariantMap{{QStringLiteral("accept"), QStringLiteral("x")},
+                                                       {QStringLiteral("back"), e}}
                                         << QStringLiteral("unknown button");
         QTest::newRow("double binding") << QVariantMap{{QStringLiteral("accept"), s}, {QStringLiteral("back"), s}}
                                         << QStringLiteral("assigned to both");
-        QTest::newRow("no accept") << QVariantMap{{QStringLiteral("back"), e}} << QStringLiteral("\"accept\" must be assigned");
-        QTest::newRow("no back") << QVariantMap{{QStringLiteral("accept"), s}} << QStringLiteral("\"back\" must be assigned");
-        QTest::newRow("direction as button") << QVariantMap{{QStringLiteral("accept"), QStringLiteral("dpadUp")},
-                                                            {QStringLiteral("back"), e}}
-                                             << QStringLiteral("unknown button");
+        QTest::newRow("no accept") << QVariantMap{{QStringLiteral("back"), e}}
+                                   << QStringLiteral("\"accept\" must be assigned");
+        QTest::newRow("no back") << QVariantMap{{QStringLiteral("accept"), s}}
+                                 << QStringLiteral("\"back\" must be assigned");
+        QTest::newRow("direction as button")
+            << QVariantMap{{QStringLiteral("accept"), QStringLiteral("dpadUp")}, {QStringLiteral("back"), e}}
+            << QStringLiteral("unknown button");
     }
 
     void rejectsInvalidMappings()

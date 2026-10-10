@@ -38,20 +38,19 @@ private slots:
         QTemporaryDir dir;
         QString detail;
         QCOMPARE(EmulatorManager::validateExecutable(QString(), &detail), EmulatorError::InvalidConfig);
-        QCOMPARE(EmulatorManager::validateExecutable(QStringLiteral("bin/emu"), &detail),
-                 EmulatorError::InvalidConfig);
+        QCOMPARE(EmulatorManager::validateExecutable(QStringLiteral("bin/emu"), &detail), EmulatorError::InvalidConfig);
         QVERIFY(detail.contains(QStringLiteral("absolute")));
         QCOMPARE(EmulatorManager::validateExecutable(dir.filePath(QStringLiteral("missing")), &detail),
                  EmulatorError::ExecutableMissing);
         QCOMPARE(detail, dir.filePath(QStringLiteral("missing")));
         QCOMPARE(EmulatorManager::validateExecutable(dir.path()), EmulatorError::NotAFile);
 
-        const QString plain = createFile(dir, QStringLiteral("plain"),
-                                         QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup);
+        const QString plain
+            = createFile(dir, QStringLiteral("plain"), QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup);
         QCOMPARE(EmulatorManager::validateExecutable(plain), EmulatorError::NotExecutable);
 
-        const QString exec = createFile(dir, QStringLiteral("exec"),
-                                        QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        const QString exec
+            = createFile(dir, QStringLiteral("exec"), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         QCOMPARE(EmulatorManager::validateExecutable(exec), EmulatorError::None);
     }
 

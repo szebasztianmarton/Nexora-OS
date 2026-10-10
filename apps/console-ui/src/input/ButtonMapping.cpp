@@ -10,7 +10,7 @@ struct ActionName
     const char *name;
 };
 constexpr ActionName kActions[] = {
-    {NavAction::Accept, "accept"},   {NavAction::Back, "back"},       {NavAction::Menu, "menu"},
+    {NavAction::Accept, "accept"},     {NavAction::Back, "back"},     {NavAction::Menu, "menu"},
     {NavAction::Favorite, "favorite"}, {NavAction::Search, "search"}, {NavAction::PrevTab, "prevTab"},
     {NavAction::NextTab, "nextTab"},
 };
@@ -21,9 +21,9 @@ struct ButtonName
     const char *name;
 };
 constexpr ButtonName kButtons[] = {
-    {GamepadButton::South, "south"}, {GamepadButton::East, "east"},     {GamepadButton::West, "west"},
-    {GamepadButton::North, "north"}, {GamepadButton::Start, "start"},   {GamepadButton::Select, "select"},
-    {GamepadButton::Guide, "guide"}, {GamepadButton::L1, "l1"},         {GamepadButton::R1, "r1"},
+    {GamepadButton::South, "south"}, {GamepadButton::East, "east"},   {GamepadButton::West, "west"},
+    {GamepadButton::North, "north"}, {GamepadButton::Start, "start"}, {GamepadButton::Select, "select"},
+    {GamepadButton::Guide, "guide"}, {GamepadButton::L1, "l1"},       {GamepadButton::R1, "r1"},
 };
 
 } // namespace
@@ -32,9 +32,9 @@ ButtonMapping ButtonMapping::defaults()
 {
     ButtonMapping m;
     m.m_actionToButton = {
-        {NavAction::Accept, GamepadButton::South},  {NavAction::Back, GamepadButton::East},
-        {NavAction::Menu, GamepadButton::Start},    {NavAction::Favorite, GamepadButton::North},
-        {NavAction::Search, GamepadButton::West},   {NavAction::PrevTab, GamepadButton::L1},
+        {NavAction::Accept, GamepadButton::South}, {NavAction::Back, GamepadButton::East},
+        {NavAction::Menu, GamepadButton::Start},   {NavAction::Favorite, GamepadButton::North},
+        {NavAction::Search, GamepadButton::West},  {NavAction::PrevTab, GamepadButton::L1},
         {NavAction::NextTab, GamepadButton::R1},
     };
     return m;

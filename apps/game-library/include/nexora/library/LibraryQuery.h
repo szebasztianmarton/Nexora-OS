@@ -12,11 +12,11 @@ enum class LibraryFilter { All, Favorites, Recent };
 
 struct QueryOptions
 {
-    QString search;          // whitespace-separated terms; all must match (case-insensitive)
+    QString search; // whitespace-separated terms; all must match (case-insensitive)
     LibraryFilter filter = LibraryFilter::All;
     SortOrder sort = SortOrder::Title;
-    QString emulatorId;      // empty = any
-    int recentLimit = 20;    // LibraryFilter::Recent keeps this many most recent entries
+    QString emulatorId; // empty = any
+    int recentLimit = 20; // LibraryFilter::Recent keeps this many most recent entries
 };
 
 // Pure filtering/sorting over library entries (no I/O), shared by the UI model and tests.

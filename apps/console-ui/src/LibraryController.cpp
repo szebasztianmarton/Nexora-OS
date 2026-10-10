@@ -12,8 +12,8 @@ namespace nexora::ui {
 
 using shared::Settings;
 
-LibraryController::LibraryController(library::GameLibrary *library, shared::Settings *settings,
-                                     AppController *app, QObject *parent)
+LibraryController::LibraryController(library::GameLibrary *library, shared::Settings *settings, AppController *app,
+                                     QObject *parent)
     : QObject(parent)
     , m_library(library)
     , m_settings(settings)
@@ -37,13 +37,14 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
 
     connect(m_library, &library::GameLibrary::entriesChanged, this, &LibraryController::rebuildViews);
     connect(m_library, &library::GameLibrary::scanningChanged, this, &LibraryController::scanningChanged);
-    connect(m_library, &library::GameLibrary::scanFinished, this, [this](const library::ApplyStats &stats, int issueCount) {
-        emit notice(QStringLiteral("Library updated: %1 new, %2 missing, %3 issue(s)")
-                        .arg(stats.added)
-                        .arg(stats.missing)
-                        .arg(issueCount),
-                    false);
-    });
+    connect(m_library, &library::GameLibrary::scanFinished, this,
+            [this](const library::ApplyStats &stats, int issueCount) {
+                emit notice(QStringLiteral("Library updated: %1 new, %2 missing, %3 issue(s)")
+                                .arg(stats.added)
+                                .arg(stats.missing)
+                                .arg(issueCount),
+                            false);
+            });
     // Emulator definitions decide which extensions are games and how they launch.
     connect(m_app, &AppController::configChanged, this, [this] {
         updateScanOptions();
@@ -157,7 +158,8 @@ bool LibraryController::refresh()
     }
     updateScanOptions();
     const bool started = m_library->refresh();
-    emit notice(started ? QStringLiteral("Scanning library…") : QStringLiteral("A scan is already running; queued another"),
+    emit notice(started ? QStringLiteral("Scanning library…")
+                        : QStringLiteral("A scan is already running; queued another"),
                 false);
     return started;
 }

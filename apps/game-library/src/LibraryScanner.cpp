@@ -34,9 +34,10 @@ class Walker
 {
 public:
     Walker(const ScanOptions &options, const std::atomic_bool *cancel, ScanResult &result)
-        : m_options(options), m_cancel(cancel), m_result(result)
-    {
-    }
+        : m_options(options)
+        , m_cancel(cancel)
+        , m_result(result)
+    { }
 
     void scanRoot(const QString &configuredRoot)
     {
@@ -65,10 +66,7 @@ public:
     }
 
 private:
-    bool stopped() const
-    {
-        return m_result.truncated || (m_cancel && m_cancel->load(std::memory_order_relaxed));
-    }
+    bool stopped() const { return m_result.truncated || (m_cancel && m_cancel->load(std::memory_order_relaxed)); }
 
     void issue(const QString &path, const QString &message)
     {
@@ -82,7 +80,8 @@ private:
         if (stopped())
             return;
         if (depth > m_options.maxDepth) {
-            issue(dirPath, QStringLiteral("maximum directory depth (%1) reached; not descending").arg(m_options.maxDepth));
+            issue(dirPath,
+                  QStringLiteral("maximum directory depth (%1) reached; not descending").arg(m_options.maxDepth));
             return;
         }
         if (m_visitedDirs.contains(dirPath))
@@ -137,7 +136,8 @@ private:
                 continue;
             }
 
-            struct ::stat st {};
+            struct ::stat st
+            { };
             const QString canonical = info.canonicalFilePath();
             if (::stat(QFile::encodeName(canonical).constData(), &st) != 0) {
                 issue(path, QStringLiteral("cannot stat file; skipped"));

@@ -1,0 +1,124 @@
+#!/bin/sh
+#
+# Starts the Nexora OS console UI supervisor
+# (/usr/libexec/nexora/nexora-session), which runs nexora-console-ui
+# as the unprivileged "nexora" user on tty1 and restarts it on exit.
+#
+# The UI is not started when the kernel command line contains
+# "nexora.noui" or when NEXORA_AUTOSTART=no is set in
+# /etc/default/nexora. Recovery logins (ttyS0, tty2) are never
+# disabled by this script.
+
+DAEMON="nexora"
+PIDFILE="/var/run/$DAEMON.pid"
+EXEC="/usr/libexec/nexora/nexora-session"
+APP_USER="nexora"
+LOG_DIR="/var/log/nexora"
+DRM_WAIT_SECONDS=10
+
+NEXORA_AUTOSTART=yes
+
+# shellcheck source=/dev/null
+[ -r "/etc/default/$DAEMON" ] && . "/etc/default/$DAEMON"
+
+running() {
+	start-stop-daemon --stop --test --quiet --pidfile "$PIDFILE"
+}
+
+prepare() {
+	uid=$(id -u "$APP_USER") || return 1
+	gid=$(id -g "$APP_USER") || return 1
+
+	# /var/log is on tmpfs; refuse a planted symlink instead of
+	# following it with chown.
+	if [ -L "$LOG_DIR" ]; then
+		echo "$LOG_DIR is a symlink, refusing"
+		return 1
+	fi
+	mkdir -p "$LOG_DIR"
+	chown "$uid:$gid" "$LOG_DIR"
+	chmod 0750 "$LOG_DIR"
+
+	mkdir -p /run/user
+	chmod 0755 /run/user
+	mkdir -p "/run/user/$uid"
+	chown "$uid:$gid" "/run/user/$uid"
+	chmod 0700 "/run/user/$uid"
+
+	# GPU drivers are modules loaded by udev; give them a moment.
+	i=0
+	while ! ls /dev/dri/card* > /dev/null 2>&1; do
+		if [ "$i" -ge $((DRM_WAIT_SECONDS * 10)) ]; then
+			echo "no DRM device after ${DRM_WAIT_SECONDS}s, starting anyway"
+			break
+		fi
+		sleep 0.1
+		i=$((i + 1))
+	done
+}
+
+start() {
+	printf 'Starting %s: ' "$DAEMON"
+	if grep -qw "nexora.noui" /proc/cmdline; then
+		echo "skipped (nexora.noui on kernel command line)"
+		return 0
+	fi
+	if [ "$NEXORA_AUTOSTART" = "no" ]; then
+		echo "skipped (NEXORA_AUTOSTART=no)"
+		return 0
+	fi
+	if running; then
+		echo "already running"
+		return 0
+	fi
+	if ! prepare; then
+		echo "FAIL"
+		return 1
+	fi
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile "$PIDFILE" --exec "$EXEC"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAIL"
+	fi
+	return "$status"
+}
+
+stop() {
+	printf 'Stopping %s: ' "$DAEMON"
+	if ! running; then
+		echo "not running"
+		rm -f "$PIDFILE"
+		return 0
+	fi
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAIL"
+		return "$status"
+	fi
+	while running; do
+		sleep 0.1
+	done
+	rm -f "$PIDFILE"
+	return "$status"
+}
+
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start|stop|restart)
+		"$1";;
+	reload)
+		restart;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload}"
+		exit 1
+esac

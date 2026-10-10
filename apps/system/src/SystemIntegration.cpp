@@ -54,8 +54,8 @@ Platform SystemIntegration::detectPlatform(const Environment &env, const QString
     if (!override.isEmpty())
         qCWarning(lcSystem) << "Unknown NEXORA_PLATFORM" << override << "- detecting instead";
     return keyValue(env.nexoraReleaseFile, QStringLiteral("NEXORA_PLATFORM")) == QLatin1String("embedded")
-               ? Platform::Embedded
-               : Platform::Desktop;
+        ? Platform::Embedded
+        : Platform::Desktop;
 }
 
 std::unique_ptr<SystemIntegration> SystemIntegration::create(const Environment &env, const QString &platformOverride)
@@ -139,8 +139,7 @@ bool EmbeddedSystemIntegration::supports(Capability capability) const
         const QFileInfo fifo(m_env.powerRequestFifo);
         return fifo.exists() && fifo.isWritable();
     }
-    case Capability::Volume:
-        return QFileInfo(m_env.mixerProgram).isExecutable();
+    case Capability::Volume: return QFileInfo(m_env.mixerProgram).isExecutable();
     }
     return false;
 }
@@ -150,7 +149,8 @@ bool EmbeddedSystemIntegration::requestPower(PowerAction action, QString *error)
     // Protocol: one line, exactly "poweroff" or "reboot", written to a FIFO owned by the
     // root-run nexora-powerd helper (mode 0620, group nexora). The UI never runs as root.
     const QByteArray path = QFile::encodeName(m_env.powerRequestFifo);
-    struct ::stat st {};
+    struct ::stat st
+    { };
     if (::stat(path.constData(), &st) != 0 || !S_ISFIFO(st.st_mode)) {
         if (error)
             *error = QStringLiteral("Power helper is not running (%1 missing)").arg(m_env.powerRequestFifo);
@@ -159,13 +159,13 @@ bool EmbeddedSystemIntegration::requestPower(PowerAction action, QString *error)
     const int fd = ::open(path.constData(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
         if (error)
-            *error = errno == ENXIO ? QStringLiteral("Power helper is not listening")
-                                    : QStringLiteral("Cannot contact power helper: %1")
-                                          .arg(QString::fromLocal8Bit(std::strerror(errno)));
+            *error = errno == ENXIO
+                ? QStringLiteral("Power helper is not listening")
+                : QStringLiteral("Cannot contact power helper: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
         return false;
     }
-    const QByteArray line = action == PowerAction::Poweroff ? QByteArrayLiteral("poweroff\n")
-                                                            : QByteArrayLiteral("reboot\n");
+    const QByteArray line
+        = action == PowerAction::Poweroff ? QByteArrayLiteral("poweroff\n") : QByteArrayLiteral("reboot\n");
     const ssize_t written = ::write(fd, line.constData(), size_t(line.size()));
     const int writeErrno = errno;
     ::close(fd);
@@ -186,14 +186,44 @@ bool EmbeddedSystemIntegration::applyVolume(int percent, QString *error)
             *error = QStringLiteral("No mixer program (%1)").arg(m_env.mixerProgram);
         return false;
     }
-    const int clamped = qBound(0, percent, 100);
-    // Fire-and-forget, explicit argument list; the user's audio group is sufficient.
-    const bool started = QProcess::startDetached(m_env.mixerProgram,
-                                                 {QStringLiteral("-q"), QStringLiteral("sset"),
-                                                  QStringLiteral("Master"), QStringLiteral("%1%").arg(clamped)});
-    if (!started && error)
-        *error = QStringLiteral("Cannot run %1").arg(m_env.mixerProgram);
-    return started;
+    runMixer(qBound(0, percent, 100), 0);
+    return true;
+}
+
+void EmbeddedSystemIntegration::runMixer(int percent, int controlIndex)
+{
+    static const QStringList controls{QStringLiteral("Master"), QStringLiteral("PCM")};
+    if (m_mixer) {
+        m_mixer->disconnect(this);
+        m_mixer->kill();
+        m_mixer->deleteLater();
+    }
+    const QString control = controls.at(controlIndex);
+    auto *process = new QProcess(this);
+    m_mixer = process;
+    connect(process, &QProcess::finished, this,
+            [this, process, percent, controlIndex, control](int code, QProcess::ExitStatus status) {
+                process->deleteLater();
+                const bool ok = status == QProcess::NormalExit && code == 0;
+                if (!ok && controlIndex + 1 < controls.size()) {
+                    runMixer(percent, controlIndex + 1);
+                    return;
+                }
+                if (!ok)
+                    qCWarning(lcSystem) << "Could not set the volume: no usable mixer control (tried" << controls
+                                        << ")";
+                emit volumeApplied(ok, ok ? control : QString());
+            });
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError e) {
+        if (e != QProcess::FailedToStart)
+            return;
+        process->deleteLater();
+        qCWarning(lcSystem) << "Cannot run" << m_env.mixerProgram;
+        emit volumeApplied(false, {});
+    });
+    // Explicit argument list; membership in the audio group is sufficient (no root).
+    process->start(m_env.mixerProgram,
+                   {QStringLiteral("-q"), QStringLiteral("sset"), control, QStringLiteral("%1%").arg(percent)});
 }
 
 } // namespace nexora::system

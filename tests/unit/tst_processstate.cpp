@@ -18,12 +18,10 @@ private slots:
 
         const QList<S> all{S::Idle, S::Starting, S::Running, S::Stopping, S::Exited, S::Failed};
         const QList<QPair<S, S>> allowed{
-            {S::Idle, S::Starting},     {S::Idle, S::Failed},
-            {S::Starting, S::Running},  {S::Starting, S::Stopping}, {S::Starting, S::Failed},
-            {S::Running, S::Stopping},  {S::Running, S::Exited},    {S::Running, S::Failed},
-            {S::Stopping, S::Exited},
-            {S::Exited, S::Starting},   {S::Exited, S::Failed},
-            {S::Failed, S::Starting},   {S::Failed, S::Failed},
+            {S::Idle, S::Starting},   {S::Idle, S::Failed},      {S::Starting, S::Running}, {S::Starting, S::Stopping},
+            {S::Starting, S::Failed}, {S::Running, S::Stopping}, {S::Running, S::Exited},   {S::Running, S::Failed},
+            {S::Stopping, S::Exited}, {S::Exited, S::Starting},  {S::Exited, S::Failed},    {S::Failed, S::Starting},
+            {S::Failed, S::Failed},
         };
         for (S from : all) {
             for (S to : all) {
@@ -70,15 +68,12 @@ private slots:
                                   << QStringLiteral("Emulator file is not executable: /x");
         QTest::newRow("busy") << EmulatorError::AlreadyActive
                               << QStringLiteral("Another emulator is already running: /x");
-        QTest::newRow("start") << EmulatorError::FailedToStart
-                               << QStringLiteral("Emulator failed to start: /x");
-        QTest::newRow("code") << EmulatorError::NonZeroExit
-                              << QStringLiteral("Emulator exited with an error code: /x");
+        QTest::newRow("start") << EmulatorError::FailedToStart << QStringLiteral("Emulator failed to start: /x");
+        QTest::newRow("code") << EmulatorError::NonZeroExit << QStringLiteral("Emulator exited with an error code: /x");
         QTest::newRow("crash") << EmulatorError::Crashed << QStringLiteral("Emulator crashed: /x");
         QTest::newRow("disabled") << EmulatorError::Disabled
                                   << QStringLiteral("Emulator is disabled in its configuration: /x");
-        QTest::newRow("config") << EmulatorError::InvalidConfig
-                                << QStringLiteral("Invalid emulator configuration: /x");
+        QTest::newRow("config") << EmulatorError::InvalidConfig << QStringLiteral("Invalid emulator configuration: /x");
         QTest::newRow("profile") << EmulatorError::ProfileNotFound << QStringLiteral("Launch profile not found: /x");
         QTest::newRow("profile off") << EmulatorError::ProfileDisabled
                                      << QStringLiteral("Launch profile is disabled: /x");

@@ -1,0 +1,26 @@
+config BR2_PACKAGE_NEXORA_OS
+	bool "nexora-os"
+	depends on BR2_PACKAGE_QT6
+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_10 # C++20
+	select BR2_PACKAGE_QT6BASE_GUI
+	select BR2_PACKAGE_QT6BASE_SQL
+	select BR2_PACKAGE_QT6BASE_SQLITE
+	select BR2_PACKAGE_QT6DECLARATIVE
+	select BR2_PACKAGE_QT6DECLARATIVE_QUICK
+	help
+	  Nexora OS console user interface (nexora-console-ui), a
+	  controller-first Qt 6 / QML launcher for native Linux
+	  emulators, built from the Nexora OS source tree that
+	  contains this BR2_EXTERNAL tree.
+
+	  Installs /usr/bin/nexora-console-ui and the example
+	  emulator configuration in /usr/share/nexora/emulators.
+
+	  The optional SDL3 gamepad backend is not available: the
+	  pinned Buildroot release (2026.02.x LTS) has no sdl3
+	  package, so the evdev backend is used.
+
+	  https://github.com/szebasztianmarton/Nexora-OS
+
+comment "nexora-os needs Qt6 and a toolchain w/ gcc >= 10"
+	depends on !BR2_PACKAGE_QT6 || !BR2_TOOLCHAIN_GCC_AT_LEAST_10

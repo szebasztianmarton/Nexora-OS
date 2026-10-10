@@ -1,0 +1,7 @@
+# Device permissions relied upon by the unprivileged "nexora" user
+# (see docs/buildroot.md). Never world-accessible.
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", GROUP="input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="js[0-9]*", GROUP="input", MODE="0660"
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*", GROUP="video", MODE="0660"
+SUBSYSTEM=="drm", KERNEL=="renderD[0-9]*", GROUP="render", MODE="0660"
+SUBSYSTEM=="sound", GROUP="audio", MODE="0660"

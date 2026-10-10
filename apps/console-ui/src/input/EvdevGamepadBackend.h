@@ -49,7 +49,7 @@ private:
         QString name;
         QSocketNotifier *notifier = nullptr;
         std::array<AxisRange, 4> ranges{}; // indexed by GamepadAxis
-        bool dropping = false;             // after SYN_DROPPED until the next SYN_REPORT
+        bool dropping = false; // after SYN_DROPPED until the next SYN_REPORT
     };
 
     void scheduleRescan();

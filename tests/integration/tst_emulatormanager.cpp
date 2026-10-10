@@ -35,10 +35,7 @@ class TestEmulatorManager : public QObject
     Q_OBJECT
 
 private slots:
-    void initTestCase()
-    {
-        QVERIFY2(QFile::exists(QStringLiteral(NEXORA_FAKE_EMULATOR)), NEXORA_FAKE_EMULATOR);
-    }
+    void initTestCase() { QVERIFY2(QFile::exists(QStringLiteral(NEXORA_FAKE_EMULATOR)), NEXORA_FAKE_EMULATOR); }
 
     void normalExit()
     {
@@ -133,9 +130,9 @@ private slots:
         EmulatorManager manager;
         QSignalSpy output(&manager, &EmulatorManager::outputReceived);
         QSignalSpy finished(&manager, &EmulatorManager::processFinished);
-        QVERIFY(manager.launch(fake({QStringLiteral("--stdout"), QStringLiteral("hello out"),
-                                     QStringLiteral("--stderr"), QStringLiteral("hello err"),
-                                     QStringLiteral("--stdout"), QStringLiteral("ünïcödé")}))
+        QVERIFY(manager
+                    .launch(fake({QStringLiteral("--stdout"), QStringLiteral("hello out"), QStringLiteral("--stderr"),
+                                  QStringLiteral("hello err"), QStringLiteral("--stdout"), QStringLiteral("ünïcödé")}))
                     .accepted);
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
         QVERIFY(manager.capturedStdout().contains(QStringLiteral("ready\n")));
@@ -186,8 +183,9 @@ private slots:
         QCOMPARE(manager.state(), ProcessState::Stopping);
         QVERIFY(manager.stop()); // idempotent while stopping
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
-        QCOMPARE(statesOf(states), QList<ProcessState>({ProcessState::Starting, ProcessState::Running,
-                                                       ProcessState::Stopping, ProcessState::Exited}));
+        QCOMPARE(statesOf(states),
+                 QList<ProcessState>(
+                     {ProcessState::Starting, ProcessState::Running, ProcessState::Stopping, ProcessState::Exited}));
         QVERIFY(manager.lastOutcome().stoppedByRequest);
         QVERIFY(!manager.lastOutcome().killed);
         QCOMPARE(manager.lastOutcome().error, EmulatorError::None);
@@ -198,8 +196,9 @@ private slots:
         EmulatorManager manager;
         manager.setStopTimeout(300ms);
         QSignalSpy finished(&manager, &EmulatorManager::processFinished);
-        QVERIFY(manager.launch(fake({QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"),
-                                     QStringLiteral("30000")}))
+        QVERIFY(manager
+                    .launch(fake(
+                        {QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"), QStringLiteral("30000")}))
                     .accepted);
         QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
 
@@ -291,8 +290,8 @@ private slots:
         profile.name = QStringLiteral("Print cwd");
         profile.emulatorId = config.id;
         profile.hasArguments = true;
-        profile.arguments = {QStringLiteral("--print-cwd"), QStringLiteral("--echo-args"),
-                             QStringLiteral("game={file}")};
+        profile.arguments
+            = {QStringLiteral("--print-cwd"), QStringLiteral("--echo-args"), QStringLiteral("game={file}")};
         profile.workingDirectory = dir.path();
         config.profiles.append(profile);
 
@@ -316,8 +315,8 @@ private slots:
 
     void configStopTimeoutIsUsed()
     {
-        EmulatorConfig config = fake({QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"),
-                                      QStringLiteral("30000")});
+        EmulatorConfig config
+            = fake({QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"), QStringLiteral("30000")});
         config.stopTimeoutMs = 500;
         EmulatorManager manager; // default timeout stays at 5 s
         QSignalSpy finished(&manager, &EmulatorManager::processFinished);
@@ -334,8 +333,9 @@ private slots:
     void destroyWhileRunning()
     {
         auto manager = std::make_unique<EmulatorManager>();
-        QVERIFY(manager->launch(fake({QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"),
-                                      QStringLiteral("30000")}))
+        QVERIFY(manager
+                    ->launch(fake(
+                        {QStringLiteral("--ignore-sigterm"), QStringLiteral("--sleep-ms"), QStringLiteral("30000")}))
                     .accepted);
         QTRY_VERIFY_WITH_TIMEOUT(manager->capturedStdout().contains(QStringLiteral("ready")), Timeout);
         manager.reset(); // must kill the child without hanging or crashing

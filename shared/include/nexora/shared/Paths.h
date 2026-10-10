@@ -16,8 +16,7 @@ struct ConfigDirResolution
 inline constexpr const char *ConfigDirEnvVar = "NEXORA_CONFIG_DIR";
 
 // Precedence: command line > environment > <appDir>/../share/nexora/emulators.
-ConfigDirResolution resolveConfigDirectory(const QString &commandLineValue,
-                                           const QString &environmentValue,
+ConfigDirResolution resolveConfigDirectory(const QString &commandLineValue, const QString &environmentValue,
                                            const QString &applicationDir);
 
 QString toString(ConfigDirSource source);

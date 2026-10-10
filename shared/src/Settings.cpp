@@ -46,8 +46,8 @@ Validator intRange(int min, int max)
     return [min, max](QVariant &v) -> QString {
         bool ok = false;
         const double d = v.toDouble(&ok);
-        const bool numeric = v.typeId() == QMetaType::Int || v.typeId() == QMetaType::Double
-                             || v.typeId() == QMetaType::LongLong;
+        const bool numeric
+            = v.typeId() == QMetaType::Int || v.typeId() == QMetaType::Double || v.typeId() == QMetaType::LongLong;
         if (!numeric || !ok || d != std::floor(d) || d < min || d > max)
             return QStringLiteral("must be an integer between %1 and %2").arg(min).arg(max);
         v = int(d);
@@ -78,14 +78,17 @@ QString toStringList(QVariant &v, const std::function<QString(QString &)> &item,
 Validator directories()
 {
     return [](QVariant &v) {
-        return toStringList(v, [](QString &s) -> QString {
-            if (s.isEmpty() || QDir::isRelativePath(s))
-                return QStringLiteral("entries must be absolute directory paths");
-            if (QDir::cleanPath(s) == QStringLiteral("/"))
-                return QStringLiteral("scanning the whole filesystem (\"/\") is not allowed");
-            s = QDir::cleanPath(s);
-            return {};
-        }, 64);
+        return toStringList(
+            v,
+            [](QString &s) -> QString {
+                if (s.isEmpty() || QDir::isRelativePath(s))
+                    return QStringLiteral("entries must be absolute directory paths");
+                if (QDir::cleanPath(s) == QStringLiteral("/"))
+                    return QStringLiteral("scanning the whole filesystem (\"/\") is not allowed");
+                s = QDir::cleanPath(s);
+                return {};
+            },
+            64);
     };
 }
 
@@ -93,14 +96,17 @@ Validator extensions()
 {
     return [](QVariant &v) {
         static const QRegularExpression re(QStringLiteral("^\\.[a-z0-9]{1,16}$"));
-        return toStringList(v, [](QString &s) -> QString {
-            s = s.toLower();
-            if (!s.startsWith(u'.'))
-                s.prepend(u'.');
-            if (!re.match(s).hasMatch())
-                return QStringLiteral("entries must look like \".ext\" (1-16 letters/digits)");
-            return {};
-        }, 128);
+        return toStringList(
+            v,
+            [](QString &s) -> QString {
+                s = s.toLower();
+                if (!s.startsWith(u'.'))
+                    s.prepend(u'.');
+                if (!re.match(s).hasMatch())
+                    return QStringLiteral("entries must look like \".ext\" (1-16 letters/digits)");
+                return {};
+            },
+            128);
     };
 }
 
@@ -115,8 +121,7 @@ Validator resolution()
     };
 }
 
-Validator stringMap(const QRegularExpression &keyRe, const QRegularExpression &valueRe,
-                    const QString &what)
+Validator stringMap(const QRegularExpression &keyRe, const QRegularExpression &valueRe, const QString &what)
 {
     return [keyRe, valueRe, what](QVariant &v) -> QString {
         if (v.typeId() != QMetaType::QVariantMap)
@@ -137,12 +142,9 @@ Validator stringMap(const QRegularExpression &keyRe, const QRegularExpression &v
 
 QVariantMap defaultMapping()
 {
-    return {{QStringLiteral("accept"), QStringLiteral("south")},
-            {QStringLiteral("back"), QStringLiteral("east")},
-            {QStringLiteral("menu"), QStringLiteral("start")},
-            {QStringLiteral("favorite"), QStringLiteral("north")},
-            {QStringLiteral("search"), QStringLiteral("west")},
-            {QStringLiteral("prevTab"), QStringLiteral("l1")},
+    return {{QStringLiteral("accept"), QStringLiteral("south")}, {QStringLiteral("back"), QStringLiteral("east")},
+            {QStringLiteral("menu"), QStringLiteral("start")},   {QStringLiteral("favorite"), QStringLiteral("north")},
+            {QStringLiteral("search"), QStringLiteral("west")},  {QStringLiteral("prevTab"), QStringLiteral("l1")},
             {QStringLiteral("nextTab"), QStringLiteral("r1")}};
 }
 
@@ -152,34 +154,27 @@ const QList<Settings::Spec> &Settings::specs()
 {
     static const QRegularExpression id(QStringLiteral("^[a-z0-9][a-z0-9_-]{0,63}$"));
     static const QRegularExpression action(QStringLiteral("^(accept|back|menu|favorite|search|prevTab|nextTab)$"));
-    static const QRegularExpression button(
-        QStringLiteral("^(south|east|west|north|start|select|guide|l1|r1)$"));
+    static const QRegularExpression button(QStringLiteral("^(south|east|west|north|start|select|guide|l1|r1)$"));
     static const QList<Spec> list{
-        {UiLanguage, QStringLiteral("en"), QStringLiteral("Interface language"),
-         oneOf({QStringLiteral("en")})},
+        {UiLanguage, QStringLiteral("en"), QStringLiteral("Interface language"), oneOf({QStringLiteral("en")})},
         {UiShowHints, true, QStringLiteral("Show the control hint bar"), boolean()},
         {LibrarySortOrder, QStringLiteral("title"), QStringLiteral("Default game library sort order"),
-         oneOf({QStringLiteral("title"), QStringLiteral("recent"), QStringLiteral("emulator"),
-                QStringLiteral("added")})},
-        {LibraryDirectories, QStringList{}, QStringLiteral("Directories scanned for games"),
-         directories()},
+         oneOf(
+             {QStringLiteral("title"), QStringLiteral("recent"), QStringLiteral("emulator"), QStringLiteral("added")})},
+        {LibraryDirectories, QStringList{}, QStringLiteral("Directories scanned for games"), directories()},
         {LibraryExtensions, QStringList{},
-         QStringLiteral("Extra file extensions to include (emulator definitions declare their own)"),
-         extensions()},
-        {LibraryFollowSymlinks, false,
-         QStringLiteral("Follow symbolic links that stay inside a library directory"), boolean()},
+         QStringLiteral("Extra file extensions to include (emulator definitions declare their own)"), extensions()},
+        {LibraryFollowSymlinks, false, QStringLiteral("Follow symbolic links that stay inside a library directory"),
+         boolean()},
         {DisplayMode, QStringLiteral("fullscreen"), QStringLiteral("Window mode"),
          oneOf({QStringLiteral("fullscreen"), QStringLiteral("windowed")})},
-        {DisplayResolution, QStringLiteral("auto"), QStringLiteral("Preferred resolution"),
-         resolution()},
+        {DisplayResolution, QStringLiteral("auto"), QStringLiteral("Preferred resolution"), resolution()},
         {AudioVolume, 80, QStringLiteral("Master volume preference (0-100)"), intRange(0, 100)},
         {InputBackend, QStringLiteral("auto"), QStringLiteral("Controller backend"),
-         oneOf({QStringLiteral("auto"), QStringLiteral("evdev"), QStringLiteral("sdl3"),
-                QStringLiteral("none")})},
+         oneOf({QStringLiteral("auto"), QStringLiteral("evdev"), QStringLiteral("sdl3"), QStringLiteral("none")})},
         {InputMapping, defaultMapping(), QStringLiteral("Controller button for each action"),
          stringMap(action, button, QStringLiteral("expected action -> button name"))},
-        {EmulatorDefaultProfiles, QVariantMap{},
-         QStringLiteral("Default launch profile per emulator id"),
+        {EmulatorDefaultProfiles, QVariantMap{}, QStringLiteral("Default launch profile per emulator id"),
          stringMap(id, id, QStringLiteral("expected emulator id -> profile id"))},
     };
     return list;
@@ -211,13 +206,11 @@ QStringList Settings::defaultSystemFiles(const QString &applicationDir)
 Settings::Settings(Paths paths, QObject *parent)
     : QObject(parent)
     , m_paths(std::move(paths))
-{
-}
+{ }
 
 std::optional<QVariantMap> Settings::readLayer(const QString &file, Layer layer)
 {
-    const QString name = layer == Layer::User ? QStringLiteral("user settings")
-                                              : QStringLiteral("system defaults");
+    const QString name = layer == Layer::User ? QStringLiteral("user settings") : QStringLiteral("system defaults");
     QFile f(file);
     if (!f.exists())
         return QVariantMap{};
@@ -288,7 +281,7 @@ bool Settings::load()
             ok = false;
             // Keep the broken file for inspection and start from defaults.
             const QString aside = m_paths.userFile + QStringLiteral(".corrupt-")
-                                  + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+                + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
             if (QFile::rename(m_paths.userFile, aside))
                 m_issues.append(QStringLiteral("user settings were unusable and moved to %1").arg(aside));
         }

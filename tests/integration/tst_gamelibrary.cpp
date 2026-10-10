@@ -187,7 +187,8 @@ private slots:
         GameLibrary library;
         QVERIFY2(library.open(db()), qPrintable(library.lastError()));
         QCOMPARE(library.databaseIssues().size(), 1);
-        const QStringList aside = QDir(QFileInfo(db()).absolutePath()).entryList({QStringLiteral("library.sqlite.corrupt-*")});
+        const QStringList aside
+            = QDir(QFileInfo(db()).absolutePath()).entryList({QStringLiteral("library.sqlite.corrupt-*")});
         QCOMPARE(aside.size(), 1);
         library.setScanOptions(options());
         scan(library);

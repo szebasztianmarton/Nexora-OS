@@ -27,8 +27,8 @@ public:
         EmulatorNameRole,
         FavoriteRole,
         PlayCountRole,
-        LastPlayedRole,  // human readable, empty if never
-        AvailableRole,   // an enabled, working emulator handles the game
+        LastPlayedRole, // human readable, empty if never
+        AvailableRole, // an enabled, working emulator handles the game
         UnavailableReasonRole,
     };
     Q_ENUM(Role)

@@ -70,11 +70,10 @@ void rotateIfNeeded(LogState &s, qint64 incoming)
 
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
-    const QString line = QStringLiteral("%1 [%2] %3: %4")
-                             .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs),
-                                  QString::fromLatin1(levelName(type)),
-                                  QString::fromLatin1(context.category ? context.category : "default"),
-                                  message);
+    const QString line
+        = QStringLiteral("%1 [%2] %3: %4")
+              .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs), QString::fromLatin1(levelName(type)),
+                   QString::fromLatin1(context.category ? context.category : "default"), message);
     const QByteArray bytes = line.toUtf8() + '\n';
 
     LogState &s = state();

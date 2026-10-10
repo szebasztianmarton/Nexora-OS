@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_NEXORA_PATH/package/nexora-os/Config.in"

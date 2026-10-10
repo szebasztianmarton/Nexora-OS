@@ -28,20 +28,13 @@ public:
 
     int count(QEvent::Type type, int key) const
     {
-        return static_cast<int>(std::count_if(events.cbegin(), events.cend(), [&](const KeyRecord &r) {
-            return r.type == type && r.key == key;
-        }));
+        return static_cast<int>(std::count_if(events.cbegin(), events.cend(),
+                                              [&](const KeyRecord &r) { return r.type == type && r.key == key; }));
     }
 
 protected:
-    void keyPressEvent(QKeyEvent *event) override
-    {
-        events.append({QEvent::KeyPress, event->key()});
-    }
-    void keyReleaseEvent(QKeyEvent *event) override
-    {
-        events.append({QEvent::KeyRelease, event->key()});
-    }
+    void keyPressEvent(QKeyEvent *event) override { events.append({QEvent::KeyPress, event->key()}); }
+    void keyReleaseEvent(QKeyEvent *event) override { events.append({QEvent::KeyRelease, event->key()}); }
 };
 
 } // namespace
@@ -209,8 +202,7 @@ void TestInputController::startAutoNeverFails()
     const QStringList allowed{QStringLiteral("sdl3"), QStringLiteral("evdev"), QStringLiteral("none")};
     QVERIFY2(allowed.contains(controller.backendName()), qPrintable(controller.backendName()));
     QVERIFY(!controller.statusText().isEmpty());
-    qInfo() << "auto backend:" << controller.backendName() << "-" << controller.statusText()
-            << controller.devices();
+    qInfo() << "auto backend:" << controller.backendName() << "-" << controller.statusText() << controller.devices();
 }
 
 void TestInputController::restartReplacesBackend()
@@ -256,7 +248,7 @@ void TestInputController::newActionsAndCapture()
     QCOMPARE(captured.size(), 1);
     QCOMPARE(captured.first().first().toString(), QStringLiteral("east"));
     QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Down), 1); // directions still navigate
-    QCOMPARE(window.count(QEvent::KeyPress, Qt::Key_Escape), 0);   // East not delivered as Back
+    QCOMPARE(window.count(QEvent::KeyPress, Qt::Key_Escape), 0); // East not delivered as Back
 
     controller.setCapturing(false);
     auto mapping = controller.mapping();

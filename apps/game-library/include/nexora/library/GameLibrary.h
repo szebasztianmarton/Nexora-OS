@@ -10,8 +10,6 @@
 #include <atomic>
 #include <memory>
 
-
-
 namespace nexora::library {
 
 // Owns the game database and runs directory scans on a worker thread. Database writes

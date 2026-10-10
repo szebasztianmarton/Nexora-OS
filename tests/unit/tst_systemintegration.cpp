@@ -59,7 +59,8 @@ private slots:
         const auto env = fakeEnv(dir);
         write(env.procRoot + QStringLiteral("/uptime"), "12345.67 99.0\n");
         write(env.procRoot + QStringLiteral("/loadavg"), "0.42 0.30 0.10 1/100 999\n");
-        write(env.procRoot + QStringLiteral("/meminfo"), "MemTotal:       16000000 kB\nMemFree: 1 kB\nMemAvailable:    8000000 kB\n");
+        write(env.procRoot + QStringLiteral("/meminfo"),
+              "MemTotal:       16000000 kB\nMemFree: 1 kB\nMemAvailable:    8000000 kB\n");
         write(env.osReleaseFile, "NAME=Test\nPRETTY_NAME=\"Test OS 1.0\"\n");
         DesktopSystemIntegration sys(env);
         const SystemStatus s = sys.status();
@@ -133,6 +134,26 @@ private slots:
             return f.open(QIODevice::ReadOnly) ? f.readAll().trimmed() : QByteArray();
         };
         QTRY_COMPARE_WITH_TIMEOUT(contents(), QByteArray("-q sset Master 100%"), 5000);
+    }
+
+    void embeddedVolumeFallsBackToPcm()
+    {
+        QTemporaryDir dir;
+        const auto env = fakeEnv(dir);
+        const QString out = dir.filePath(QStringLiteral("mixer-args"));
+        write(env.mixerProgram, "#!/bin/sh\n[ \"$3\" = Master ] && exit 1\necho \"$@\" > '" + out.toUtf8() + "'\n");
+        QFile::setPermissions(env.mixerProgram, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        EmbeddedSystemIntegration sys(env);
+        QSignalSpy applied(&sys, &EmbeddedSystemIntegration::volumeApplied);
+        QVERIFY(sys.applyVolume(40, nullptr));
+        QTRY_COMPARE_WITH_TIMEOUT(applied.size(), 1, 5000);
+        QCOMPARE(applied.first().at(0).toBool(), true);
+        QCOMPARE(applied.first().at(1).toString(), QStringLiteral("PCM"));
+
+        write(env.mixerProgram, "#!/bin/sh\nexit 1\n");
+        QVERIFY(sys.applyVolume(40, nullptr));
+        QTRY_COMPARE_WITH_TIMEOUT(applied.size(), 2, 5000);
+        QCOMPARE(applied.last().at(0).toBool(), false);
     }
 
     void singleInstance()

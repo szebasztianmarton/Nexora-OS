@@ -24,18 +24,10 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 d
     };
 
     switch (button) {
-    case GamepadButton::DpadUp:
-        directional(SrcDpadUp, NavAction::Up);
-        return;
-    case GamepadButton::DpadDown:
-        directional(SrcDpadDown, NavAction::Down);
-        return;
-    case GamepadButton::DpadLeft:
-        directional(SrcDpadLeft, NavAction::Left);
-        return;
-    case GamepadButton::DpadRight:
-        directional(SrcDpadRight, NavAction::Right);
-        return;
+    case GamepadButton::DpadUp: directional(SrcDpadUp, NavAction::Up); return;
+    case GamepadButton::DpadDown: directional(SrcDpadDown, NavAction::Down); return;
+    case GamepadButton::DpadLeft: directional(SrcDpadLeft, NavAction::Left); return;
+    case GamepadButton::DpadRight: directional(SrcDpadRight, NavAction::Right); return;
     case GamepadButton::South:
     case GamepadButton::East:
     case GamepadButton::West:
@@ -44,8 +36,7 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 d
     case GamepadButton::Select:
     case GamepadButton::Guide:
     case GamepadButton::L1:
-    case GamepadButton::R1:
-        break;
+    case GamepadButton::R1: break;
     }
 
     if (button == GamepadButton::Start || button == GamepadButton::Select) {
@@ -69,10 +60,22 @@ void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized, quint32 de
     int source = SrcLeftX;
     bool horizontal = true;
     switch (axis) {
-    case GamepadAxis::LeftX: source = SrcLeftX; horizontal = true; break;
-    case GamepadAxis::LeftY: source = SrcLeftY; horizontal = false; break;
-    case GamepadAxis::HatX: source = SrcHatX; horizontal = true; break;
-    case GamepadAxis::HatY: source = SrcHatY; horizontal = false; break;
+    case GamepadAxis::LeftX:
+        source = SrcLeftX;
+        horizontal = true;
+        break;
+    case GamepadAxis::LeftY:
+        source = SrcLeftY;
+        horizontal = false;
+        break;
+    case GamepadAxis::HatX:
+        source = SrcHatX;
+        horizontal = true;
+        break;
+    case GamepadAxis::HatY:
+        source = SrcHatY;
+        horizontal = false;
+        break;
     }
 
     DeviceState &state = m_devices[device];
@@ -143,8 +146,7 @@ void GamepadNavigator::resetDevice(quint32 device)
     updateChord();
 }
 
-void GamepadNavigator::setRepeatDelays(std::chrono::milliseconds initial,
-                                       std::chrono::milliseconds interval)
+void GamepadNavigator::setRepeatDelays(std::chrono::milliseconds initial, std::chrono::milliseconds interval)
 {
     m_initialDelay = std::max(initial, std::chrono::milliseconds{1});
     m_interval = std::max(interval, std::chrono::milliseconds{1});

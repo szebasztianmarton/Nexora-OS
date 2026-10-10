@@ -171,8 +171,7 @@ void TestGamepadNavigator::hatAxes()
     nav.axisEvent(GamepadAxis::HatX, -1.0);
     nav.axisEvent(GamepadAxis::HatX, 0.0);
     nav.axisEvent(GamepadAxis::HatX, 1.0);
-    QCOMPARE(actions(spy), (QList<NavAction>{NavAction::Up, NavAction::Down, NavAction::Left,
-                                             NavAction::Right}));
+    QCOMPARE(actions(spy), (QList<NavAction>{NavAction::Up, NavAction::Down, NavAction::Left, NavAction::Right}));
 }
 
 void TestGamepadNavigator::heldDirectionRepeats()
@@ -309,9 +308,9 @@ void TestGamepadNavigator::normalizeAxisValues()
     QCOMPARE(normalizeAxis(-1, -1, 1), -1.0);
     QCOMPARE(normalizeAxis(0, -1, 1), 0.0);
     QCOMPARE(normalizeAxis(1, -1, 1), 1.0);
-    QCOMPARE(normalizeAxis(500, 0, 255), 1.0);   // clamped
+    QCOMPARE(normalizeAxis(500, 0, 255), 1.0); // clamped
     QCOMPARE(normalizeAxis(-500, 0, 255), -1.0); // clamped
-    QCOMPARE(normalizeAxis(5, 3, 3), 0.0);       // degenerate range
+    QCOMPARE(normalizeAxis(5, 3, 3), 0.0); // degenerate range
     QCOMPARE(normalizeAxis(5, 10, 3), 0.0);
 }
 #endif

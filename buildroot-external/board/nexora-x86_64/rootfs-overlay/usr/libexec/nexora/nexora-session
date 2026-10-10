@@ -1,0 +1,132 @@
+#!/bin/sh
+# Nexora OS console UI supervisor (started as root by /etc/init.d/S90nexora).
+#
+# Runs /usr/bin/nexora-console-ui as the unprivileged "nexora" user on a
+# virtual terminal and restarts it when it exits, with exponential
+# backoff. After NEXORA_MAX_RAPID_FAILURES consecutive runs shorter than
+# NEXORA_RAPID_SECONDS it gives up and switches to the recovery login on
+# tty2, so that a crashing UI never makes the system unusable.
+#
+# This script only runs fixed commands; it reads no input from the
+# console UI.
+
+APP=/usr/bin/nexora-console-ui
+APP_USER=nexora
+# Application log, written by the UI itself (directory owned by nexora).
+LOG_DIR=/var/log/nexora
+LOG_FILE="${LOG_DIR}/console-ui.log"
+# Supervisor messages and the UI's stdout/stderr (early Qt platform
+# errors appear only there). Root-owned directory: the unprivileged UI
+# can write through the inherited descriptor but cannot replace the path.
+SESSION_DIR=/run/nexora-session
+STDERR_LOG="${SESSION_DIR}/session.log"
+LOG_MAX_KIB=1024
+RECOVERY_VT=2
+
+NEXORA_TTY=/dev/tty1
+NEXORA_CONSOLE_UI_ARGS=""
+NEXORA_MAX_RAPID_FAILURES=5
+NEXORA_RAPID_SECONDS=15
+
+# shellcheck source=/dev/null
+[ -r /etc/default/nexora ] && . /etc/default/nexora
+
+log() {
+	logger -t nexora-session -- "$*"
+	echo "$(date '+%Y-%m-%dT%H:%M:%S') nexora-session: $*" >> "${STDERR_LOG}"
+}
+
+uptime_seconds() {
+	cut -d. -f1 /proc/uptime
+}
+
+# Size-based rotation; never follows symlinks.
+rotate() {
+	[ -f "$1" ] && [ ! -L "$1" ] || return 0
+	if [ -n "$(find "$1" -maxdepth 0 -type f -size +"${LOG_MAX_KIB}"k)" ]; then
+		mv -f "$1" "$1.1"
+	fi
+}
+
+child=""
+stopping=0
+
+on_term() {
+	stopping=1
+	if [ -n "${child}" ]; then
+		kill -TERM "${child}" 2> /dev/null
+		wait "${child}" 2> /dev/null
+	fi
+	log "stopped"
+	exit 0
+}
+trap on_term TERM INT
+
+mkdir -p "${SESSION_DIR}"
+chown root:root "${SESSION_DIR}"
+chmod 0755 "${SESSION_DIR}"
+
+uid=$(id -u "${APP_USER}") || exit 1
+gid=$(id -g "${APP_USER}") || exit 1
+home="/home/${APP_USER}"
+
+export HOME="${home}"
+export USER="${APP_USER}"
+export LOGNAME="${APP_USER}"
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export XDG_RUNTIME_DIR="/run/user/${uid}"
+export NEXORA_PLATFORM=embedded
+export QT_QPA_PLATFORM=eglfs
+export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+
+failures=0
+delay=1
+
+while [ "${stopping}" -eq 0 ]; do
+	# The UI rotates its own --log-file; only the supervisor log is
+	# rotated here.
+	rotate "${STDERR_LOG}"
+
+	# The UI owns its virtual terminal (it switches it to graphics mode
+	# and mutes the keyboard there); everything else stays root-owned.
+	chown "${uid}:${gid}" "${NEXORA_TTY}"
+	chmod 0600 "${NEXORA_TTY}"
+
+	start=$(uptime_seconds)
+	log "starting ${APP} as ${APP_USER} on ${NEXORA_TTY}"
+	# setsid + opening the VT as stdin makes it the controlling terminal
+	# of the new session; start-stop-daemon then drops to the nexora
+	# user (including its supplementary groups) and execs the UI.
+	# shellcheck disable=SC2016,SC2086 # $0/$1 expand in the child shell;
+	# NEXORA_CONSOLE_UI_ARGS is split on purpose
+	setsid /bin/sh -c 'tty="$1"; app="$2"; shift 2; exec start-stop-daemon \
+		--start --chuid "$0" --exec "$app" -- "$@" < "$tty"' \
+		"${APP_USER}" "${NEXORA_TTY}" "${APP}" \
+		--fullscreen --log-file "${LOG_FILE}" ${NEXORA_CONSOLE_UI_ARGS} \
+		>> "${STDERR_LOG}" 2>&1 &
+	child=$!
+	wait "${child}"
+	status=$?
+	child=""
+	runtime=$(( $(uptime_seconds) - start ))
+	log "nexora-console-ui exited with status ${status} after ${runtime}s"
+
+	if [ "${runtime}" -lt "${NEXORA_RAPID_SECONDS}" ]; then
+		failures=$((failures + 1))
+	else
+		failures=0
+		delay=1
+	fi
+	if [ "${failures}" -ge "${NEXORA_MAX_RAPID_FAILURES}" ]; then
+		log "giving up after ${failures} rapid failures; see ${LOG_FILE} and ${STDERR_LOG}; recovery login on tty${RECOVERY_VT}"
+		chvt "${RECOVERY_VT}"
+		exit 1
+	fi
+
+	sleep "${delay}" &
+	child=$!
+	wait "${child}"
+	child=""
+	delay=$((delay * 2))
+	[ "${delay}" -gt 30 ] && delay=30
+done

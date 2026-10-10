@@ -46,12 +46,8 @@ QList<GameEntry> LibraryQuery::apply(QList<GameEntry> entries, const QueryOption
     // The Recent filter always orders by recency so the limit keeps the newest entries.
     const SortOrder order = options.filter == LibraryFilter::Recent ? SortOrder::Recent : options.sort;
     switch (order) {
-    case SortOrder::Title:
-        std::sort(entries.begin(), entries.end(), byTitle);
-        break;
-    case SortOrder::Recent:
-        std::sort(entries.begin(), entries.end(), byRecent);
-        break;
+    case SortOrder::Title: std::sort(entries.begin(), entries.end(), byTitle); break;
+    case SortOrder::Recent: std::sort(entries.begin(), entries.end(), byRecent); break;
     case SortOrder::Emulator:
         std::sort(entries.begin(), entries.end(), [&](const GameEntry &a, const GameEntry &b) {
             const int c = a.emulatorId().compare(b.emulatorId());
@@ -64,8 +60,7 @@ QList<GameEntry> LibraryQuery::apply(QList<GameEntry> entries, const QueryOption
         });
         break;
     }
-    if (options.filter == LibraryFilter::Recent && options.recentLimit >= 0
-        && entries.size() > options.recentLimit) {
+    if (options.filter == LibraryFilter::Recent && options.recentLimit >= 0 && entries.size() > options.recentLimit) {
         entries.resize(options.recentLimit);
     }
     return entries;

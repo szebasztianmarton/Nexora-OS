@@ -6,16 +6,14 @@
 
 namespace nexora::shared {
 
-ConfigDirResolution resolveConfigDirectory(const QString &commandLineValue,
-                                           const QString &environmentValue,
+ConfigDirResolution resolveConfigDirectory(const QString &commandLineValue, const QString &environmentValue,
                                            const QString &applicationDir)
 {
     if (!commandLineValue.isEmpty())
         return {QDir(commandLineValue).absolutePath(), ConfigDirSource::CommandLine};
     if (!environmentValue.isEmpty())
         return {QDir(environmentValue).absolutePath(), ConfigDirSource::Environment};
-    return {QDir::cleanPath(QDir(applicationDir).absoluteFilePath(
-                QStringLiteral("../share/nexora/emulators"))),
+    return {QDir::cleanPath(QDir(applicationDir).absoluteFilePath(QStringLiteral("../share/nexora/emulators"))),
             ConfigDirSource::Default};
 }
 

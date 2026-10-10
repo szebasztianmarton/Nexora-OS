@@ -10,9 +10,9 @@ std::optional<GamepadButton> evdevKeyToButton(quint16 code)
 {
     switch (code) {
     case BTN_SOUTH: return GamepadButton::South; // == BTN_A
-    case BTN_EAST: return GamepadButton::East;   // == BTN_B
+    case BTN_EAST: return GamepadButton::East; // == BTN_B
     case BTN_NORTH: return GamepadButton::North; // == BTN_X
-    case BTN_WEST: return GamepadButton::West;   // == BTN_Y
+    case BTN_WEST: return GamepadButton::West; // == BTN_Y
     case BTN_START: return GamepadButton::Start;
     case BTN_SELECT: return GamepadButton::Select;
     case BTN_MODE: return GamepadButton::Guide;

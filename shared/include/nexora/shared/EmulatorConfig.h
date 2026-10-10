@@ -14,7 +14,7 @@ struct LaunchProfile
     QString id;
     QString name;
     QString emulatorId;
-    QStringList arguments;   // replaces the emulator's arguments when hasArguments is set
+    QStringList arguments; // replaces the emulator's arguments when hasArguments is set
     bool hasArguments = false;
     QString workingDirectory; // absolute; empty = emulator's working directory
     bool enabled = true;
@@ -30,9 +30,9 @@ struct EmulatorConfig
     QString executable; // absolute, cleaned path; never resolved through PATH
     QStringList arguments;
     bool enabled = true;
-    QString sourceFile;       // JSON file this entry was loaded from (diagnostics only)
+    QString sourceFile; // JSON file this entry was loaded from (diagnostics only)
     QString workingDirectory; // absolute; empty = the executable's directory
-    QStringList extensions;   // lower-case game file extensions handled, e.g. ".sfc"
+    QStringList extensions; // lower-case game file extensions handled, e.g. ".sfc"
     std::optional<int> stopTimeoutMs; // graceful-stop timeout before SIGKILL
     QList<LaunchProfile> profiles;
 

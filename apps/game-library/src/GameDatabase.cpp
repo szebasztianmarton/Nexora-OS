@@ -37,8 +37,7 @@ bool isUnder(const QString &path, const QString &root)
 
 GameDatabase::GameDatabase()
     : m_connection(QStringLiteral("nexora-library-%1").arg(connectionCounter.fetchAndAddRelaxed(1)))
-{
-}
+{ }
 
 GameDatabase::~GameDatabase()
 {
@@ -100,7 +99,7 @@ bool GameDatabase::open(const QString &path)
         if (inMemory || attempt == 1 || !QFile::exists(path))
             break;
         const QString aside = path + QStringLiteral(".corrupt-")
-                              + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+            + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
         if (!QFile::rename(path, aside))
             break;
         QFile::remove(path + QStringLiteral("-wal"));
@@ -195,11 +194,10 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
         if (find.next()) {
             const qint64 id = find.value(0).toLongLong();
             const bool changed = !find.value(1).toBool() || find.value(2).toString() != f.title
-                                 || find.value(3).toLongLong() != f.size
-                                 || find.value(4).toString() != joinList(f.emulatorIds);
+                || find.value(3).toLongLong() != f.size || find.value(4).toString() != joinList(f.emulatorIds);
             find.finish();
-            for (const QVariant &v : {QVariant(f.title), QVariant(f.extension), QVariant(f.root),
-                                      QVariant(f.size), modified, QVariant(joinList(f.emulatorIds)), QVariant(id)})
+            for (const QVariant &v : {QVariant(f.title), QVariant(f.extension), QVariant(f.root), QVariant(f.size),
+                                      modified, QVariant(joinList(f.emulatorIds)), QVariant(id)})
                 update.addBindValue(v);
             if (!update.exec()) {
                 m_lastError = update.lastError().text();
@@ -235,11 +233,11 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
             continue;
         const bool rootScanned = std::any_of(result.scannedRoots.cbegin(), result.scannedRoots.cend(),
                                              [&](const QString &r) { return isUnder(path, r); });
-        const bool rootConfigured = std::any_of(configuredRoots.cbegin(), configuredRoots.cend(),
-                                                [&](const QString &r) {
-                                                    const QString c = QFileInfo(r).canonicalFilePath();
-                                                    return isUnder(root, c.isEmpty() ? QDir::cleanPath(r) : c);
-                                                });
+        const bool rootConfigured
+            = std::any_of(configuredRoots.cbegin(), configuredRoots.cend(), [&](const QString &r) {
+                  const QString c = QFileInfo(r).canonicalFilePath();
+                  return isUnder(root, c.isEmpty() ? QDir::cleanPath(r) : c);
+              });
         // A truncated or cancelled scan did not see every file: only drop entries whose
         // directory was removed from the configuration in that case.
         const bool complete = !result.truncated && !result.cancelled;
@@ -259,8 +257,8 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
         m_lastError = db.lastError().text();
         return std::nullopt;
     }
-    qCInfo(lcLibrary) << "Library update:" << stats.added << "added," << stats.updated << "updated,"
-                      << stats.missing << "missing";
+    qCInfo(lcLibrary) << "Library update:" << stats.added << "added," << stats.updated << "updated," << stats.missing
+                      << "missing";
     return stats;
 }
 
@@ -286,9 +284,9 @@ GameEntry entryFromQuery(const QSqlQuery &q)
     return e;
 }
 
-const QString selectColumns = QStringLiteral(
-    "SELECT id, path, title, extension, root, size, emulator_candidates, emulator_override, present, "
-    "favorite, play_count, last_played, added_at FROM games");
+const QString selectColumns
+    = QStringLiteral("SELECT id, path, title, extension, root, size, emulator_candidates, emulator_override, present, "
+                     "favorite, play_count, last_played, added_at FROM games");
 
 } // namespace
 

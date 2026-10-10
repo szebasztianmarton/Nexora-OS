@@ -4,8 +4,7 @@ namespace nexora::ui {
 
 EmulatorListModel::EmulatorListModel(QObject *parent)
     : QAbstractListModel(parent)
-{
-}
+{ }
 
 int EmulatorListModel::rowCount(const QModelIndex &parent) const
 {
@@ -29,7 +28,8 @@ QVariant EmulatorListModel::data(const QModelIndex &index, int role) const
     case ProfilesRole: {
         QVariantList profiles;
         for (const auto &p : entry.config.profiles)
-            profiles.append(QVariantMap{{QStringLiteral("id"), p.id}, {QStringLiteral("name"), p.name},
+            profiles.append(QVariantMap{{QStringLiteral("id"), p.id},
+                                        {QStringLiteral("name"), p.name},
                                         {QStringLiteral("enabled"), p.enabled}});
         return profiles;
     }
@@ -41,14 +41,10 @@ QVariant EmulatorListModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> EmulatorListModel::roleNames() const
 {
     return {
-        {EmulatorIdRole, "emulatorId"},
-        {NameRole, "name"},
-        {ExecutableRole, "executable"},
-        {StatusRole, "status"},
-        {StatusTextRole, "statusText"},
-        {DetailRole, "detail"},
-        {AvailableRole, "available"},
-        {ProfilesRole, "profiles"},
+        {EmulatorIdRole, "emulatorId"}, {NameRole, "name"},
+        {ExecutableRole, "executable"}, {StatusRole, "status"},
+        {StatusTextRole, "statusText"}, {DetailRole, "detail"},
+        {AvailableRole, "available"},   {ProfilesRole, "profiles"},
         {ExtensionsRole, "extensions"},
     };
 }
@@ -86,8 +82,8 @@ void EmulatorListModel::setEmulators(const QList<shared::EmulatorConfig> &emulat
         emit countChanged();
 }
 
-bool EmulatorListModel::setStatus(const QString &id, const QString &status,
-                                  const QString &statusText, const QString &detail)
+bool EmulatorListModel::setStatus(const QString &id, const QString &status, const QString &statusText,
+                                  const QString &detail)
 {
     const int row = indexOf(id);
     if (row < 0)

@@ -18,10 +18,36 @@ env:
     qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtqml-models
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates
     qml6-module-qtquick-layouts qml6-module-qtquick-window
-    libgl-dev
+    libqt6sql6-sqlite libgl-dev
   SDL3_TAG: release-3.2.30
 
 jobs:
+  lint:
+    name: formatting and file checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format-18 shellcheck
+
+      - name: clang-format (C++)
+        run: git ls-files '*.cpp' '*.h' | xargs clang-format-18 --dry-run --Werror
+
+      - name: JSON syntax
+        run: |
+          status=0
+          for f in $(git ls-files '*.json'); do
+            python3 -m json.tool "$f" > /dev/null || { echo "::error file=$f::invalid JSON"; status=1; }
+          done
+          exit $status
+
+      - name: shellcheck (scripts)
+        run: shellcheck scripts/*.sh
+
   build-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
@@ -66,8 +92,17 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
 
-      - name: Test
-        run: ctest --preset ${{ matrix.preset }}
+      - name: Unit tests
+        run: ctest --preset ${{ matrix.preset }} -L unit
+
+      - name: Integration tests
+        run: ctest --preset ${{ matrix.preset }} -L integration
+
+      - name: Validate configuration files
+        run: |
+          app=build/${{ matrix.preset }}/bin/nexora-console-ui
+          "$app" --check-config --config-dir config/emulators --settings-file config/examples/settings.json
+          "$app" --check-config --config-dir config/examples/emulators --settings-file config/examples/settings.json
 
       - name: Upload test log
         if: failure()

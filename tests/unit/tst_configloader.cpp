@@ -21,8 +21,7 @@ private:
         file.write(content);
     }
 
-    static std::optional<nexora::shared::EmulatorConfig> parse(const QByteArray &json,
-                                                               QStringList *errors,
+    static std::optional<nexora::shared::EmulatorConfig> parse(const QByteArray &json, QStringList *errors,
                                                                QStringList *warnings = nullptr)
     {
         return ConfigLoader::parse(json, QStringLiteral("/etc/nexora/test.json"), errors, warnings);
@@ -32,7 +31,8 @@ private slots:
     void parsesCompleteDefinition()
     {
         QStringList errors;
-        const auto config = parse("{\"id\":\"snes-x\",\"name\":\" SNES \",\"executable\":\"/usr/bin/snes\", \"arguments\":[\"--fullscreen\",\"-v\"],\"enabled\":false}",
+        const auto config = parse("{\"id\":\"snes-x\",\"name\":\" SNES \",\"executable\":\"/usr/bin/snes\", "
+                                  "\"arguments\":[\"--fullscreen\",\"-v\"],\"enabled\":false}",
                                   &errors);
         QVERIFY2(config.has_value(), qPrintable(errors.join(u'\n')));
         QCOMPARE(config->id, QStringLiteral("snes-x"));
@@ -71,19 +71,19 @@ private slots:
                                       << QStringLiteral("\"name\" must be a string");
         QTest::newRow("blank name") << QByteArray("{\"id\":\"a\",\"name\":\"  \",\"executable\":\"/bin/true\"}")
                                     << QStringLiteral("\"name\" must not be empty");
-        QTest::newRow("missing executable") << QByteArray("{\"id\":\"a\",\"name\":\"A\"}")
-                                            << QStringLiteral("\"executable\" must be a string");
+        QTest::newRow("missing executable")
+            << QByteArray("{\"id\":\"a\",\"name\":\"A\"}") << QStringLiteral("\"executable\" must be a string");
         QTest::newRow("empty executable") << QByteArray("{\"id\":\"a\",\"name\":\"A\",\"executable\":\"\"}")
                                           << QStringLiteral("\"executable\" must not be empty");
         QTest::newRow("arguments string")
             << QByteArray("{\"id\":\"a\",\"name\":\"A\",\"executable\":\"/bin/true\",\"arguments\":\"-v\"}")
             << QStringLiteral("\"arguments\" must be an array of strings (got string)");
-        QTest::newRow("argument number")
-            << QByteArray("{\"id\":\"a\",\"name\":\"A\",\"executable\":\"/bin/true\",\"arguments\":[\"-v\",3]}")
-            << QStringLiteral("\"arguments\"[1] must be a string (got number)");
-        QTest::newRow("enabled string")
-            << QByteArray("{\"id\":\"a\",\"name\":\"A\",\"executable\":\"/bin/true\",\"enabled\":\"yes\"}")
-            << QStringLiteral("\"enabled\" must be a boolean (got string)");
+        QTest::newRow("argument number") << QByteArray(
+            "{\"id\":\"a\",\"name\":\"A\",\"executable\":\"/bin/true\",\"arguments\":[\"-v\",3]}")
+                                         << QStringLiteral("\"arguments\"[1] must be a string (got number)");
+        QTest::newRow("enabled string") << QByteArray(
+            "{\"id\":\"a\",\"name\":\"A\",\"executable\":\"/bin/true\",\"enabled\":\"yes\"}")
+                                        << QStringLiteral("\"enabled\" must be a boolean (got string)");
     }
 
     void rejectsInvalidDefinitions()
@@ -93,9 +93,8 @@ private slots:
         QStringList errors;
         QVERIFY(!parse(json, &errors).has_value());
         QVERIFY(!errors.isEmpty());
-        const bool found = std::any_of(errors.cbegin(), errors.cend(), [&](const QString &e) {
-            return e.contains(expectedError);
-        });
+        const bool found
+            = std::any_of(errors.cbegin(), errors.cend(), [&](const QString &e) { return e.contains(expectedError); });
         QVERIFY2(found, qPrintable(errors.join(u'\n')));
     }
 
@@ -191,8 +190,10 @@ private slots:
     void rejectsDuplicateIds()
     {
         QTemporaryDir dir;
-        writeFile(dir, QStringLiteral("1-first.json"), "{\"id\":\"dup\",\"name\":\"First\",\"executable\":\"/bin/true\"}");
-        writeFile(dir, QStringLiteral("2-second.json"), "{\"id\":\"dup\",\"name\":\"Second\",\"executable\":\"/bin/true\"}");
+        writeFile(dir, QStringLiteral("1-first.json"),
+                  "{\"id\":\"dup\",\"name\":\"First\",\"executable\":\"/bin/true\"}");
+        writeFile(dir, QStringLiteral("2-second.json"),
+                  "{\"id\":\"dup\",\"name\":\"Second\",\"executable\":\"/bin/true\"}");
 
         const auto result = ConfigLoader::loadDirectory(dir.path());
         QCOMPARE(result.emulators.size(), 1);

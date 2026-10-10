@@ -45,8 +45,7 @@ EvdevGamepadBackend::EvdevGamepadBackend(GamepadNavigator *navigator, QObject *p
     m_rescanTimer.setSingleShot(true);
     m_rescanTimer.setInterval(kRescanDebounceMs);
     connect(&m_rescanTimer, &QTimer::timeout, this, &EvdevGamepadBackend::rescan);
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this,
-            &EvdevGamepadBackend::scheduleRescan);
+    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &EvdevGamepadBackend::scheduleRescan);
 }
 
 EvdevGamepadBackend::~EvdevGamepadBackend()
@@ -100,9 +99,8 @@ void EvdevGamepadBackend::scheduleRescan()
 void EvdevGamepadBackend::rescan()
 {
     const QDir dir(m_inputDir);
-    const QStringList entries =
-        dir.entryList({QStringLiteral("event*")}, QDir::System | QDir::Files | QDir::NoDotAndDotDot,
-                      QDir::Name);
+    const QStringList entries
+        = dir.entryList({QStringLiteral("event*")}, QDir::System | QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
 
     m_eventNodeCount = static_cast<int>(entries.size());
     m_permissionDeniedCount = 0;
@@ -126,8 +124,7 @@ void EvdevGamepadBackend::rescan()
     updateStatus();
 }
 
-std::unique_ptr<EvdevGamepadBackend::Device> EvdevGamepadBackend::openDevice(const QString &path,
-                                                                             int *openErrno)
+std::unique_ptr<EvdevGamepadBackend::Device> EvdevGamepadBackend::openDevice(const QString &path, int *openErrno)
 {
     const QByteArray nativePath = QFile::encodeName(path);
     const int fd = ::open(nativePath.constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
@@ -139,8 +136,7 @@ std::unique_ptr<EvdevGamepadBackend::Device> EvdevGamepadBackend::openDevice(con
     }
 
     unsigned long keyBits[kKeyBitsLongs] = {};
-    if (::ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) < 0
-        || !testBit(keyBits, BTN_GAMEPAD)) {
+    if (::ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) < 0 || !testBit(keyBits, BTN_GAMEPAD)) {
         ::close(fd); // not a gamepad (keyboard, mouse, power button, ...)
         return nullptr;
     }
@@ -177,8 +173,7 @@ std::unique_ptr<EvdevGamepadBackend::Device> EvdevGamepadBackend::openDevice(con
 
 void EvdevGamepadBackend::readDevice(int fd)
 {
-    auto it = std::find_if(m_devices.begin(), m_devices.end(),
-                           [fd](const auto &d) { return d->fd == fd; });
+    auto it = std::find_if(m_devices.begin(), m_devices.end(), [fd](const auto &d) { return d->fd == fd; });
     if (it == m_devices.end())
         return;
     Device &device = **it;
@@ -191,8 +186,7 @@ void EvdevGamepadBackend::readDevice(int fd)
                 continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 return;
-            qCInfo(lcInput).noquote() << "Gamepad disconnected:" << device.name
-                                      << '(' + errnoString(errno) + ')';
+            qCInfo(lcInput).noquote() << "Gamepad disconnected:" << device.name << '(' + errnoString(errno) + ')';
             closeDevice(device);
             removeClosedDevices();
             updateStatus();
@@ -225,7 +219,7 @@ void EvdevGamepadBackend::readDevice(int fd)
                 if (const auto axis = evdevAbsToAxis(ev.code)) {
                     const auto &range = device.ranges[static_cast<std::size_t>(*axis)];
                     navigator()->axisEvent(*axis, normalizeAxis(ev.value, range.min, range.max),
-                                            static_cast<quint32>(fd));
+                                           static_cast<quint32>(fd));
                 }
             }
         }
@@ -249,8 +243,7 @@ void EvdevGamepadBackend::closeDevice(Device &device)
 
 void EvdevGamepadBackend::removeClosedDevices()
 {
-    m_devices.erase(std::remove_if(m_devices.begin(), m_devices.end(),
-                                   [](const auto &d) { return d->fd < 0; }),
+    m_devices.erase(std::remove_if(m_devices.begin(), m_devices.end(), [](const auto &d) { return d->fd < 0; }),
                     m_devices.end());
 }
 

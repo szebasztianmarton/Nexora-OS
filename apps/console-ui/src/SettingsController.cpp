@@ -29,9 +29,12 @@ const QHash<QString, QStringList> kChoices{
 QString actionLabel(const QString &action)
 {
     static const QHash<QString, QString> labels{
-        {QStringLiteral("accept"), QStringLiteral("Confirm")},     {QStringLiteral("back"), QStringLiteral("Back")},
-        {QStringLiteral("menu"), QStringLiteral("Menu")},          {QStringLiteral("favorite"), QStringLiteral("Favorite")},
-        {QStringLiteral("search"), QStringLiteral("Search")},      {QStringLiteral("prevTab"), QStringLiteral("Previous tab")},
+        {QStringLiteral("accept"), QStringLiteral("Confirm")},
+        {QStringLiteral("back"), QStringLiteral("Back")},
+        {QStringLiteral("menu"), QStringLiteral("Menu")},
+        {QStringLiteral("favorite"), QStringLiteral("Favorite")},
+        {QStringLiteral("search"), QStringLiteral("Search")},
+        {QStringLiteral("prevTab"), QStringLiteral("Previous tab")},
         {QStringLiteral("nextTab"), QStringLiteral("Next tab")},
     };
     return labels.value(action, action);
@@ -63,15 +66,42 @@ SettingsController::SettingsController(shared::Settings *settings, input::InputC
     connect(m_settings, &Settings::reloaded, this, &SettingsController::changed);
 }
 
-QString SettingsController::language() const { return m_settings->stringValue(Settings::UiLanguage); }
-QString SettingsController::displayMode() const { return m_settings->stringValue(Settings::DisplayMode); }
-QString SettingsController::resolution() const { return m_settings->stringValue(Settings::DisplayResolution); }
-QStringList SettingsController::resolutions() const { return kResolutions; }
-int SettingsController::volume() const { return m_settings->intValue(Settings::AudioVolume); }
-bool SettingsController::showHints() const { return m_settings->boolValue(Settings::UiShowHints); }
-QString SettingsController::sortOrder() const { return m_settings->stringValue(Settings::LibrarySortOrder); }
-QString SettingsController::inputBackend() const { return m_settings->stringValue(Settings::InputBackend); }
-QString SettingsController::userFile() const { return m_settings->paths().userFile; }
+QString SettingsController::language() const
+{
+    return m_settings->stringValue(Settings::UiLanguage);
+}
+QString SettingsController::displayMode() const
+{
+    return m_settings->stringValue(Settings::DisplayMode);
+}
+QString SettingsController::resolution() const
+{
+    return m_settings->stringValue(Settings::DisplayResolution);
+}
+QStringList SettingsController::resolutions() const
+{
+    return kResolutions;
+}
+int SettingsController::volume() const
+{
+    return m_settings->intValue(Settings::AudioVolume);
+}
+bool SettingsController::showHints() const
+{
+    return m_settings->boolValue(Settings::UiShowHints);
+}
+QString SettingsController::sortOrder() const
+{
+    return m_settings->stringValue(Settings::LibrarySortOrder);
+}
+QString SettingsController::inputBackend() const
+{
+    return m_settings->stringValue(Settings::InputBackend);
+}
+QString SettingsController::userFile() const
+{
+    return m_settings->paths().userFile;
+}
 
 bool SettingsController::volumeSupported() const
 {
@@ -83,7 +113,8 @@ QStringList SettingsController::issues() const
     QStringList list = m_settings->issues();
     QStringList mappingErrors;
     if (!input::ButtonMapping::fromVariantMap(m_settings->mapValue(Settings::InputMapping), &mappingErrors))
-        list.append(QStringLiteral("Controller mapping ignored (%1); using defaults").arg(mappingErrors.join(QStringLiteral("; "))));
+        list.append(QStringLiteral("Controller mapping ignored (%1); using defaults")
+                        .arg(mappingErrors.join(QStringLiteral("; "))));
     return list;
 }
 
@@ -189,7 +220,8 @@ void SettingsController::applyMapping()
     QStringList errors;
     const auto mapping = input::ButtonMapping::fromVariantMap(m_settings->mapValue(Settings::InputMapping), &errors);
     if (!mapping)
-        qCWarning(lcInput).noquote() << "Invalid controller mapping, using defaults:" << errors.join(QStringLiteral("; "));
+        qCWarning(lcInput).noquote() << "Invalid controller mapping, using defaults:"
+                                     << errors.join(QStringLiteral("; "));
     m_input->setMapping(mapping.value_or(input::ButtonMapping::defaults()));
 }
 

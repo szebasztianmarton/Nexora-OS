@@ -1,0 +1,16 @@
+# Settings for /etc/init.d/S90nexora (sourced as a shell fragment).
+
+# Extra command line arguments for nexora-console-ui, e.g.
+# "--config-dir /etc/nexora/emulators" or "--input-backend evdev".
+#NEXORA_CONSOLE_UI_ARGS=""
+
+# Virtual terminal the console UI runs on.
+#NEXORA_TTY=/dev/tty1
+
+# Give up restarting after this many consecutive runs that lasted less
+# than NEXORA_RAPID_SECONDS seconds.
+#NEXORA_MAX_RAPID_FAILURES=5
+#NEXORA_RAPID_SECONDS=15
+
+# Set to "no" to disable the console UI autostart.
+#NEXORA_AUTOSTART=yes

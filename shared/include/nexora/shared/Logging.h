@@ -17,7 +17,7 @@ namespace nexora::shared {
 
 struct LoggingOptions
 {
-    QString logFilePath;   // optional; empty = stderr only
+    QString logFilePath; // optional; empty = stderr only
     int ringCapacity = 500; // lines kept in memory for the diagnostics screen
     // The log file is rotated (file.1 .. file.N) when it would exceed this size, so it
     // never grows without bound. 0 disables rotation.

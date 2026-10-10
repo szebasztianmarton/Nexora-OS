@@ -11,8 +11,8 @@ class TestPaths : public QObject
 private slots:
     void commandLineWins()
     {
-        const auto r = resolveConfigDirectory(QStringLiteral("/cli"), QStringLiteral("/env"),
-                                              QStringLiteral("/app/bin"));
+        const auto r
+            = resolveConfigDirectory(QStringLiteral("/cli"), QStringLiteral("/env"), QStringLiteral("/app/bin"));
         QCOMPARE(r.path, QStringLiteral("/cli"));
         QVERIFY(r.source == ConfigDirSource::CommandLine);
     }

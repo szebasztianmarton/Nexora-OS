@@ -101,7 +101,7 @@ private:
 
     Paths m_paths;
     QVariantMap m_system; // validated system default overrides
-    QVariantMap m_user;   // validated user overrides
+    QVariantMap m_user; // validated user overrides
     QStringList m_issues;
 };
 

@@ -41,7 +41,8 @@ private:
     {
         ui::UiContext::Options o;
         o.app = {configDir(), QStringLiteral("test"), {}, false};
-        o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))}, m_dir.filePath(QStringLiteral("user/settings.json"))};
+        o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))},
+                      m_dir.filePath(QStringLiteral("user/settings.json"))};
         o.databasePath = m_dir.filePath(QStringLiteral("data/library.sqlite"));
         o.platformOverride = QStringLiteral("desktop");
         return o;
@@ -53,7 +54,8 @@ private:
               "{\"id\":\"fake\",\"name\":\"Fake\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
               "\"arguments\":[\"--echo-args\",\"{file}\"],\"extensions\":[\".rom\"],"
               "\"profiles\":[{\"id\":\"long\",\"name\":\"Long\",\"arguments\":[\"--sleep-ms\",\"30000\"]},"
-              "{\"id\":\"off\",\"name\":\"Off\",\"enabled\":false}]" + extra + "}");
+              "{\"id\":\"off\",\"name\":\"Off\",\"enabled\":false}]"
+                  + extra + "}");
     }
 
     static void waitForScan(ui::UiContext &ctx)
@@ -95,8 +97,10 @@ private slots:
         bool backOnSouth = false;
         for (const auto &r : rows) {
             const auto m = r.toMap();
-            acceptOnEast |= m.value(QStringLiteral("action")) == QStringLiteral("accept") && m.value(QStringLiteral("button")) == QStringLiteral("east");
-            backOnSouth |= m.value(QStringLiteral("action")) == QStringLiteral("back") && m.value(QStringLiteral("button")) == QStringLiteral("south");
+            acceptOnEast |= m.value(QStringLiteral("action")) == QStringLiteral("accept")
+                && m.value(QStringLiteral("button")) == QStringLiteral("east");
+            backOnSouth |= m.value(QStringLiteral("action")) == QStringLiteral("back")
+                && m.value(QStringLiteral("button")) == QStringLiteral("south");
         }
         QVERIFY(acceptOnEast);
         QVERIFY(backOnSouth); // swapped, still reachable
@@ -109,7 +113,8 @@ private slots:
     {
         write(m_dir.filePath(QStringLiteral("user/settings.json")), "{ definitely not json");
         write(m_dir.filePath(QStringLiteral("system-defaults.json")),
-              "{\"version\":1,\"settings\":{\"audio.volume\":55,\"library.directories\":[\"" + gamesDir().toUtf8() + "\"]}}");
+              "{\"version\":1,\"settings\":{\"audio.volume\":55,\"library.directories\":[\"" + gamesDir().toUtf8()
+                  + "\"]}}");
         ui::UiContext ctx(options());
         ctx.start();
         QCOMPARE(ctx.settings()->volume(), 55); // system default still applies
@@ -167,7 +172,9 @@ private slots:
         QVERIFY(ctx.library()->launch(id));
         QCOMPARE(ctx.app()->activeEmulatorName(), QStringLiteral("Space Quest (Fake)"));
         QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("exited"), Timeout);
-        QVERIFY2(ctx.app()->lastOutput().contains(QStringLiteral("arg: ") + QFileInfo(gamesDir() + QStringLiteral("/Space Quest.rom")).canonicalFilePath()),
+        QVERIFY2(ctx.app()->lastOutput().contains(
+                     QStringLiteral("arg: ")
+                     + QFileInfo(gamesDir() + QStringLiteral("/Space Quest.rom")).canonicalFilePath()),
                  qPrintable(ctx.app()->lastOutput()));
         QCOMPARE(ctx.library()->recentGames()->rowCount(), 1);
         QCOMPARE(ctx.library()->recentGames()->gameIdAt(0), id);

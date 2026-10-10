@@ -145,8 +145,7 @@ void Sdl3GamepadBackend::pump()
                 navigator()->axisEvent(GamepadAxis::LeftY, value, event.gaxis.which);
             break;
         }
-        default:
-            break;
+        default: break;
         }
     }
     if (devicesChanged)
@@ -157,7 +156,7 @@ void Sdl3GamepadBackend::updateStatus()
 {
     const auto count = m_pads.size();
     m_status = count == 0 ? QStringLiteral("No gamepad detected; waiting for one to be connected")
-             : count == 1 ? QStringLiteral("1 gamepad connected")
+        : count == 1      ? QStringLiteral("1 gamepad connected")
                           : QStringLiteral("%1 gamepads connected").arg(count);
     emit statusChanged();
 }

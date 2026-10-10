@@ -25,8 +25,8 @@ InputController::InputController(QObject *parent)
     , m_statusOverride(QStringLiteral("Controller input not started"))
 {
     connect(m_navigator, &GamepadNavigator::actionTriggered, this, [this](NavAction action) {
-        const bool directional = action == NavAction::Up || action == NavAction::Down
-                                 || action == NavAction::Left || action == NavAction::Right;
+        const bool directional = action == NavAction::Up || action == NavAction::Down || action == NavAction::Left
+            || action == NavAction::Right;
         if (m_capturing && !directional)
             return; // reported through buttonCaptured() instead
         injectAction(action);
@@ -100,8 +100,7 @@ bool InputController::startBackend(std::unique_ptr<InputBackend> backend)
     }
     m_backend = backend.release();
     m_backend->setParent(this);
-    qCInfo(lcInput).noquote() << "Controller input backend:" << m_backend->name() << '-'
-                              << m_backend->statusText();
+    qCInfo(lcInput).noquote() << "Controller input backend:" << m_backend->name() << '-' << m_backend->statusText();
     emit statusChanged();
     return true;
 }
@@ -197,7 +196,7 @@ void InputController::deliver(NavAction action)
     }
     const int key = keyForAction(action);
     const QString text = action == NavAction::Accept ? QStringLiteral("\r")
-                       : action == NavAction::Back   ? QStringLiteral("\x1b")
+        : action == NavAction::Back                  ? QStringLiteral("\x1b")
                                                      : QString();
     // Posted (not sent) so delivery never re-enters the caller, e.g. a backend read loop.
     QCoreApplication::postEvent(target, new QKeyEvent(QEvent::KeyPress, key, Qt::NoModifier, text));

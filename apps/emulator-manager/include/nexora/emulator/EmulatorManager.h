@@ -21,10 +21,10 @@ struct ProcessOutcome
 {
     ProcessState finalState = ProcessState::Idle; // Exited or Failed
     EmulatorError error = EmulatorError::None;
-    std::optional<int> exitCode;  // set for normal (non-crash) exits
+    std::optional<int> exitCode; // set for normal (non-crash) exits
     bool stoppedByRequest = false; // stop() was called
-    bool killed = false;           // graceful stop timed out and SIGKILL was sent
-    QString message;               // user-facing summary
+    bool killed = false; // graceful stop timed out and SIGKILL was sent
+    QString message; // user-facing summary
 };
 
 // What to start: an emulator, optionally one of its launch profiles and a game file.
@@ -37,8 +37,8 @@ struct ProcessOutcome
 struct LaunchRequest
 {
     shared::EmulatorConfig emulator;
-    QString profileId;   // empty = emulator defaults
-    QString gamePath;    // empty = start the emulator without a game
+    QString profileId; // empty = emulator defaults
+    QString gamePath; // empty = start the emulator without a game
     QString displayName; // empty = emulator name
 };
 
@@ -79,8 +79,7 @@ public:
 
     // Validates |request| and computes the exact program, arguments and working directory.
     // Performs filesystem checks but starts nothing.
-    static std::optional<ResolvedLaunch> resolve(const LaunchRequest &request, EmulatorError *error,
-                                                 QString *detail);
+    static std::optional<ResolvedLaunch> resolve(const LaunchRequest &request, EmulatorError *error, QString *detail);
 
     // Requests a graceful stop (SIGTERM), escalating to SIGKILL after stopTimeout().
     // Returns false if no process is active.
@@ -108,8 +107,7 @@ public:
 
 signals:
     void stateChanged(nexora::emulator::ProcessState state, const QString &emulatorId);
-    void outputReceived(const QString &emulatorId, nexora::emulator::OutputChannel channel,
-                        const QString &text);
+    void outputReceived(const QString &emulatorId, nexora::emulator::OutputChannel channel, const QString &text);
     void processFinished(const QString &emulatorId, const nexora::emulator::ProcessOutcome &outcome);
 
 private:

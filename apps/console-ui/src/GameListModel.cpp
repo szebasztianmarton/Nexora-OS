@@ -6,8 +6,7 @@ namespace nexora::ui {
 
 GameListModel::GameListModel(QObject *parent)
     : QAbstractListModel(parent)
-{
-}
+{ }
 
 int GameListModel::rowCount(const QModelIndex &parent) const
 {
@@ -45,18 +44,23 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> GameListModel::roleNames() const
 {
-    return {{GameIdRole, "gameId"},           {TitleRole, "title"},
-            {PathRole, "path"},               {EmulatorIdRole, "emulatorId"},
-            {EmulatorNameRole, "emulatorName"}, {FavoriteRole, "favorite"},
-            {PlayCountRole, "playCount"},     {LastPlayedRole, "lastPlayed"},
-            {AvailableRole, "available"},     {UnavailableReasonRole, "unavailableReason"}};
+    return {{GameIdRole, "gameId"},
+            {TitleRole, "title"},
+            {PathRole, "path"},
+            {EmulatorIdRole, "emulatorId"},
+            {EmulatorNameRole, "emulatorName"},
+            {FavoriteRole, "favorite"},
+            {PlayCountRole, "playCount"},
+            {LastPlayedRole, "lastPlayed"},
+            {AvailableRole, "available"},
+            {UnavailableReasonRole, "unavailableReason"}};
 }
 
 void GameListModel::setEntries(const QList<library::GameEntry> &entries)
 {
     const bool sameRows = entries.size() == m_entries.size()
-                          && std::equal(entries.cbegin(), entries.cend(), m_entries.cbegin(),
-                                        [](const auto &a, const auto &b) { return a.id == b.id; });
+        && std::equal(entries.cbegin(), entries.cend(), m_entries.cbegin(),
+                      [](const auto &a, const auto &b) { return a.id == b.id; });
     if (sameRows) {
         m_entries = entries;
         if (!m_entries.isEmpty())

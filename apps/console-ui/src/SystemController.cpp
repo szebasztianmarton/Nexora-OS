@@ -33,7 +33,8 @@ void SystemController::refresh()
         lines.append(QStringLiteral("OS: %1 (kernel %2)").arg(s.osName, s.kernel));
     lines.append(QStringLiteral("Host: %1").arg(s.hostname));
     if (s.uptimeSeconds >= 0)
-        lines.append(QStringLiteral("Uptime: %1 h %2 min").arg(s.uptimeSeconds / 3600).arg((s.uptimeSeconds / 60) % 60));
+        lines.append(
+            QStringLiteral("Uptime: %1 h %2 min").arg(s.uptimeSeconds / 3600).arg((s.uptimeSeconds / 60) % 60));
     if (s.load1 >= 0)
         lines.append(QStringLiteral("Load (1 min): %1").arg(s.load1, 0, 'f', 2));
     if (s.memoryTotalKiB > 0)

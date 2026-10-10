@@ -34,7 +34,7 @@ public:
     // action's old button so that every action stays reachable.
     void bind(NavAction action, GamepadButton button);
 
-    static QStringList actionNames();  // remappable actions, in display order
+    static QStringList actionNames(); // remappable actions, in display order
     static QStringList buttonNames();
     static std::optional<NavAction> actionFromName(const QString &name);
     static QString actionName(NavAction action);

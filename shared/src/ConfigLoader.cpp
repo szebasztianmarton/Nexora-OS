@@ -20,11 +20,10 @@ namespace {
 
 const QStringList &knownKeys()
 {
-    static const QStringList keys{QStringLiteral("id"), QStringLiteral("name"),
-                                  QStringLiteral("executable"), QStringLiteral("arguments"),
-                                  QStringLiteral("enabled"), QStringLiteral("workingDirectory"),
-                                  QStringLiteral("extensions"), QStringLiteral("stopTimeoutMs"),
-                                  QStringLiteral("profiles")};
+    static const QStringList keys{
+        QStringLiteral("id"),         QStringLiteral("name"),          QStringLiteral("executable"),
+        QStringLiteral("arguments"),  QStringLiteral("enabled"),       QStringLiteral("workingDirectory"),
+        QStringLiteral("extensions"), QStringLiteral("stopTimeoutMs"), QStringLiteral("profiles")};
     return keys;
 }
 
@@ -52,9 +51,8 @@ QString ConfigIssue::toDisplayString() const
 
 bool ConfigLoadResult::hasErrors() const
 {
-    return std::any_of(issues.cbegin(), issues.cend(), [](const ConfigIssue &issue) {
-        return issue.severity == ConfigIssue::Severity::Error;
-    });
+    return std::any_of(issues.cbegin(), issues.cend(),
+                       [](const ConfigIssue &issue) { return issue.severity == ConfigIssue::Severity::Error; });
 }
 
 bool ConfigLoader::isValidId(const QString &id)
@@ -63,10 +61,8 @@ bool ConfigLoader::isValidId(const QString &id)
     return pattern.match(id).hasMatch();
 }
 
-std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json,
-                                                  const QString &sourceFile,
-                                                  QStringList *errors,
-                                                  QStringList *warnings)
+std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json, const QString &sourceFile,
+                                                  QStringList *errors, QStringList *warnings)
 {
     QStringList localErrors;
     auto fail = [&](const QString &message) { localErrors.append(message); };
@@ -74,9 +70,7 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json,
     QJsonParseError parseError{};
     const QJsonDocument doc = QJsonDocument::fromJson(json, &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        fail(QStringLiteral("invalid JSON at offset %1: %2")
-                 .arg(parseError.offset)
-                 .arg(parseError.errorString()));
+        fail(QStringLiteral("invalid JSON at offset %1: %2").arg(parseError.offset).arg(parseError.errorString()));
     } else if (!doc.isObject()) {
         fail(QStringLiteral("top-level JSON value must be an object"));
     }
@@ -108,8 +102,7 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json,
     else
         config.name = name.toString().trimmed();
 
-    const QString baseDir = sourceFile.isEmpty() ? QDir::currentPath()
-                                                 : QFileInfo(sourceFile).absolutePath();
+    const QString baseDir = sourceFile.isEmpty() ? QDir::currentPath() : QFileInfo(sourceFile).absolutePath();
     // Relative paths are resolved against the config file's directory; never via PATH.
     auto resolvePath = [&](const QString &raw) {
         return QDir::cleanPath(QDir::isRelativePath(raw) ? QDir(baseDir).filePath(raw) : raw);
@@ -160,8 +153,7 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json,
     }
 
     if (obj.contains(QStringLiteral("arguments")))
-        parseStringArray(obj.value(QStringLiteral("arguments")), QStringLiteral("\"arguments\""),
-                         &config.arguments);
+        parseStringArray(obj.value(QStringLiteral("arguments")), QStringLiteral("\"arguments\""), &config.arguments);
     parseOptionalBool(obj, QStringLiteral("\"enabled\""), &config.enabled);
     parseOptionalPath(obj, QStringLiteral("\"workingDirectory\""), &config.workingDirectory);
 
@@ -194,9 +186,12 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json,
         if (!profiles.isArray()) {
             fail(QStringLiteral("\"profiles\" must be an array of objects (got %1)").arg(jsonTypeName(profiles)));
         } else {
-            static const QStringList profileKeys{QStringLiteral("id"), QStringLiteral("name"),
-                                                 QStringLiteral("emulator"), QStringLiteral("arguments"),
-                                                 QStringLiteral("workingDirectory"), QStringLiteral("enabled")};
+            static const QStringList profileKeys{QStringLiteral("id"),
+                                                 QStringLiteral("name"),
+                                                 QStringLiteral("emulator"),
+                                                 QStringLiteral("arguments"),
+                                                 QStringLiteral("workingDirectory"),
+                                                 QStringLiteral("enabled")};
             const QJsonArray array = profiles.toArray();
             if (array.size() > MaxProfiles)
                 fail(QStringLiteral("\"profiles\" must not contain more than %1 entries").arg(MaxProfiles));
@@ -261,15 +256,13 @@ ConfigLoadResult ConfigLoader::loadDirectory(const QString &directory)
     const QDir dir(directory);
     if (directory.isEmpty() || !dir.exists()) {
         result.issues.append({ConfigIssue::Severity::Error, directory,
-                              QStringLiteral("configuration directory \"%1\" does not exist")
-                                  .arg(directory)});
+                              QStringLiteral("configuration directory \"%1\" does not exist").arg(directory)});
         return result;
     }
     result.directoryFound = true;
 
     // Only regular *.json files directly inside the directory; hidden files skipped.
-    const QFileInfoList files = dir.entryInfoList({QStringLiteral("*.json")},
-                                                  QDir::Files, QDir::Name);
+    const QFileInfoList files = dir.entryInfoList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
     QHash<QString, QString> seenIds; // id -> file that defined it
 
     for (const QFileInfo &info : files) {
@@ -283,14 +276,12 @@ ConfigLoadResult ConfigLoader::loadDirectory(const QString &directory)
         };
 
         if (info.size() > MaxFileSize) {
-            addIssue(ConfigIssue::Severity::Error,
-                     QStringLiteral("file is larger than %1 bytes").arg(MaxFileSize));
+            addIssue(ConfigIssue::Severity::Error, QStringLiteral("file is larger than %1 bytes").arg(MaxFileSize));
             continue;
         }
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly)) {
-            addIssue(ConfigIssue::Severity::Error,
-                     QStringLiteral("cannot read file: %1").arg(file.errorString()));
+            addIssue(ConfigIssue::Severity::Error, QStringLiteral("cannot read file: %1").arg(file.errorString()));
             continue;
         }
 
@@ -314,8 +305,8 @@ ConfigLoadResult ConfigLoader::loadDirectory(const QString &directory)
         result.emulators.append(*config);
     }
 
-    qCInfo(lcConfig) << "Loaded" << result.emulators.size() << "emulator definition(s) from"
-                     << directory << "with" << result.issues.size() << "issue(s)";
+    qCInfo(lcConfig) << "Loaded" << result.emulators.size() << "emulator definition(s) from" << directory << "with"
+                     << result.issues.size() << "issue(s)";
     return result;
 }
 

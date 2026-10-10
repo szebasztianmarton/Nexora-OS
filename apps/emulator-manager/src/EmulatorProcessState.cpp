@@ -8,22 +8,17 @@ bool isValidTransition(ProcessState from, ProcessState to)
     switch (from) {
     case S::Idle:
     case S::Exited:
-    case S::Failed:
-        return to == S::Starting || to == S::Failed;
-    case S::Starting:
-        return to == S::Running || to == S::Stopping || to == S::Failed;
-    case S::Running:
-        return to == S::Stopping || to == S::Exited || to == S::Failed;
-    case S::Stopping:
-        return to == S::Exited;
+    case S::Failed: return to == S::Starting || to == S::Failed;
+    case S::Starting: return to == S::Running || to == S::Stopping || to == S::Failed;
+    case S::Running: return to == S::Stopping || to == S::Exited || to == S::Failed;
+    case S::Stopping: return to == S::Exited;
     }
     return false;
 }
 
 bool isActive(ProcessState state)
 {
-    return state == ProcessState::Starting || state == ProcessState::Running
-           || state == ProcessState::Stopping;
+    return state == ProcessState::Starting || state == ProcessState::Running || state == ProcessState::Stopping;
 }
 
 QString nameOf(ProcessState state)
@@ -62,9 +57,8 @@ QString nameOf(EmulatorError error)
 
 QString describe(EmulatorError error, const QString &detail)
 {
-    auto withDetail = [&](const QString &text) {
-        return detail.isEmpty() ? text : text + QStringLiteral(": ") + detail;
-    };
+    auto withDetail
+        = [&](const QString &text) { return detail.isEmpty() ? text : text + QStringLiteral(": ") + detail; };
     switch (error) {
     case EmulatorError::None: return QStringLiteral("No error");
     case EmulatorError::InvalidConfig: return withDetail(QStringLiteral("Invalid emulator configuration"));
@@ -78,8 +72,7 @@ QString describe(EmulatorError error, const QString &detail)
     case EmulatorError::Crashed: return withDetail(QStringLiteral("Emulator crashed"));
     case EmulatorError::ProfileNotFound: return withDetail(QStringLiteral("Launch profile not found"));
     case EmulatorError::ProfileDisabled: return withDetail(QStringLiteral("Launch profile is disabled"));
-    case EmulatorError::InvalidWorkingDirectory:
-        return withDetail(QStringLiteral("Working directory does not exist"));
+    case EmulatorError::InvalidWorkingDirectory: return withDetail(QStringLiteral("Working directory does not exist"));
     case EmulatorError::GameFileMissing: return withDetail(QStringLiteral("Game file is missing or unreadable"));
     }
     return withDetail(QStringLiteral("Unknown error"));

@@ -30,13 +30,12 @@ public:
     {
         AppController::Options app;
         shared::Settings::Paths settings;
-        QString databasePath;               // ":memory:" allowed
-        QString platformOverride;           // "", "desktop" or "embedded"
+        QString databasePath; // ":memory:" allowed
+        QString platformOverride; // "", "desktop" or "embedded"
         system::SystemEnvironment environment;
     };
 
-    explicit UiContext(const Options &options, input::InputController *input = nullptr,
-                       QObject *parent = nullptr);
+    explicit UiContext(const Options &options, input::InputController *input = nullptr, QObject *parent = nullptr);
     ~UiContext() override;
 
     shared::Settings &settingsStore() { return m_settings; }

@@ -107,8 +107,8 @@ private slots:
         QTemporaryDir dir;
         Settings s({{}, dir.filePath(QStringLiteral("s.json"))});
         s.load();
-        QVERIFY(s.setValue(Settings::LibraryExtensions, QStringList{QStringLiteral("SFC"), QStringLiteral(".sfc"),
-                                                                   QStringLiteral(" .Nes ")}));
+        QVERIFY(s.setValue(Settings::LibraryExtensions,
+                           QStringList{QStringLiteral("SFC"), QStringLiteral(".sfc"), QStringLiteral(" .Nes ")}));
         QCOMPARE(s.stringListValue(Settings::LibraryExtensions),
                  QStringList({QStringLiteral(".sfc"), QStringLiteral(".nes")}));
         QVERIFY(s.setValue(Settings::AudioVolume, 40.0)); // JSON numbers arrive as double

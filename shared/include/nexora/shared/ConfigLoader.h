@@ -59,9 +59,7 @@ public:
 
     // Parses and validates a single definition. Returns std::nullopt on error and
     // appends human-readable messages to |errors|; non-fatal notes go to |warnings|.
-    static std::optional<EmulatorConfig> parse(const QByteArray &json,
-                                               const QString &sourceFile,
-                                               QStringList *errors,
+    static std::optional<EmulatorConfig> parse(const QByteArray &json, const QString &sourceFile, QStringList *errors,
                                                QStringList *warnings = nullptr);
 
     static bool isValidId(const QString &id);
