@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -172,8 +173,35 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     db.transaction();
 
-    QSqlQuery find(db);
-    find.prepare(QStringLiteral("SELECT id, present, title, size, emulator_candidates FROM games WHERE path = ?"));
+    // One pass over the existing rows instead of a SELECT per scanned file.
+    struct Existing
+    {
+        qint64 id;
+        bool present;
+        QString title;
+        qint64 size;
+        QString candidates;
+        QString root;
+        QVariant modified;
+    };
+    QHash<QString, Existing> existing;
+    {
+        QSqlQuery all(db);
+        all.setForwardOnly(true);
+        if (!all.exec(QStringLiteral(
+                "SELECT id, path, present, title, size, emulator_candidates, root, modified FROM games"))) {
+            m_lastError = all.lastError().text();
+            db.rollback();
+            return std::nullopt;
+        }
+        while (all.next()) {
+            existing.insert(all.value(1).toString(),
+                            {all.value(0).toLongLong(), all.value(2).toBool(), all.value(3).toString(),
+                             all.value(4).toLongLong(), all.value(5).toString(), all.value(6).toString(),
+                             all.value(7)});
+        }
+    }
+
     QSqlQuery insert(db);
     insert.prepare(QStringLiteral("INSERT INTO games (path, title, extension, root, size, modified, "
                                   "emulator_candidates, present, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)"));
@@ -185,31 +213,26 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
     for (const ScannedFile &f : result.files) {
         found.insert(f.path);
         const QVariant modified = f.modified.isValid() ? QVariant(f.modified.toSecsSinceEpoch()) : QVariant();
-        find.addBindValue(f.path);
-        if (!find.exec()) {
-            m_lastError = find.lastError().text();
-            db.rollback();
-            return std::nullopt;
-        }
-        if (find.next()) {
-            const qint64 id = find.value(0).toLongLong();
-            const bool changed = !find.value(1).toBool() || find.value(2).toString() != f.title
-                || find.value(3).toLongLong() != f.size || find.value(4).toString() != joinList(f.emulatorIds);
-            find.finish();
+        const QString candidates = joinList(f.emulatorIds);
+        const auto it = existing.constFind(f.path);
+        if (it != existing.cend()) {
+            const bool changed = !it->present || it->title != f.title || it->size != f.size
+                || it->candidates != candidates || it->root != f.root
+                || it->modified.toLongLong() != modified.toLongLong();
+            if (!changed)
+                continue; // nothing to write; keeps rescans of large libraries cheap
             for (const QVariant &v : {QVariant(f.title), QVariant(f.extension), QVariant(f.root), QVariant(f.size),
-                                      modified, QVariant(joinList(f.emulatorIds)), QVariant(id)})
+                                      modified, QVariant(candidates), QVariant(it->id)})
                 update.addBindValue(v);
             if (!update.exec()) {
                 m_lastError = update.lastError().text();
                 db.rollback();
                 return std::nullopt;
             }
-            if (changed)
-                ++stats.updated;
+            ++stats.updated;
         } else {
-            find.finish();
             for (const QVariant &v : {QVariant(f.path), QVariant(f.title), QVariant(f.extension), QVariant(f.root),
-                                      QVariant(f.size), modified, QVariant(joinList(f.emulatorIds)), QVariant(now)})
+                                      QVariant(f.size), modified, QVariant(candidates), QVariant(now)})
                 insert.addBindValue(v);
             if (!insert.exec()) {
                 m_lastError = insert.lastError().text();
