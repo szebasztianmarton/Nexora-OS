@@ -152,7 +152,7 @@ CI runs this for `config/emulators` and `config/examples/emulators` with `config
 | Default path | `$XDG_DATA_HOME/nexora/library.sqlite` (Qt `QStandardPaths::GenericDataLocation`; normally `~/.local/share/nexora/library.sqlite`; on the image expected at `/home/nexora/.local/share/nexora/library.sqlite`, not checked on a booted image) |
 | Override | `--library-db <file>` (relative paths are made absolute) |
 | Format | SQLite (Qt `QSQLITE` driver), WAL journal mode, so `library.sqlite-wal` and `library.sqlite-shm` may exist next to it |
-| Unusable file | Renamed to `library.sqlite.corrupt-<yyyyMMdd-HHmmss>` (its `-wal`/`-shm` files are removed) and a new, empty database is created; favorites and play history then start empty. A database created by a newer schema version is handled the same way. |
+| Unusable file | A file that is not a usable SQLite database is renamed to `library.sqlite.corrupt-<yyyyMMdd-HHmmss>` (its `-wal` file is moved with it, `-shm` is removed) and a new, empty database is created; favorites and play history then start empty. A database written by a **newer** schema version, or one that is busy/locked, is left untouched: the library is disabled for that run and the error is shown in Diagnostics. |
 | Database cannot be opened at all | The library is disabled for the session (logged as critical); emulators can still be started. |
 
 Schema and rescan behaviour: [game-library.md](game-library.md#database).

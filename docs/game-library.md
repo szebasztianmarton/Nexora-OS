@@ -167,7 +167,7 @@ The order comes from `library.sortOrder`. Choosing a sort order on the Games tab
    - The game path is only ever passed as an argument. The emulator executable is started directly with an argument list; no shell is involved, so spaces and quotes in file names need no escaping.
    - Working directory: profile `workingDirectory`, else emulator `workingDirectory`, else the executable's directory.
    - Stop timeout before SIGKILL: the emulator's `stopTimeoutMs` (500–60000) or 5000 ms.
-4. If the launch was accepted, the play count is incremented and `last_played` set. This happens when the process is being started, so a launch that later crashes still counts.
+4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does.
 
 Starting an emulator **without** a game (from the emulator list) drops every argument that contains `{file}`.
 
