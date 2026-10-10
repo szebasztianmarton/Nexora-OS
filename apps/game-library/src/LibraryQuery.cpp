@@ -1,6 +1,7 @@
 #include "nexora/library/LibraryQuery.h"
 
 #include <QFileInfo>
+#include <QRegularExpression>
 
 #include <algorithm>
 
@@ -8,7 +9,8 @@ namespace nexora::library {
 
 bool LibraryQuery::matchesSearch(const GameEntry &entry, const QString &search)
 {
-    const QStringList terms = search.split(u' ', Qt::SkipEmptyParts);
+    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
+    const QStringList terms = search.split(whitespace, Qt::SkipEmptyParts);
     if (terms.isEmpty())
         return true;
     const QString fileName = QFileInfo(entry.path).fileName();

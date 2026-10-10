@@ -56,6 +56,8 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
             if (key == Settings::LibraryDirectories)
                 emit directoriesChanged();
             updateScanOptions();
+        } else if (key == Settings::LibrarySortOrder) {
+            setSortOrder(m_settings->stringValue(Settings::LibrarySortOrder));
         }
     });
     rebuildViews();
@@ -96,6 +98,9 @@ void LibraryController::setSortOrder(const QString &order)
     if (s == m_query.sort)
         return;
     m_query.sort = s;
+    // The library screen's choice becomes the remembered default.
+    m_settings->setValue(Settings::LibrarySortOrder, library::LibraryQuery::toString(s));
+    m_settings->save();
     emit queryChanged();
     rebuildViews();
 }
@@ -128,7 +133,7 @@ QString LibraryController::lastScanSummary() const
         .arg(scan.truncated ? QStringLiteral("; scan limit reached") : QString());
 }
 
-void LibraryController::updateScanOptions(bool force)
+void LibraryController::updateScanOptions(bool force, bool autoScan)
 {
     library::ScanOptions options;
     options.roots = directories();
@@ -146,7 +151,7 @@ void LibraryController::updateScanOptions(bool force)
     m_library->setScanOptions(options);
     if (!m_library->isOpen())
         return;
-    if (force || m_library->needsRescan())
+    if (autoScan && (force || m_library->needsRescan()))
         m_library->refresh();
 }
 
@@ -156,7 +161,7 @@ bool LibraryController::refresh()
         emit notice(QStringLiteral("The game library is unavailable: %1").arg(m_library->lastError()), true);
         return false;
     }
-    updateScanOptions();
+    updateScanOptions(/*force=*/false, /*autoScan=*/false);
     const bool started = m_library->refresh();
     emit notice(started ? QStringLiteral("Scanning library…")
                         : QStringLiteral("A scan is already running; queued another"),

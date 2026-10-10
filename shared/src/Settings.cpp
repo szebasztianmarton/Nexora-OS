@@ -263,7 +263,7 @@ std::optional<QVariantMap> Settings::readLayer(const QString &file, Layer layer)
     return result;
 }
 
-bool Settings::load()
+bool Settings::load(LoadMode mode)
 {
     m_issues.clear();
     m_system.clear();
@@ -279,6 +279,10 @@ bool Settings::load()
             m_user = *layer;
         } else {
             ok = false;
+            if (mode == LoadMode::Inspect) {
+                emit reloaded();
+                return ok;
+            }
             // Keep the broken file for inspection and start from defaults.
             const QString aside = m_paths.userFile + QStringLiteral(".corrupt-")
                 + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));

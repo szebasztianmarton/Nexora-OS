@@ -185,6 +185,18 @@ private slots:
         QCOMPARE(again.intValue(Settings::AudioVolume), 30);
     }
 
+    void inspectModeNeverRenames()
+    {
+        QTemporaryDir dir;
+        const QString user = dir.filePath(QStringLiteral("settings.json"));
+        write(user, "{broken");
+        Settings s({{}, user});
+        QVERIFY(!s.load(Settings::LoadMode::Inspect));
+        QVERIFY(!s.issues().isEmpty());
+        QVERIFY(QFile::exists(user));
+        QCOMPARE(QDir(dir.path()).entryList({QStringLiteral("settings.json.corrupt-*")}).size(), 0);
+    }
+
     void resetKeepsBackup()
     {
         QTemporaryDir dir;

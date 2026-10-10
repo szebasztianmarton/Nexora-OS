@@ -104,7 +104,12 @@ private:
                     continue;
                 }
                 const QString target = entry.canonicalFilePath();
-                if (target.isEmpty() || !isInside(target, root)) {
+                if (target.isEmpty()) {
+                    ++m_result.skippedSymlinks;
+                    issue(path, QStringLiteral("broken symbolic link; skipped"));
+                    continue;
+                }
+                if (!isInside(target, root)) {
                     ++m_result.skippedSymlinks;
                     issue(path, QStringLiteral("symbolic link points outside the library directory; skipped"));
                     continue;

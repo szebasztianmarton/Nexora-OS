@@ -1,5 +1,6 @@
 #include "UiBootstrap.h"
 #include "UiContext.h"
+#include "input/ButtonMapping.h"
 #include "input/InputController.h"
 
 #include "nexora/shared/ConfigLoader.h"
@@ -55,7 +56,14 @@ int checkConfiguration(const QString &configDir, const nexora::shared::Settings:
         std::printf("  %s: %s\n", isError ? "error" : "warning", qPrintable(issue.toDisplayString()));
     }
     Settings settings(settingsPaths);
-    settings.load();
+    settings.load(Settings::LoadMode::Inspect);
+    QStringList mappingErrors;
+    if (!nexora::input::ButtonMapping::fromVariantMap(settings.mapValue(Settings::InputMapping), &mappingErrors)) {
+        for (const QString &e : std::as_const(mappingErrors)) {
+            ++errors;
+            std::printf("  error: input.mapping: %s\n", qPrintable(e));
+        }
+    }
     std::printf("Settings (user file %s): %lld issue(s)\n", qPrintable(settingsPaths.userFile),
                 static_cast<long long>(settings.issues().size()));
     for (const QString &issue : settings.issues()) {

@@ -61,8 +61,12 @@ public:
 
     explicit Settings(Paths paths, QObject *parent = nullptr);
 
+    enum class LoadMode {
+        Normal, // an unusable user file is moved aside so the next save starts clean
+        Inspect, // read-only: never renames or writes anything (used by --check-config)
+    };
     // (Re)reads all layers. Returns false only if the user file existed but was unusable.
-    bool load();
+    bool load(LoadMode mode = LoadMode::Normal);
     // Atomically writes the user overrides. Creates the parent directory if needed.
     bool save();
     // Drops all user overrides; the previous user file is kept as <file>.bak.

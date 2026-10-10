@@ -100,17 +100,23 @@ private slots:
         QVERIFY(QFile::link(outside.filePath(QStringLiteral("secret.sfc")),
                             dir.filePath(QStringLiteral("lib/secret.sfc"))));
         QVERIFY(QFile::link(dir.filePath(QStringLiteral("lib")), dir.filePath(QStringLiteral("lib/sub/loop"))));
+        QVERIFY(
+            QFile::link(dir.filePath(QStringLiteral("nowhere.sfc")), dir.filePath(QStringLiteral("lib/broken.sfc"))));
         auto o = options({dir.filePath(QStringLiteral("lib"))});
         o.followSymlinks = true;
         const auto r = LibraryScanner::scan(o);
         // inner.sfc found once (via sub/ and sublink/ it is the same file), escapes refused,
         // the loop back to lib/ terminates.
         QCOMPARE(names(r), QStringList{QStringLiteral("inner.sfc")});
-        QCOMPARE(r.skippedSymlinks, 2);
+        QCOMPARE(r.skippedSymlinks, 3);
         bool sawOutsideIssue = false;
-        for (const auto &i : r.issues)
+        bool sawBrokenIssue = false;
+        for (const auto &i : r.issues) {
             sawOutsideIssue |= i.message.contains(QStringLiteral("outside the library"));
+            sawBrokenIssue |= i.message.contains(QStringLiteral("broken symbolic link"));
+        }
         QVERIFY(sawOutsideIssue);
+        QVERIFY(sawBrokenIssue);
     }
 
     void detectsDuplicates()

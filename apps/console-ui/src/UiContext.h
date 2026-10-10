@@ -48,7 +48,8 @@ public:
 
     // Startup: load settings, open the library, apply preferences, scan if needed.
     void start();
-    // Shutdown: stop the emulator, finish/cancel scanning, flush settings.
+    // Shutdown: stop the emulator and wait for a running scan. Settings need no flush: every
+    // change is saved when it is made.
     void shutdown();
 
 private:

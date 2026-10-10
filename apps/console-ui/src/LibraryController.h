@@ -70,7 +70,8 @@ public:
 
     // Recomputes scan options from emulator definitions + settings; rescans only when
     // they changed since the last completed scan (or |force|).
-    void updateScanOptions(bool force = false);
+    // |autoScan| = false only updates the options (the caller scans itself).
+    void updateScanOptions(bool force = false, bool autoScan = true);
 
 signals:
     void queryChanged();

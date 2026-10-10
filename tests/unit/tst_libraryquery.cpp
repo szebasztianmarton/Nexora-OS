@@ -107,6 +107,8 @@ private slots:
         QueryOptions o;
         o.search = QStringLiteral("  MARIO  kart ");
         QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList{QStringLiteral("mario kart")});
+        o.search = QStringLiteral("mario\tkart");
+        QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList{QStringLiteral("mario kart")});
         o.search = QStringLiteral("mario zelda");
         QVERIFY(LibraryQuery::apply(sample(), o).isEmpty());
         o.search = QStringLiteral("roid");
