@@ -83,6 +83,7 @@ signals:
 
 private:
     void rebuildViews();
+    void rebuildEmulatorInfo();
 
     library::GameLibrary *m_library;
     shared::Settings *m_settings;
@@ -92,6 +93,8 @@ private:
     GameListModel m_recent;
     GameListModel m_favorites;
     QTimer m_searchDebounce;
+    QHash<QString, std::pair<QString, QString>> m_emulatorInfo; // id -> (name, unavailable reason)
+    qint64 m_pendingLaunch = 0; // recorded as played once its process is running
 };
 
 } // namespace nexora::ui

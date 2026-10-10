@@ -33,7 +33,9 @@ public:
     GameDatabase &operator=(const GameDatabase &) = delete;
 
     // Opens (creating if needed) |path|. A file that is not a usable database is moved to
-    // <path>.corrupt-<timestamp> and a new one is created. ":memory:" is accepted.
+    // <path>.corrupt-<timestamp> (with its -wal file) and a new one is created. A database
+    // from a newer schema or a busy/locked one is left untouched and open() fails.
+    // ":memory:" is accepted.
     bool open(const QString &path);
     void close();
     bool isOpen() const;
@@ -60,6 +62,7 @@ private:
     bool migrate();
 
     QString m_connection;
+    bool m_recoverable = true; // false: failure must not be treated as corruption
     QString m_lastError;
     QStringList m_issues;
 };

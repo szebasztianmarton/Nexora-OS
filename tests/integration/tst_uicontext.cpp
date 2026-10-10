@@ -161,12 +161,22 @@ private slots:
         QVERIFY(ctx.settings()->beginRemap(QStringLiteral("favorite")));
         QCOMPARE(ctx.settings()->capturingAction(), QStringLiteral("favorite"));
         QVERIFY(input.isCapturing());
+        QSignalSpy delivered(&input, &input::InputController::actionDelivered);
         input.navigator()->buttonEvent(input::GamepadButton::L1, true);
-        QVERIFY(ctx.settings()->capturingAction().isEmpty());
+        QTRY_VERIFY(ctx.settings()->capturingAction().isEmpty());
         QVERIFY(!input.isCapturing());
         QCOMPARE(input.mapping().buttonFor(input::NavAction::Favorite), std::optional(input::GamepadButton::L1));
         QCOMPARE(input.mapping().buttonFor(input::NavAction::PrevTab), std::optional(input::GamepadButton::North));
         QVERIFY(!ctx.settings()->beginRemap(QStringLiteral("fly")));
+        QCOMPARE(delivered.size(), 0); // L1 (old prevTab, new favorite) was not also acted on
+
+        // Remapping Confirm: the completing press must not act as Confirm right away.
+        QVERIFY(ctx.settings()->beginRemap(QStringLiteral("accept")));
+        input.navigator()->buttonEvent(input::GamepadButton::West, true);
+        QTRY_VERIFY(ctx.settings()->capturingAction().isEmpty());
+        QCoreApplication::processEvents();
+        QCOMPARE(delivered.size(), 0);
+        QCOMPARE(input.mapping().buttonFor(input::NavAction::Accept), std::optional(input::GamepadButton::West));
     }
 
     void launchGameFromLibrary()
@@ -203,6 +213,25 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(games->rowCount(), 1, Timeout);
         ctx.library()->setFilter(QStringLiteral("all"));
         QTRY_COMPARE_WITH_TIMEOUT(games->rowCount(), 2, Timeout);
+    }
+
+    void failedStartIsNotPlayed()
+    {
+        // Executable bit set but not a program: passes validation, then fails to start.
+        const QString broken = m_dir.filePath(QStringLiteral("broken-emulator"));
+        write(broken, QByteArray(64, '\x01'));
+        QFile::setPermissions(broken, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        write(configDir() + QStringLiteral("/fake.json"),
+              "{\"id\":\"fake\",\"name\":\"Fake\",\"executable\":\"" + broken.toUtf8()
+                  + "\",\"extensions\":[\".rom\"]}");
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        QVERIFY(ctx.library()->launch(ctx.library()->games()->gameIdAt(0)));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("failed"), Timeout);
+        QCOMPARE(ctx.library()->recentGames()->rowCount(), 0);
+        QCOMPARE(ctx.gameLibrary().entries().first().playCount, 0);
     }
 
     void missingGameFileAndRecovery()

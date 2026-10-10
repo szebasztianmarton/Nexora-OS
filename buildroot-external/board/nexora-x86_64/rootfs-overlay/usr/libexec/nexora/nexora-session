@@ -102,7 +102,7 @@ while [ "${stopping}" -eq 0 ]; do
 	setsid /bin/sh -c 'tty="$1"; app="$2"; shift 2; exec start-stop-daemon \
 		--start --chuid "$0" --exec "$app" -- "$@" < "$tty"' \
 		"${APP_USER}" "${NEXORA_TTY}" "${APP}" \
-		--fullscreen --log-file "${LOG_FILE}" ${NEXORA_CONSOLE_UI_ARGS} \
+		--log-file "${LOG_FILE}" ${NEXORA_CONSOLE_UI_ARGS} \
 		>> "${STDERR_LOG}" 2>&1 &
 	child=$!
 	wait "${child}"

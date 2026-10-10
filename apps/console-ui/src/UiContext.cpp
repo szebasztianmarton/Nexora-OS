@@ -46,6 +46,7 @@ void UiContext::shutdown()
 {
     if (m_app)
         m_app->manager()->shutdown();
+    m_library.cancelScan(); // do not walk a large/slow library while quitting
     m_library.waitForScan();
 }
 

@@ -98,11 +98,20 @@ void GameLibrary::waitForScan()
     }
 }
 
+void GameLibrary::cancelScan()
+{
+    m_rerunQueued = false;
+    if (m_cancel)
+        m_cancel->store(true);
+}
+
 void GameLibrary::onScanDone(const ScanResult &result)
 {
     m_lastScan = result;
+    bool stored = false;
     if (!result.cancelled) {
         if (const auto stats = m_db.applyScan(result, m_options.roots)) {
+            stored = true;
             m_lastStats = *stats;
             m_db.setMeta(QStringLiteral("scan-signature"), optionsSignature());
             m_db.setMeta(QStringLiteral("last-scan"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
@@ -110,7 +119,10 @@ void GameLibrary::onScanDone(const ScanResult &result)
         reloadEntries();
     }
     emit scanningChanged(false);
-    emit scanFinished(m_lastStats, int(result.issues.size()));
+    if (stored)
+        emit scanFinished(m_lastStats, int(result.issues.size()));
+    else if (!result.cancelled)
+        emit scanFailed(m_db.lastError());
     if (m_rerunQueued) {
         m_rerunQueued = false;
         refresh();
@@ -128,19 +140,36 @@ std::optional<GameEntry> GameLibrary::entry(qint64 id) const
     return m_db.entry(id);
 }
 
+template<typename F> void GameLibrary::updateCached(qint64 id, F update)
+{
+    for (GameEntry &e : m_entries) {
+        if (e.id == id) {
+            update(e);
+            break;
+        }
+    }
+    emit entriesChanged();
+}
+
 bool GameLibrary::setFavorite(qint64 id, bool favorite)
 {
     if (!m_db.setFavorite(id, favorite))
         return false;
-    reloadEntries();
+    updateCached(id, [favorite](GameEntry &e) { e.favorite = favorite; });
     return true;
 }
 
 bool GameLibrary::recordLaunch(qint64 id)
 {
-    if (!m_db.recordLaunch(id))
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    if (!m_db.recordLaunch(id, now))
         return false;
-    reloadEntries();
+    // Same second resolution as the database, so cached and reloaded entries agree.
+    const QDateTime stored = QDateTime::fromSecsSinceEpoch(now.toSecsSinceEpoch(), Qt::UTC);
+    updateCached(id, [stored](GameEntry &e) {
+        ++e.playCount;
+        e.lastPlayed = stored;
+    });
     return true;
 }
 
@@ -148,7 +177,7 @@ bool GameLibrary::setEmulatorOverride(qint64 id, const QString &emulatorId)
 {
     if (!m_db.setEmulatorOverride(id, emulatorId))
         return false;
-    reloadEntries();
+    updateCached(id, [&emulatorId](GameEntry &e) { e.emulatorOverride = emulatorId; });
     return true;
 }
 

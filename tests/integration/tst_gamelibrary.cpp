@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -150,6 +152,25 @@ private slots:
         QVERIFY(library.entries().isEmpty());
     }
 
+    void symlinkedRootToUnmountedDriveKeepsEntries()
+    {
+        const QString drive = m_dir.filePath(QStringLiteral("usb/roms"));
+        touch(drive + QStringLiteral("/Alpha.sfc"));
+        const QString link = m_dir.filePath(QStringLiteral("roms-link"));
+        QVERIFY(QFile::link(drive, link));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        auto o = options();
+        o.roots = {link};
+        library.setScanOptions(o);
+        scan(library);
+        QCOMPARE(library.entries().size(), 1);
+
+        QVERIFY(QDir(m_dir.filePath(QStringLiteral("usb"))).removeRecursively()); // drive gone, link dangles
+        scan(library);
+        QCOMPARE(library.entries().size(), 1);
+    }
+
     void queuesRefreshWhileScanning()
     {
         for (int i = 0; i < 50; ++i)
@@ -193,6 +214,28 @@ private slots:
         library.setScanOptions(options());
         scan(library);
         QCOMPARE(library.entries().size(), 1);
+    }
+
+    void newerSchemaIsLeftUntouched()
+    {
+        {
+            GameLibrary library;
+            QVERIFY(library.open(db()));
+        }
+        {
+            QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("raw"));
+            raw.setDatabaseName(db());
+            QVERIFY(raw.open());
+            QSqlQuery(raw).exec(QStringLiteral("PRAGMA user_version = 99"));
+            raw.close();
+        }
+        QSqlDatabase::removeDatabase(QStringLiteral("raw"));
+        GameLibrary library;
+        QVERIFY(!library.open(db()));
+        QVERIFY(library.lastError().contains(QStringLiteral("newer")));
+        QVERIFY(QFile::exists(db()));
+        QCOMPARE(QDir(QFileInfo(db()).absolutePath()).entryList({QStringLiteral("library.sqlite.corrupt-*")}).size(),
+                 0);
     }
 
     void emulatorOverride()

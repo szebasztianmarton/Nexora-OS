@@ -53,15 +53,21 @@ public:
 
     // Blocks until a running scan has finished (tests and shutdown only).
     void waitForScan();
+    // Asks a running scan to stop and drops a queued rerun (shutdown).
+    void cancelScan();
 
 signals:
     void scanningChanged(bool scanning);
     void entriesChanged();
     void scanFinished(const nexora::library::ApplyStats &stats, int issueCount);
+    // The scan ran but its results could not be stored.
+    void scanFailed(const QString &error);
 
 private:
     void onScanDone(const ScanResult &result);
     void reloadEntries();
+    // Applies |update| to the cached entry |id| (avoids reloading the whole table).
+    template<typename F> void updateCached(qint64 id, F update);
     QString optionsSignature() const;
 
     GameDatabase m_db;

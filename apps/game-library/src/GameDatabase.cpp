@@ -66,6 +66,10 @@ bool GameDatabase::exec(const QString &sql)
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
     if (!q.exec(sql)) {
         m_lastError = q.lastError().text();
+        // SQLITE_BUSY (5) / SQLITE_LOCKED (6) are transient, not corruption.
+        const QString code = q.lastError().nativeErrorCode();
+        if (code == QLatin1String("5") || code == QLatin1String("6"))
+            m_recoverable = false;
         qCWarning(lcLibrary).noquote() << "SQL failed:" << sql.left(80) << "-" << m_lastError;
         return false;
     }
@@ -76,6 +80,7 @@ bool GameDatabase::open(const QString &path)
 {
     close();
     m_issues.clear();
+    m_recoverable = true;
     if (!QSqlDatabase::isDriverAvailable(QStringLiteral("QSQLITE"))) {
         m_lastError = QStringLiteral("Qt SQLite driver (QSQLITE) is not available");
         qCCritical(lcLibrary).noquote() << m_lastError;
@@ -97,13 +102,14 @@ bool GameDatabase::open(const QString &path)
                 m_lastError = db.lastError().text();
         }
         close();
-        if (inMemory || attempt == 1 || !QFile::exists(path))
+        if (inMemory || attempt == 1 || !QFile::exists(path) || !m_recoverable)
             break;
         const QString aside = path + QStringLiteral(".corrupt-")
             + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
         if (!QFile::rename(path, aside))
             break;
-        QFile::remove(path + QStringLiteral("-wal"));
+        // Keep the write-ahead log with the copy: it may hold committed transactions.
+        QFile::rename(path + QStringLiteral("-wal"), aside + QStringLiteral("-wal"));
         QFile::remove(path + QStringLiteral("-shm"));
         m_issues.append(QStringLiteral("library database was unusable (%1) and was moved to %2; "
                                        "favorites and play history start empty")
@@ -120,6 +126,9 @@ bool GameDatabase::migrate()
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
     if (!q.exec(QStringLiteral("PRAGMA user_version")) || !q.next()) {
         m_lastError = q.lastError().text();
+        const QString code = q.lastError().nativeErrorCode();
+        if (code == QLatin1String("5") || code == QLatin1String("6"))
+            m_recoverable = false;
         return false;
     }
     // Reading the version is also our "is this a database at all" probe.
@@ -127,7 +136,11 @@ bool GameDatabase::migrate()
         return false;
     const int version = q.value(0).toInt();
     if (version > SchemaVersion) {
-        m_lastError = QStringLiteral("database schema %1 is newer than supported (%2)").arg(version).arg(SchemaVersion);
+        // Written by a newer Nexora: leave it untouched for that version.
+        m_recoverable = false;
+        m_lastError = QStringLiteral("database schema %1 is newer than supported (%2); not modified")
+                          .arg(version)
+                          .arg(SchemaVersion);
         return false;
     }
     if (version == SchemaVersion)
@@ -246,8 +259,26 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
     // Anything present that was not found: missing if its root was scanned (file deleted)
     // or its root is no longer configured. Roots that failed to scan (e.g. an unmounted
     // drive) keep their entries as they are.
+    // Canonical forms of the configured roots, computed once. For a symlinked root whose
+    // target is currently unavailable (e.g. an unmounted drive) the link target is used, so
+    // its entries are still recognised as configured and kept.
+    QStringList configured;
+    for (const QString &r : configuredRoots) {
+        const QFileInfo info(r);
+        configured.append(QDir::cleanPath(r));
+        const QString canonical = info.canonicalFilePath();
+        if (!canonical.isEmpty())
+            configured.append(canonical);
+        else if (info.isSymLink())
+            configured.append(QDir::cleanPath(info.symLinkTarget()));
+    }
     QSqlQuery present(db);
-    present.exec(QStringLiteral("SELECT id, path, root FROM games WHERE present = 1"));
+    present.setForwardOnly(true);
+    if (!present.exec(QStringLiteral("SELECT id, path, root FROM games WHERE present = 1"))) {
+        m_lastError = present.lastError().text();
+        db.rollback();
+        return std::nullopt;
+    }
     QList<qint64> vanished;
     while (present.next()) {
         const QString path = present.value(1).toString();
@@ -257,10 +288,7 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
         const bool rootScanned = std::any_of(result.scannedRoots.cbegin(), result.scannedRoots.cend(),
                                              [&](const QString &r) { return isUnder(path, r); });
         const bool rootConfigured
-            = std::any_of(configuredRoots.cbegin(), configuredRoots.cend(), [&](const QString &r) {
-                  const QString c = QFileInfo(r).canonicalFilePath();
-                  return isUnder(root, c.isEmpty() ? QDir::cleanPath(r) : c);
-              });
+            = std::any_of(configured.cbegin(), configured.cend(), [&](const QString &r) { return isUnder(root, r); });
         // A truncated or cancelled scan did not see every file: only drop entries whose
         // directory was removed from the configuration in that case.
         const bool complete = !result.truncated && !result.cancelled;
@@ -272,7 +300,11 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
     mark.prepare(QStringLiteral("UPDATE games SET present = 0 WHERE id = ?"));
     for (qint64 id : std::as_const(vanished)) {
         mark.addBindValue(id);
-        mark.exec();
+        if (!mark.exec()) {
+            m_lastError = mark.lastError().text();
+            db.rollback();
+            return std::nullopt;
+        }
     }
     stats.missing = int(vanished.size());
 

@@ -177,7 +177,7 @@ Boot sequence (BusyBox init → `/etc/init.d/rcS`):
 4. The supervisor runs, in a loop:
 
    ```
-   /usr/bin/nexora-console-ui --fullscreen --log-file /var/log/nexora/console-ui.log [$NEXORA_CONSOLE_UI_ARGS]
+   /usr/bin/nexora-console-ui --log-file /var/log/nexora/console-ui.log [$NEXORA_CONSOLE_UI_ARGS]   (window mode comes from the display.mode setting, default fullscreen)
    ```
 
    as user **`nexora`** (via `start-stop-daemon --chuid nexora`, which also sets the supplementary groups), in a new session whose controlling terminal is **tty1** (owned by `nexora` while the UI runs, so Qt can switch it to graphics mode and mute the console keyboard), with the environment `QT_QPA_PLATFORM=eglfs`, `QT_QPA_EGLFS_INTEGRATION=eglfs_kms`, `XDG_RUNTIME_DIR=/run/user/1000`, `NEXORA_PLATFORM=embedded`, `HOME=/home/nexora`.

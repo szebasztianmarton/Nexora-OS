@@ -245,7 +245,7 @@ void TestInputController::newActionsAndCapture()
     controller.setCapturing(true);
     controller.navigator()->buttonEvent(GamepadButton::East, true);
     controller.navigator()->buttonEvent(GamepadButton::DpadDown, true);
-    QCOMPARE(captured.size(), 1);
+    QTRY_COMPARE(captured.size(), 1); // delivered queued, after the press was swallowed
     QCOMPARE(captured.first().first().toString(), QStringLiteral("east"));
     QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Down), 1); // directions still navigate
     QCOMPARE(window.count(QEvent::KeyPress, Qt::Key_Escape), 0); // East not delivered as Back

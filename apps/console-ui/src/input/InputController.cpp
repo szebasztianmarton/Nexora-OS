@@ -32,8 +32,12 @@ InputController::InputController(QObject *parent)
         injectAction(action);
     });
     connect(m_navigator, &GamepadNavigator::buttonPressed, this, [this](GamepadButton button, quint32) {
-        if (m_capturing && !m_suspended)
-            emit buttonCaptured(ButtonMapping::buttonName(button));
+        if (m_capturing && !m_suspended) {
+            // Queued: the action for this same press (emitted right after) must still be
+            // swallowed by capture mode, not run with the freshly applied mapping.
+            const QString name = ButtonMapping::buttonName(button);
+            QMetaObject::invokeMethod(this, [this, name] { emit buttonCaptured(name); }, Qt::QueuedConnection);
+        }
     });
     connect(m_navigator, &GamepadNavigator::returnToLauncherRequested, this, [this] {
         qCInfo(lcInput) << "Return-to-launcher chord (Select + Start) detected";

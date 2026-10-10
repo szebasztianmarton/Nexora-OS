@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QFileInfo>
 
+#include <utility>
+
 namespace nexora::ui {
 
 using shared::Settings;
@@ -21,13 +23,12 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
 {
     m_query.sort = library::LibraryQuery::sortOrderFromString(settings->stringValue(Settings::LibrarySortOrder));
     const auto info = [this](const QString &emulatorId) -> std::pair<QString, QString> {
-        QString name;
-        for (const auto &c : m_app->enabledEmulators()) {
-            if (c.id == emulatorId)
-                name = c.name;
-        }
-        return {name, m_app->unavailableReason(emulatorId)};
+        const auto it = m_emulatorInfo.constFind(emulatorId);
+        if (it != m_emulatorInfo.cend())
+            return *it;
+        return {QString(), m_app->unavailableReason(emulatorId)};
     };
+    rebuildEmulatorInfo();
     for (GameListModel *model : {&m_games, &m_recent, &m_favorites})
         model->setEmulatorInfo(info);
 
@@ -46,7 +47,20 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
                             false);
             });
     // Emulator definitions decide which extensions are games and how they launch.
+    connect(m_library, &library::GameLibrary::scanFailed, this, [this](const QString &error) {
+        emit notice(QStringLiteral("Library scan could not be saved: %1").arg(error), true);
+    });
+    // A launch counts as "played" only once the emulator process is actually running.
+    connect(m_app->manager(), &emulator::EmulatorManager::stateChanged, this, [this](emulator::ProcessState state) {
+        if (m_pendingLaunch == 0)
+            return;
+        if (state == emulator::ProcessState::Running)
+            m_library->recordLaunch(std::exchange(m_pendingLaunch, 0));
+        else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
+            m_pendingLaunch = 0;
+    });
     connect(m_app, &AppController::configChanged, this, [this] {
+        rebuildEmulatorInfo();
         updateScanOptions();
         rebuildViews();
     });
@@ -176,9 +190,11 @@ bool LibraryController::launch(qint64 gameId)
         emit notice(QStringLiteral("This game is no longer in the library"), true);
         return false;
     }
-    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->title))
+    m_pendingLaunch = gameId;
+    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->title)) {
+        m_pendingLaunch = 0;
         return false;
-    m_library->recordLaunch(gameId);
+    }
     return true;
 }
 
@@ -226,6 +242,13 @@ bool LibraryController::removeDirectory(const QString &path)
 int LibraryController::purgeMissing()
 {
     return m_library->purgeMissing();
+}
+
+void LibraryController::rebuildEmulatorInfo()
+{
+    m_emulatorInfo.clear();
+    for (const auto &c : m_app->enabledEmulators())
+        m_emulatorInfo.insert(c.id, {c.name, m_app->unavailableReason(c.id)});
 }
 
 void LibraryController::rebuildViews()
