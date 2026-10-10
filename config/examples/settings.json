@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "settings": {
+    "ui.language": "en",
+    "ui.showHints": true,
+    "display.mode": "fullscreen",
+    "display.resolution": "auto",
+    "audio.volume": 80,
+    "input.backend": "auto",
+    "input.mapping": {
+      "accept": "south",
+      "back": "east",
+      "menu": "start",
+      "favorite": "north",
+      "search": "west",
+      "prevTab": "l1",
+      "nextTab": "r1"
+    },
+    "library.directories": ["/srv/games"],
+    "library.extensions": [".zip"],
+    "library.followSymlinks": false,
+    "library.sortOrder": "title",
+    "emulators.defaultProfiles": {"example-profiles": "fullscreen"}
+  }
+}

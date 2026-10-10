@@ -1,0 +1,24 @@
+{
+  "id": "example-profiles",
+  "name": "Example with launch profiles",
+  "executable": "/bin/true",
+  "arguments": ["{file}"],
+  "workingDirectory": "/tmp",
+  "extensions": [".example"],
+  "stopTimeoutMs": 3000,
+  "enabled": true,
+  "profiles": [
+    {
+      "id": "fullscreen",
+      "name": "Fullscreen",
+      "emulator": "example-profiles",
+      "arguments": ["--fullscreen", "{file}"]
+    },
+    {
+      "id": "debug",
+      "name": "Debug (disabled)",
+      "arguments": ["--verbose", "--rom={file}"],
+      "enabled": false
+    }
+  ]
+}

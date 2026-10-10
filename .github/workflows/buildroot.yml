@@ -1,0 +1,136 @@
+name: Buildroot
+
+# Light validation of the BR2_EXTERNAL tree on every change to it, and an
+# optional full image build that only runs when requested manually.
+
+on:
+  push:
+    paths:
+      - "buildroot-external/**"
+      - ".github/workflows/buildroot.yml"
+  pull_request:
+    paths:
+      - "buildroot-external/**"
+      - ".github/workflows/buildroot.yml"
+  workflow_dispatch:
+    inputs:
+      full_build:
+        description: >-
+          Also build the complete disk image (several hours; may exceed the
+          6 h limit of GitHub-hosted runners, see docs/buildroot.md)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buildroot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep in sync with docs/buildroot.md.
+  BUILDROOT_VERSION: "2026.02.3"
+  BUILDROOT_GIT: https://gitlab.com/buildroot.org/buildroot.git
+  DEFCONFIG: nexora_x86_64_defconfig
+
+jobs:
+  validate:
+    name: check-package + defconfig symbols
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential file cpio unzip rsync bc wget python3 \
+            shellcheck python3-magic flake8
+
+      - name: Fetch Buildroot ${{ env.BUILDROOT_VERSION }}
+        run: |
+          git clone --depth 1 --branch "$BUILDROOT_VERSION" \
+            "$BUILDROOT_GIT" "$RUNNER_TEMP/buildroot"
+
+      - name: check-package
+        working-directory: buildroot-external
+        run: |
+          find . -type f -print0 | sort -z | \
+            xargs -0 "$RUNNER_TEMP/buildroot/utils/check-package" --br2-external
+
+      - name: Defconfig symbols survive Kconfig
+        run: |
+          buildroot-external/scripts/check-defconfig.sh \
+            "$RUNNER_TEMP/buildroot" "$RUNNER_TEMP/out" "$DEFCONFIG"
+
+  image:
+    name: full image build
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && inputs.full_build
+    runs-on: ubuntu-24.04
+    # GitHub-hosted runners stop jobs after 6 h. A cold build (LLVM/Clang
+    # for Mesa, Qt 6, kernel) can take longer on a 4-core runner; re-running
+    # with a warm dl/ cache helps only with downloads.
+    timeout-minutes: 360
+    env:
+      BR2_DL_DIR: /mnt/br/dl
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential file cpio unzip rsync bc wget python3 perl \
+            libncurses-dev
+          # The root filesystem of the runner is small; build on /mnt.
+          sudo mkdir -p /mnt/br
+          sudo chown "$(id -u):$(id -g)" /mnt/br
+          df -h / /mnt
+
+      - name: Fetch Buildroot ${{ env.BUILDROOT_VERSION }}
+        run: |
+          git clone --depth 1 --branch "$BUILDROOT_VERSION" \
+            "$BUILDROOT_GIT" /mnt/br/buildroot
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: /mnt/br/dl
+          key: br-dl-${{ env.BUILDROOT_VERSION }}-${{ hashFiles('buildroot-external/configs/*_defconfig') }}
+          restore-keys: |
+            br-dl-${{ env.BUILDROOT_VERSION }}-
+
+      - name: Configure
+        run: |
+          make -C /mnt/br/buildroot BR2_EXTERNAL="$GITHUB_WORKSPACE/buildroot-external" \
+            O=/mnt/br/out "$DEFCONFIG"
+
+      - name: Build
+        run: |
+          make -C /mnt/br/buildroot O=/mnt/br/out \
+            > /mnt/br/build.log 2>&1 || { tail -n 200 /mnt/br/build.log; exit 1; }
+          tail -n 20 /mnt/br/build.log
+
+      - name: Compress image
+        run: |
+          ls -l /mnt/br/out/images
+          xz -T0 -k /mnt/br/out/images/disk.img
+
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-x86_64-disk-image
+          path: /mnt/br/out/images/disk.img.xz
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildroot-build-log
+          path: /mnt/br/build.log
+          if-no-files-found: ignore
+          retention-days: 7

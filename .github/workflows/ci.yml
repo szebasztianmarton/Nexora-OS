@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_APT_PACKAGES: >-
+    qt6-base-dev qt6-declarative-dev
+    qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtqml-models
+    qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates
+    qml6-module-qtquick-layouts qml6-module-qtquick-window
+    libqt6sql6-sqlite libgl-dev
+  SDL3_TAG: release-3.2.30
+
+jobs:
+  lint:
+    name: formatting and file checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format-18 shellcheck
+
+      - name: clang-format (C++)
+        run: git ls-files '*.cpp' '*.h' | xargs clang-format-18 --dry-run --Werror
+
+      - name: JSON syntax
+        run: |
+          status=0
+          for f in $(git ls-files '*.json'); do
+            python3 -m json.tool "$f" > /dev/null || { echo "::error file=$f::invalid JSON"; status=1; }
+          done
+          exit $status
+
+      - name: shellcheck (scripts)
+        run: shellcheck scripts/*.sh
+
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc / debug (-Werror)
+            cc: gcc
+            cxx: g++
+            preset: ci
+          - name: clang / debug (-Werror)
+            cc: clang
+            cxx: clang++
+            preset: ci
+          - name: gcc / release
+            cc: gcc
+            cxx: g++
+            preset: release
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ clang $QT_APT_PACKAGES
+
+      - name: Tool versions
+        run: |
+          cmake --version | head -1
+          ninja --version
+          $CXX --version | head -1
+          dpkg-query -W -f='${Package} ${Version}\n' qt6-base-dev qt6-declarative-dev
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Unit tests
+        run: ctest --preset ${{ matrix.preset }} -L unit
+
+      - name: Integration tests
+        run: ctest --preset ${{ matrix.preset }} -L integration
+
+      - name: Validate configuration files
+        run: |
+          app=build/${{ matrix.preset }}/bin/nexora-console-ui
+          "$app" --check-config --config-dir config/emulators --settings-file config/examples/settings.json
+          "$app" --check-config --config-dir config/examples/emulators --settings-file config/examples/settings.json
+
+      - name: Upload test log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-${{ matrix.cxx }}-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+  build-sdl3:
+    # SDL3 is not packaged for Ubuntu 24.04, so build a pinned release from source to keep
+    # the optional SDL3 gamepad backend compiling.
+    name: gcc / debug + SDL3 backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ git $QT_APT_PACKAGES \
+            libudev-dev
+
+      - name: Cache SDL3
+        id: sdl3-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sdl3
+          key: sdl3-${{ env.SDL3_TAG }}-console-ubuntu-24.04
+
+      - name: Build SDL3 ${{ env.SDL3_TAG }}
+        if: steps.sdl3-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$SDL3_TAG" https://github.com/libsdl-org/SDL.git "$RUNNER_TEMP/sdl-src"
+          cmake -S "$RUNNER_TEMP/sdl-src" -B "$RUNNER_TEMP/sdl-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/sdl3" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_EXAMPLES=OFF -DSDL_TESTS=OFF \
+            -DSDL_UNIX_CONSOLE_BUILD=ON
+          cmake --build "$RUNNER_TEMP/sdl-build"
+          cmake --install "$RUNNER_TEMP/sdl-build"
+
+      - name: Configure (NEXORA_WITH_SDL3=ON)
+        run: >
+          cmake --preset ci -DNEXORA_WITH_SDL3=ON -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/sdl3"
+
+      - name: Build
+        run: cmake --build --preset ci
+
+      - name: Test
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/sdl3/lib
+        run: ctest --preset ci

@@ -1,0 +1,74 @@
+#!/bin/sh
+# Nexora OS power request daemon (runs as root, started by
+# /etc/init.d/S80nexora-powerd).
+#
+# Protocol: members of the "nexora" group write one line to the FIFO
+# /run/nexora/power-request. The only accepted lines are exactly
+# "poweroff" and "reboot"; anything else is ignored and logged. See
+# docs/buildroot.md ("Power requests").
+#
+# The request text is never evaluated, expanded or passed to another
+# program: it is only compared against two fixed words.
+
+RUN_DIR=/run/nexora
+FIFO="${RUN_DIR}/power-request"
+GROUP=nexora
+MAX_LINE=64
+
+log() {
+	logger -t nexora-powerd -p "daemon.$1" -- "$2"
+}
+
+# Printable, bounded excerpt of a rejected request for the log.
+sanitize() {
+	printf '%s' "$1" | tr -cd 'A-Za-z0-9_.-' | cut -c1-32
+}
+
+mkdir -p "${RUN_DIR}"
+chown "root:${GROUP}" "${RUN_DIR}"
+chmod 0750 "${RUN_DIR}"
+
+rm -f "${FIFO}"
+if ! mkfifo -m 0620 "${FIFO}"; then
+	log err "cannot create ${FIFO}"
+	exit 1
+fi
+chown "root:${GROUP}" "${FIFO}"
+chmod 0620 "${FIFO}"
+
+# Open read-write: the daemon then always holds a writer, so reads
+# block instead of returning EOF when a client closes its end, and
+# clients opening with O_WRONLY|O_NONBLOCK succeed while we run.
+exec 3<> "${FIFO}"
+
+log info "listening on ${FIFO}"
+
+while :; do
+	line=""
+	# shellcheck disable=SC3045 # BusyBox ash supports read -n
+	if ! IFS= read -r -n "${MAX_LINE}" line <&3; then
+		# Only reached on a read error (we hold a writer ourselves).
+		log err "read from ${FIFO} failed"
+		sleep 1
+		continue
+	fi
+	case "${line}" in
+	poweroff)
+		log notice "power off requested"
+		sync
+		poweroff
+		exit 0
+		;;
+	reboot)
+		log notice "reboot requested"
+		sync
+		reboot
+		exit 0
+		;;
+	*)
+		log warning "ignored invalid request ($(sanitize "${line}"))"
+		# Throttle so a misbehaving client cannot flood the log.
+		sleep 1
+		;;
+	esac
+done

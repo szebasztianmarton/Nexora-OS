@@ -1,0 +1,12 @@
+# Build trees
+/build/
+/build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# Editors / tools
+*.user
+.cache/
+.vscode/
+.idea/
+*.swp
