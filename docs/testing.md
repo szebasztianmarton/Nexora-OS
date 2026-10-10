@@ -4,6 +4,8 @@ The test suite uses Qt Test, registered with CTest. It needs no display, no cont
 
 **Status (MVP 2, `feature/mvp2`):** locally verified on Ubuntu 24.04 (GCC 13, Qt 6.4.2): the `ci` preset (GCC, Debug) builds cleanly with `-Werror` and **19/19** tests pass, including the rewritten `tst_qmlsmoke` for the MVP 2 dashboard. A separate run as a non-root user of all tests except `tst_qmlsmoke` also passed, so the [root-skipped functions](#tests-skipped-as-root) were executed. On GitHub, all five `ci.yml` jobs passed for the MVP 2 dashboard commit ([run \#8](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38070075614), 2026-10-10).
 
+Testing on Windows 11 (WSL 2): see [testing-windows11.md](testing-windows11.md).
+
 ## Contents
 
 - [Layout](#layout)

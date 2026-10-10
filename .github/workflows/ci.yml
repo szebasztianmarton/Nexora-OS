@@ -34,8 +34,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang-format-18 shellcheck
 
+      # prototypes/ keeps the separately developed console UI as-is; it has
+      # its own formatting and is not part of the main build.
       - name: clang-format (C++)
-        run: git ls-files '*.cpp' '*.h' | xargs clang-format-18 --dry-run --Werror
+        run: git ls-files '*.cpp' '*.h' ':!prototypes' | xargs clang-format-18 --dry-run --Werror
 
       - name: JSON syntax
         run: |

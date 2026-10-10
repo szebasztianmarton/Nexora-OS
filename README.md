@@ -38,6 +38,8 @@ Documentation:
 | [docs/controller-support.md](docs/controller-support.md) | Backends, button layouts, mapping, remapping, hardware test checklist |
 | [docs/testing.md](docs/testing.md) | Test suite, fake emulator, CI, manual tests |
 | [docs/buildroot.md](docs/buildroot.md) | Buildroot external tree, image, start-up, power helper, QEMU |
+| [docs/testing-windows11.md](docs/testing-windows11.md) | Building and testing on Windows 11 (WSL 2, WSLg, usbipd, QEMU) — in Hungarian |
+| [prototypes/console-ui/](prototypes/console-ui/README.md) | Separately developed console UI prototype (from the `claude/nexora-console-ui` branch); standalone CMake project |
 
 ## Vision
 
