@@ -54,6 +54,7 @@ include(cmake/NexoraCompilerWarnings.cmake)
 add_subdirectory(shared)
 add_subdirectory(apps/emulator-manager)
 add_subdirectory(apps/game-library)
+add_subdirectory(apps/system)
 add_subdirectory(apps/console-ui)
 
 if(NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING)

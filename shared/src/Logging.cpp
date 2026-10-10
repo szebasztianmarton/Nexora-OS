@@ -26,6 +26,9 @@ struct LogState
 {
     QMutex mutex;
     std::unique_ptr<QFile> file;
+    QString filePath;
+    qint64 maxFileBytes = 0;
+    int keepRotated = 3;
     std::deque<QString> ring;
     int ringCapacity = 500;
 };
@@ -48,6 +51,23 @@ const char *levelName(QtMsgType type)
     return "unknown";
 }
 
+// Called with the mutex held.
+void rotateIfNeeded(LogState &s, qint64 incoming)
+{
+    if (!s.file || s.maxFileBytes <= 0 || s.file->size() + incoming <= s.maxFileBytes)
+        return;
+    s.file->close();
+    QFile::remove(s.filePath + QStringLiteral(".%1").arg(s.keepRotated));
+    for (int i = s.keepRotated - 1; i >= 1; --i)
+        QFile::rename(s.filePath + QStringLiteral(".%1").arg(i), s.filePath + QStringLiteral(".%1").arg(i + 1));
+    if (s.keepRotated > 0)
+        QFile::rename(s.filePath, s.filePath + QStringLiteral(".1"));
+    else
+        QFile::remove(s.filePath);
+    if (!s.file->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
+        s.file.reset();
+}
+
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
     const QString line = QStringLiteral("%1 [%2] %3: %4")
@@ -62,6 +82,7 @@ void messageHandler(QtMsgType type, const QMessageLogContext &context, const QSt
         QMutexLocker locker(&s.mutex);
         std::fwrite(bytes.constData(), 1, size_t(bytes.size()), stderr);
         std::fflush(stderr);
+        rotateIfNeeded(s, bytes.size());
         if (s.file) {
             s.file->write(bytes);
             s.file->flush();
@@ -88,6 +109,9 @@ bool installMessageHandler(const LoggingOptions &options)
         QMutexLocker locker(&s.mutex);
         s.ringCapacity = qMax(1, options.ringCapacity);
         s.file.reset();
+        s.filePath = options.logFilePath;
+        s.maxFileBytes = options.maxFileBytes;
+        s.keepRotated = qMax(0, options.keepRotated);
         if (!options.logFilePath.isEmpty()) {
             auto file = std::make_unique<QFile>(options.logFilePath);
             if (file->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))

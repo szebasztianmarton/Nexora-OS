@@ -1,0 +1,93 @@
+#pragma once
+
+#include <QObject>
+#include <QString>
+#include <QStringList>
+
+#include <memory>
+
+namespace nexora::system {
+
+enum class Platform { Desktop, Embedded };
+enum class PowerAction { Poweroff, Reboot };
+enum class Capability { Power, Volume };
+
+struct SystemStatus
+{
+    QString platform;     // "desktop" / "embedded"
+    QString osName;       // PRETTY_NAME from os-release, if any
+    QString hostname;
+    QString kernel;       // uname release
+    qint64 uptimeSeconds = -1;
+    double load1 = -1;    // 1-minute load average
+    qint64 memoryTotalKiB = -1;
+    qint64 memoryAvailableKiB = -1;
+};
+
+// Filesystem locations the integration reads or writes (overridable for tests).
+struct SystemEnvironment
+{
+    QString procRoot = QStringLiteral("/proc");
+    QString osReleaseFile = QStringLiteral("/etc/os-release");
+    QString nexoraReleaseFile = QStringLiteral("/etc/nexora-release");
+    QString powerRequestFifo = QStringLiteral("/run/nexora/power-request");
+    QString mixerProgram = QStringLiteral("/usr/bin/amixer");
+};
+
+// Boundary between the UI and the operating system. The UI only talks to this interface;
+// the desktop implementation deliberately does nothing privileged, the embedded one uses
+// narrowly scoped, documented mechanisms (see docs/architecture.md, docs/buildroot.md).
+class SystemIntegration : public QObject
+{
+    Q_OBJECT
+
+public:
+    using QObject::QObject;
+
+    using Environment = SystemEnvironment;
+
+    // NEXORA_PLATFORM=desktop|embedded wins; otherwise "embedded" when
+    // /etc/nexora-release says NEXORA_PLATFORM=embedded; otherwise desktop.
+    static Platform detectPlatform(const Environment &env, const QString &override);
+    static std::unique_ptr<SystemIntegration> create(const Environment &env = Environment{},
+                                                     const QString &platformOverride = {});
+
+    virtual Platform platform() const = 0;
+    QString platformName() const;
+    virtual bool supports(Capability capability) const = 0;
+    virtual SystemStatus status() const;
+
+    // Asks the system to power off / reboot. Never blocks.
+    virtual bool requestPower(PowerAction action, QString *error) = 0;
+    // Applies a 0-100 master volume. Never blocks.
+    virtual bool applyVolume(int percent, QString *error) = 0;
+
+    const Environment &environment() const { return m_env; }
+
+protected:
+    Environment m_env;
+};
+
+class DesktopSystemIntegration : public SystemIntegration
+{
+    Q_OBJECT
+public:
+    explicit DesktopSystemIntegration(Environment env, QObject *parent = nullptr);
+    Platform platform() const override { return Platform::Desktop; }
+    bool supports(Capability) const override { return false; }
+    bool requestPower(PowerAction action, QString *error) override;
+    bool applyVolume(int percent, QString *error) override;
+};
+
+class EmbeddedSystemIntegration : public SystemIntegration
+{
+    Q_OBJECT
+public:
+    explicit EmbeddedSystemIntegration(Environment env, QObject *parent = nullptr);
+    Platform platform() const override { return Platform::Embedded; }
+    bool supports(Capability capability) const override;
+    bool requestPower(PowerAction action, QString *error) override;
+    bool applyVolume(int percent, QString *error) override;
+};
+
+} // namespace nexora::system
