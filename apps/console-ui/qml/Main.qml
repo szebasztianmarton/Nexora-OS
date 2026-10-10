@@ -2,6 +2,11 @@ import QtQuick
 import QtQuick.Controls
 import Nexora.Console
 
+// Full-screen dashboard: header, top-level tabs (Home, Games, Emulators, Settings,
+// Diagnostics), the running-emulator overlay and transient notices.
+//
+// Controllers arrive as key events (see InputController::keyForAction): arrows, Return
+// (Accept), Escape/Back (Back), Menu/F1, Favorites, Search, PageUp/PageDown (L1/R1).
 ApplicationWindow {
     id: window
     objectName: "mainWindow"
@@ -18,65 +23,261 @@ ApplicationWindow {
     title: "Nexora OS"
     color: Theme.background
 
-    header: Header { app: window.app }
-    footer: HintBar {
-        hints: window.app.busy
-               ? [{ button: "Enter", action: "Stop emulator" },
-                  { button: "Select + Start (hold)", action: "Return to launcher" }]
-               : stack.depth > 1
-                 ? [{ button: "A / Enter", action: "Reload config" },
-                    { button: "↑ ↓", action: "Scroll" },
-                    { button: "B / Esc", action: "Back" }]
-                 : [{ button: "← →", action: "Select" },
-                    { button: "A / Enter", action: "Launch" },
-                    { button: "Menu / F1", action: "Diagnostics" }]
-    }
+    readonly property var tabs: [{ key: "home", title: "Home" },
+                                 { key: "games", title: "Games" },
+                                 { key: "emulators", title: "Emulators" },
+                                 { key: "settings", title: "Settings" },
+                                 { key: "diagnostics", title: "Diagnostics" }]
+    property int currentTab: 0
+    readonly property string currentTabKey: tabs[currentTab].key
+    readonly property var pages: [homeScreen, gamesScreen, emulatorsScreen, settingsScreen, diagnosticsScreen]
 
-    function goBack() {
-        if (stack.depth > 1)
-            stack.pop()
+    // Last focused item per tab (restored when switching back) and before the overlay.
+    property var tabFocus: [null, null, null, null, null]
+    property Item focusBeforeOverlay: null
+
+    function tabIndex(key) {
+        for (let i = 0; i < tabs.length; ++i) {
+            if (tabs[i].key === key)
+                return i
+        }
+        return -1
     }
-    function openDiagnostics() {
-        if (stack.depth === 1)
-            stack.push(diagnosticsComponent)
+    function pageIndexOf(item) {
+        for (let p = item; p; p = p.parent) {
+            const i = pages.indexOf(p)
+            if (i >= 0)
+                return i
+        }
+        return -1
+    }
+    function focusPage() {
+        const page = pages[currentTab]
+        const remembered = tabFocus[currentTab]
+        if (remembered && remembered.visible && pageIndexOf(remembered) === currentTab) {
+            remembered.forceActiveFocus()
+            return
+        }
+        // First visit (or the remembered item is gone): the page picks its default.
+        page.focusDefault()
+        page.forceActiveFocus()
+    }
+    function switchTab(index) {
+        if (index < 0 || index >= tabs.length)
+            return
+        const stayOnBar = tabBar.activeFocus
+        currentTab = index
+        if (!stayOnBar)
+            focusPage()
+    }
+    function openTab(key) {
+        switchTab(tabIndex(key))
+        if (tabBar.activeFocus)
+            focusPage()
+    }
+    // Home / Games buttons; with no library folder the Settings field to add one gets focus.
+    function navigate(key) {
+        openTab(key)
+        if (key === "settings" && window.library.directories.length === 0)
+            settingsScreen.focusAddFolder()
+    }
+    function focusSearch() {
+        openTab("games")
+        gamesScreen.focusSearch()
     }
     function restoreFocus() {
-        if (window.app.busy)
+        if (window.app.busy) {
             overlay.forceActiveFocus()
-        else if (stack.currentItem)
-            stack.currentItem.forceActiveFocus()
+            return
+        }
+        const saved = focusBeforeOverlay
+        focusBeforeOverlay = null
+        if (saved && saved.visible)
+            saved.forceActiveFocus()
+        else
+            focusPage()
     }
 
-    StackView {
-        id: stack
-        objectName: "stack"
-        anchors.fill: parent
-        focus: true
-        initialItem: LibraryScreen { app: window.app }
-
-        onCurrentItemChanged: Qt.callLater(window.restoreFocus)
-
-        // Keys not handled by the focused screen bubble up to here.
-        Keys.onPressed: (event) => {
-            switch (event.key) {
-            case Qt.Key_Escape:
-            case Qt.Key_Back:
-            case Qt.Key_Backspace:
-                window.goBack()
-                event.accepted = true
-                break
-            case Qt.Key_Menu:
-            case Qt.Key_F1:
-                window.openDiagnostics()
-                event.accepted = true
-                break
-            }
+    onActiveFocusItemChanged: {
+        const item = window.activeFocusItem
+        const page = pageIndexOf(item)
+        if (page >= 0 && item !== pages[page]) {
+            const copy = tabFocus.slice()
+            copy[page] = item
+            tabFocus = copy
+        }
+        // Focus can drop out (e.g. the focused row was removed from its model).
+        if (!item || item === window.contentItem)
+            focusGuard.restart()
+    }
+    Timer {
+        id: focusGuard
+        interval: 50
+        onTriggered: {
+            const item = window.activeFocusItem
+            if (!item || item === window.contentItem)
+                window.restoreFocus()
         }
     }
 
-    Component {
-        id: diagnosticsComponent
-        DiagnosticsScreen { app: window.app }
+    header: Header {
+        app: window.app
+        library: window.library
+    }
+    footer: HintBar {
+        visible: window.settings.showHints
+        hints: window.app.busy
+               ? [{ button: "A / Enter", action: "Stop emulator" },
+                  { button: "Select + Start (hold)", action: "Return to Nexora" }]
+               : tabBar.activeFocus
+                 ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
+                    { button: "L1 / R1", action: "Switch tab" }]
+                 : window.pages[window.currentTab].hints
+    }
+
+    FocusScope {
+        id: contentRoot
+        objectName: "contentRoot"
+        anchors.fill: parent
+        focus: true
+
+        NavTabBar {
+            id: tabBar
+            objectName: "tabBar"
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            tabs: window.tabs
+            currentIndex: window.currentTab
+            onTabRequested: (index) => {
+                window.switchTab(index)
+            }
+            onEnterRequested: window.focusPage()
+        }
+
+        Item {
+            id: pageArea
+            anchors.top: tabBar.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+
+            HomeScreen {
+                id: homeScreen
+                anchors.fill: parent
+                visible: window.currentTab === 0
+                app: window.app
+                library: window.library
+                onNavigate: (tab) => window.navigate(tab)
+            }
+            GamesScreen {
+                id: gamesScreen
+                anchors.fill: parent
+                visible: window.currentTab === 1
+                app: window.app
+                library: window.library
+                onNavigate: (tab) => window.navigate(tab)
+            }
+            EmulatorsScreen {
+                id: emulatorsScreen
+                anchors.fill: parent
+                visible: window.currentTab === 2
+                app: window.app
+            }
+            SettingsScreen {
+                id: settingsScreen
+                anchors.fill: parent
+                visible: window.currentTab === 3
+                app: window.app
+                library: window.library
+                settings: window.settings
+                system: window.system
+            }
+            DiagnosticsScreen {
+                id: diagnosticsScreen
+                anchors.fill: parent
+                visible: window.currentTab === 4
+                app: window.app
+                library: window.library
+                settings: window.settings
+                system: window.system
+            }
+        }
+
+        // Keys the focused control did not handle bubble up to here.
+        Keys.onPressed: (event) => {
+            const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+            const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+            switch (event.key) {
+            case Qt.Key_PageUp:
+                window.switchTab(window.currentTab - 1)
+                break
+            case Qt.Key_PageDown:
+                window.switchTab(window.currentTab + 1)
+                break
+            case Qt.Key_Tab:
+            case Qt.Key_Backtab:
+                if (!ctrl)
+                    return
+                window.switchTab(window.currentTab + (shift || event.key === Qt.Key_Backtab ? -1 : 1))
+                break
+            case Qt.Key_Menu:
+            case Qt.Key_F1:
+                window.openTab("diagnostics")
+                break
+            case Qt.Key_Search:
+                window.focusSearch()
+                break
+            case Qt.Key_F:
+                if (ctrl)
+                    window.focusSearch()
+                break
+            case Qt.Key_Slash:
+                window.focusSearch()
+                break
+            case Qt.Key_Escape:
+            case Qt.Key_Back:
+            case Qt.Key_Backspace:
+                // A console UI never quits on Back; from the tab bar it re-enters the tab.
+                if (tabBar.activeFocus)
+                    window.focusPage()
+                break
+            case Qt.Key_Up:
+                tabBar.forceActiveFocus()
+                break
+            default:
+                return
+            }
+            event.accepted = true
+        }
+    }
+
+    Timer {
+        id: startupQuiet
+        interval: 3000
+        running: true
+    }
+    Toast {
+        id: toast
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.spacing * 1.5
+        z: 20
+    }
+    Connections {
+        target: window.library
+        function onNotice(message, isError) {
+            // The automatic scan at start-up is not worth a notice unless it failed.
+            if (isError || !startupQuiet.running)
+                toast.show(message, isError)
+        }
+    }
+    Connections {
+        target: window.app
+        function onStatusMessageChanged() {
+            if (window.app.statusIsError)
+                toast.show(window.app.statusMessage, true)
+        }
     }
 
     RunningOverlay {
@@ -85,7 +286,16 @@ ApplicationWindow {
         z: 10
         app: window.app
         visible: window.app.busy
-        onVisibleChanged: Qt.callLater(window.restoreFocus)
+        onVisibleChanged: {
+            if (visible) {
+                const item = window.activeFocusItem
+                if (item && window.pageIndexOf(item) >= 0)
+                    window.focusBeforeOverlay = item
+                overlay.forceActiveFocus()
+            } else {
+                Qt.callLater(window.restoreFocus)
+            }
+        }
     }
 
     // Development convenience; the console build will not expose quitting.
@@ -94,5 +304,5 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
 
-    Component.onCompleted: restoreFocus()
+    Component.onCompleted: focusPage()
 }

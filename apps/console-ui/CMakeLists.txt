@@ -7,12 +7,21 @@ set(NEXORA_QML_FILES
     qml/Main.qml
     qml/Theme.qml
     qml/Header.qml
-    qml/LibraryScreen.qml
+    qml/NavTabBar.qml
+    qml/HintBar.qml
+    qml/Toast.qml
+    qml/NxButton.qml
+    qml/SettingRow.qml
+    qml/GameTile.qml
+    qml/GameRow.qml
+    qml/HomeScreen.qml
+    qml/GamesScreen.qml
+    qml/EmulatorsScreen.qml
     qml/EmulatorCard.qml
     qml/EmptyState.qml
-    qml/RunningOverlay.qml
+    qml/SettingsScreen.qml
     qml/DiagnosticsScreen.qml
-    qml/HintBar.qml
+    qml/RunningOverlay.qml
 )
 # Serve the files at qrc:/qt/qml/Nexora/Console/<Name>.qml (without the qml/ subdirectory).
 foreach(qml_file IN LISTS NEXORA_QML_FILES)

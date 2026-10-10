@@ -21,6 +21,18 @@ FocusScope {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
+            text: "NOW PLAYING"
+            color: Theme.accent
+            font.pixelSize: Theme.fontSmall
+            font.bold: true
+            font.letterSpacing: 2
+        }
+        Text {
+            objectName: "runningTitle"
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(implicitWidth, overlay.width - 96)
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
             text: overlay.app.activeEmulatorName
             color: Theme.text
             font.pixelSize: Theme.fontHero
@@ -40,15 +52,16 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             focus: true
             height: 56
-            width: 220
-            radius: 10
+            width: 240
+            radius: 12
             color: Theme.surfaceRaised
             border.width: activeFocus ? Theme.focusWidth : 1
             border.color: activeFocus ? Theme.accent : Theme.border
             opacity: overlay.app.state === "stopping" ? 0.5 : 1.0
+            scale: activeFocus ? 1.04 : 1.0
             Text {
                 anchors.centerIn: parent
-                text: "Stop emulator"
+                text: "■  Stop emulator"
                 color: Theme.text
                 font.pixelSize: Theme.fontBody
                 font.bold: true
@@ -60,7 +73,7 @@ FocusScope {
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "The library returns automatically when the emulator exits.\n"
+            text: "Nexora returns here automatically when the emulator exits.\n"
                   + "Controller: hold Select + Start to stop the emulator and return."
             horizontalAlignment: Text.AlignHCenter
             color: Theme.textMuted
