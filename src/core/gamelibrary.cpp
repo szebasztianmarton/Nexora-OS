@@ -116,6 +116,8 @@ void GameLibrary::refresh()
 void GameLibrary::onScanDone()
 {
     ScanResult result = m_watcher.result();
+    // Entries removed while the scan was running must stay hidden.
+    result.entries.removeIf([this](const GameEntry &entry) { return m_hidden.contains(entry.path); });
     const QDateTime now = QDateTime::currentDateTime();
     bool firstSeenChanged = false;
     for (GameEntry &entry : result.entries) {
@@ -212,7 +214,8 @@ QString GameLibrary::resolveEmulator(const GameEntry &entry, bool *overridden) c
     if (!m_registry)
         return {};
     const QString overrideId = m_overrides.value(entry.path);
-    if (!overrideId.isEmpty() && m_registry->find(overrideId)) {
+    const EmulatorDefinition *chosen = overrideId.isEmpty() ? nullptr : m_registry->find(overrideId);
+    if (chosen && chosen->enabled) {
         *overridden = true;
         return overrideId;
     }

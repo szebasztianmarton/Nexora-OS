@@ -187,9 +187,10 @@ FocusScope {
                 return
             }
             var crashed = result === Launcher.Crashed
+            var name = Emulators.byId(emulatorId).name || qsTr("The emulator")
             shell.openError({
-                title: crashed ? qsTr("%1 stopped unexpectedly").arg(Launcher.activeEmulatorName || Emulators.byId(emulatorId).name)
-                               : qsTr("%1 exited with an error").arg(Emulators.byId(emulatorId).name),
+                title: crashed ? qsTr("%1 stopped unexpectedly").arg(name)
+                               : qsTr("%1 exited with an error").arg(name),
                 message: Launcher.lastErrorMessage,
                 details: (crashed ? qsTr("The process crashed.") : qsTr("Exit code: %1").arg(exitCode))
                          + "\n" + qsTr("Log file: %1").arg(Diagnostics.logFilePath),

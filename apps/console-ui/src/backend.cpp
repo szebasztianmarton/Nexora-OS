@@ -44,7 +44,16 @@ Backend::Backend(const QString &configDirectory, QObject *parent)
         m_window->requestActivate();
     });
     connect(m_settings, &AppSettings::libraryDirectoriesChanged, m_library, &GameLibrary::refresh);
-    connect(m_emulators, &EmulatorRegistry::reloaded, m_library, &GameLibrary::refresh);
+    // GameLibrary re-resolves emulators on reload by itself; a rescan is only
+    // needed when the set of indexable file extensions changed.
+    connect(m_emulators, &EmulatorRegistry::reloaded, this, [this] {
+        const QStringList extensions = m_emulators->supportedExtensions();
+        if (extensions != m_indexedExtensions) {
+            m_indexedExtensions = extensions;
+            m_library->refresh();
+        }
+    });
+    m_indexedExtensions = m_emulators->supportedExtensions();
 }
 
 Backend::~Backend()

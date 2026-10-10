@@ -1,6 +1,7 @@
 #include "emulatordefinition.h"
 
 #include <QFileInfo>
+#include <algorithm>
 #include <QJsonArray>
 #include <QVariantList>
 
@@ -165,15 +166,19 @@ QStringList EmulatorDefinition::buildArguments(const QString &gamePath, const QS
                 break;
             }
         }
+        if (args == arguments && std::none_of(profiles.cbegin(), profiles.cend(),
+                                              [&](const LaunchProfile &p) { return p.id == profileId; }))
+            qWarning("Emulators: %s has no profile \"%s\"; using default arguments",
+                     qPrintable(id), qPrintable(profileId));
     }
     if (gamePath.isEmpty()) {
-        args.removeAll(GamePlaceholder);
+        args.removeIf([](const QString &arg) { return arg.contains(GamePlaceholder); });
         return args;
     }
     bool substituted = false;
     for (QString &arg : args) {
-        if (arg == GamePlaceholder) {
-            arg = gamePath;
+        if (arg.contains(GamePlaceholder)) {
+            arg.replace(GamePlaceholder, gamePath);
             substituted = true;
         }
     }

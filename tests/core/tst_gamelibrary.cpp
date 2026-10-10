@@ -78,6 +78,7 @@ private slots:
     void recordLaunchAndRecentCap();
     void removeFromLibraryKeepsFile();
     void emulatorOverride();
+    void removeDuringScanStaysHidden();
     void firstSeenPersists();
     void corruptStateFile();
     void refreshWhileScanningQueues();
@@ -327,6 +328,30 @@ void TestGameLibrary::emulatorOverride()
 
     restarted.setEmulatorOverride(path, QString());
     QCOMPARE(restarted.get(path).value("emulatorId").toString(), QStringLiteral("mock"));
+
+    // An override pointing at a disabled emulator also falls back.
+    QJsonObject disabledAlt = testutils::mockEntry("alt", {"alt"});
+    disabledAlt["enabled"] = false;
+    testutils::writeEmulators(f.config.path(), {testutils::mockEntry("mock", {"mock"}), disabledAlt});
+    f.registry->reload();
+    restarted.setEmulatorOverride(path, "alt");
+    QCOMPARE(restarted.get(path).value("emulatorId").toString(), QStringLiteral("mock"));
+    QCOMPARE(restarted.get(path).value("emulatorOverridden").toBool(), false);
+}
+
+void TestGameLibrary::removeDuringScanStaysHidden()
+{
+    Fixture f;
+    const QString path = f.game("Removed.mock");
+    f.game("Kept.mock");
+    GameLibrary library(f.config.path(), f.settings, f.registry);
+    QVERIFY(scan(library));
+    QSignalSpy finished(&library, &GameLibrary::scanFinished);
+    library.refresh();                // worker gets the old (empty) hidden list
+    library.removeFromLibrary(path);  // removed while the scan is running
+    QVERIFY(finished.wait(Timeout));
+    QVERIFY(library.get(path).isEmpty());
+    QCOMPARE(library.model()->count(), 1);
 }
 
 void TestGameLibrary::firstSeenPersists()

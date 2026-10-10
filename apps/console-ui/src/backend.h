@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class QQmlEngine;
 class QWindow;
@@ -52,6 +53,7 @@ private:
     ControllerManager *m_controllers;
     Diagnostics *m_diagnostics;
     QWindow *m_window = nullptr;
+    QStringList m_indexedExtensions;
 };
 
 } // namespace nexora

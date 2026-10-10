@@ -33,10 +33,12 @@ enum class EmulatorStatus {
 //   "platforms": ["Test Platform"], "extensions": ["mock"],
 //   "profiles": [{"id": "windowed", "name": "Windowed", "arguments": ["{game}"]}]
 // }
-// The literal argument "{game}" is replaced by the absolute game path as ONE argv
-// element. Arguments are never passed through a shell. If a game is launched and
-// no "{game}" placeholder exists, the path is appended as the final argument.
-// When launching the emulator without a game, "{game}" elements are dropped.
+// "{game}" in an argument is replaced by the absolute game path, either as a
+// whole argument or embedded ("--rom={game}"); each argument stays ONE argv
+// element and is never passed through a shell. If a game is launched and no
+// argument contains "{game}", the path is appended as the final argument.
+// When launching the emulator without a game, arguments containing "{game}"
+// are dropped.
 struct EmulatorDefinition
 {
     QString id;

@@ -61,11 +61,15 @@ QHash<int, QByteArray> GameModel::roleNames() const
 
 int GameModel::indexOfPath(const QString &path) const
 {
-    for (int row = 0; row < m_entries.size(); ++row) {
-        if (m_entries.at(row).path == path)
-            return row;
-    }
-    return -1;
+    return m_rowByPath.value(path, -1);
+}
+
+void GameModel::rebuildIndex()
+{
+    m_rowByPath.clear();
+    m_rowByPath.reserve(m_entries.size());
+    for (int row = 0; row < m_entries.size(); ++row)
+        m_rowByPath.insert(m_entries.at(row).path, row);
 }
 
 const GameEntry *GameModel::entry(const QString &path) const
@@ -79,6 +83,7 @@ void GameModel::resetEntries(const QList<GameEntry> &entries)
     const qsizetype oldCount = m_entries.size();
     beginResetModel();
     m_entries = entries;
+    rebuildIndex();
     endResetModel();
     if (oldCount != m_entries.size())
         emit countChanged();
@@ -100,6 +105,7 @@ void GameModel::removeEntry(const QString &path)
         return;
     beginRemoveRows({}, row, row);
     m_entries.removeAt(row);
+    rebuildIndex();
     endRemoveRows();
     emit countChanged();
 }

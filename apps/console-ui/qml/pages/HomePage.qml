@@ -34,17 +34,18 @@ PageContainer {
         Emulators.validateAll()
         refreshHero()
     }
+    // Bulk model updates emit many signals; Qt.callLater coalesces them into one refresh.
     Connections {
         target: Library
-        function onStateChanged() { page.refreshHero() }
-        function onFavoriteChanged() { page.refreshHero() }
-        function onScanFinished() { page.refreshHero() }
+        function onStateChanged() { Qt.callLater(page.refreshHero) }
+        function onFavoriteChanged() { Qt.callLater(page.refreshHero) }
+        function onScanFinished() { Qt.callLater(page.refreshHero) }
     }
     Connections {
         target: Library.model
-        function onModelReset() { page.refreshHero() }
-        function onDataChanged() { page.refreshHero() }
-        function onRowsRemoved() { page.refreshHero() }
+        function onModelReset() { Qt.callLater(page.refreshHero) }
+        function onDataChanged() { Qt.callLater(page.refreshHero) }
+        function onRowsRemoved() { Qt.callLater(page.refreshHero) }
     }
 
     readonly property string statusMessage: {

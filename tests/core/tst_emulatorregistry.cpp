@@ -239,6 +239,11 @@ void TestEmulatorRegistry::buildArguments()
     noPlaceholder.arguments = {"-v"};
     QCOMPARE(noPlaceholder.buildArguments(game), QStringList({"-v", game}));
     QCOMPARE(noPlaceholder.buildArguments(QString()), QStringList({"-v"}));
+
+    EmulatorDefinition embedded;
+    embedded.arguments = {"-L", "core.so", "--rom={game}"};
+    QCOMPARE(embedded.buildArguments(game), QStringList({"-L", "core.so", "--rom=" + game}));
+    QCOMPARE(embedded.buildArguments(QString()), QStringList({"-L", "core.so"}));
 }
 
 void TestEmulatorRegistry::supportedExtensions()

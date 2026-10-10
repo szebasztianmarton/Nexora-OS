@@ -99,6 +99,11 @@ bool EmulatorManager::launch(const QString &emulatorId, const QString &gamePath,
     connect(process, &QProcess::started, this, [this] {
         m_runTimer.start();
         qInfo("Launcher: %s started (pid %lld)", qPrintable(m_activeName), qint64(m_process->processId()));
+        if (m_state == Stopping) {
+            // Stop was requested before a pid existed: deliver it now.
+            m_process->terminate();
+            return;
+        }
         setState(Running);
         emit processStarted(m_activeId, m_activeGame);
     });

@@ -71,7 +71,10 @@ signals:
     void countChanged();
 
 private:
+    void rebuildIndex();
+
     QList<GameEntry> m_entries;
+    QHash<QString, int> m_rowByPath; // path -> row, kept in sync with m_entries
     QHash<QString, QPair<QString, QString>> m_emulatorInfo;
 };
 

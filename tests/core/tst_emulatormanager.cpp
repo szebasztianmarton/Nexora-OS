@@ -32,6 +32,7 @@ private slots:
     void secondLaunchRefused();
     void terminateStops();
     void terminateKillsStubbornProcess();
+    void terminateWhileLaunching();
     void retryRelaunches();
     void argumentsAreSeparateArgv();
     void destructorKillsChild();
@@ -231,6 +232,21 @@ void TestEmulatorManager::terminateStops()
     QVERIFY(finished.wait(Timeout));
     QCOMPARE(m_manager->state(), EmulatorManager::Idle);
     QCOMPARE(m_manager->lastResult(), EmulatorManager::NormalExit); // user stop is not an error
+    QVERIFY(!m_manager->canRetry());
+}
+
+void TestEmulatorManager::terminateWhileLaunching()
+{
+    QSignalSpy started(m_manager, &EmulatorManager::processStarted);
+    QSignalSpy finished(m_manager, &EmulatorManager::processFinished);
+    QVERIFY(m_manager->launch("long"));
+    QCOMPARE(m_manager->state(), EmulatorManager::Launching);
+    m_manager->terminate(); // before the process has a pid
+    QCOMPARE(m_manager->state(), EmulatorManager::Stopping);
+    QVERIFY(finished.wait(Timeout));
+    QCOMPARE(m_manager->state(), EmulatorManager::Idle);
+    QCOMPARE(started.count(), 0);  // never reported as running
+    QCOMPARE(m_manager->lastResult(), EmulatorManager::NormalExit);
     QVERIFY(!m_manager->canRetry());
 }
 
