@@ -1,0 +1,27 @@
+find_package(Qt6 REQUIRED COMPONENTS Test)
+
+# nexora_add_core_test(<name> [GUI])
+# GUI tests run on the offscreen platform so no display is required.
+function(nexora_add_core_test name)
+    cmake_parse_arguments(ARG "GUI" "" "" ${ARGN})
+    add_executable(${name} ${name}.cpp testutils.h)
+    target_link_libraries(${name} PRIVATE nexora_core Qt6::Test)
+    target_compile_options(${name} PRIVATE -Wall -Wextra)
+    target_compile_definitions(${name} PRIVATE
+        NEXORA_MOCK_EMULATOR="$<TARGET_FILE:nexora-mock-emulator>")
+    add_dependencies(${name} nexora-mock-emulator)
+    add_test(NAME ${name} COMMAND ${name})
+    if(ARG_GUI)
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
+    set_tests_properties(${name} PROPERTIES TIMEOUT 120)
+endfunction()
+
+nexora_add_core_test(tst_appsettings)
+nexora_add_core_test(tst_emulatorregistry)
+nexora_add_core_test(tst_emulatormanager)
+nexora_add_core_test(tst_gamelibrary)
+nexora_add_core_test(tst_gamefiltermodel)
+nexora_add_core_test(tst_controllermanager GUI)
+nexora_add_core_test(tst_diagnostics GUI)
+nexora_add_core_test(tst_directorybrowser)
