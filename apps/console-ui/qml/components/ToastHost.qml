@@ -6,6 +6,7 @@ import QtQuick
 Item {
     id: host
     property int maxVisible: 3
+    readonly property int count: toasts.count
 
     function show(message, kind) {
         if (toasts.count > 0 && toasts.get(toasts.count - 1).message === message) {
