@@ -11,6 +11,11 @@ SystemController::SystemController(system::SystemIntegration *system, QObject *p
     : QObject(parent)
     , m_system(system)
 {
+    // Keep the display lines current when monitors are connected or removed.
+    if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        connect(app, &QGuiApplication::screenAdded, this, &SystemController::refresh);
+        connect(app, &QGuiApplication::screenRemoved, this, &SystemController::refresh);
+    }
     refresh();
 }
 
@@ -49,6 +54,11 @@ void SystemController::refresh()
                              .arg(screen->size().height())
                              .arg(screen->refreshRate(), 0, 'f', 0));
     }
+    const system::UpdateInfo update = m_system->updateInfo();
+    lines.append(QStringLiteral("Updates: %1%2")
+                     .arg(update.installedVersion.isEmpty() ? QString()
+                                                            : QStringLiteral("image %1, ").arg(update.installedVersion),
+                          update.message));
     m_lines = lines;
     emit statusChanged();
 }

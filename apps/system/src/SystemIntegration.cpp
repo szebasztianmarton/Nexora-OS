@@ -104,6 +104,17 @@ SystemStatus SystemIntegration::status() const
     return s;
 }
 
+UpdateInfo SystemIntegration::updateInfo() const
+{
+    UpdateInfo info;
+    info.installedVersion = keyValue(m_env.nexoraReleaseFile, QStringLiteral("NEXORA_VERSION"));
+    info.channel = keyValue(m_env.nexoraReleaseFile, QStringLiteral("NEXORA_UPDATE_CHANNEL"));
+    info.message = platform() == Platform::Embedded
+        ? QStringLiteral("In-place system updates are not implemented yet; write a newer image to update")
+        : QStringLiteral("Updates are managed by the host system (rebuild or reinstall Nexora)");
+    return info;
+}
+
 DesktopSystemIntegration::DesktopSystemIntegration(Environment env, QObject *parent)
     : SystemIntegration(parent)
 {
@@ -140,6 +151,7 @@ bool EmbeddedSystemIntegration::supports(Capability capability) const
         return fifo.exists() && fifo.isWritable();
     }
     case Capability::Volume: return QFileInfo(m_env.mixerProgram).isExecutable();
+    case Capability::Update: return false; // no update mechanism yet (see updateInfo())
     }
     return false;
 }

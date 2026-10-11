@@ -53,6 +53,27 @@ private slots:
         QCOMPARE(SystemIntegration::create(env)->platformName(), QStringLiteral("embedded"));
     }
 
+    void reportsUpdateInfoWithoutAMechanism()
+    {
+        QTemporaryDir dir;
+        const auto env = fakeEnv(dir);
+        auto desktop = SystemIntegration::create(env, QStringLiteral("desktop"));
+        QVERIFY(!desktop->supports(Capability::Update));
+        UpdateInfo info = desktop->updateInfo();
+        QVERIFY(!info.supported);
+        QVERIFY(info.installedVersion.isEmpty());
+        QVERIFY(!info.message.isEmpty());
+
+        write(env.nexoraReleaseFile, "NEXORA_VERSION=\"0.2.0\"\nNEXORA_PLATFORM=embedded\nNEXORA_UPDATE_CHANNEL=dev\n");
+        auto embedded = SystemIntegration::create(env);
+        QVERIFY(!embedded->supports(Capability::Update));
+        info = embedded->updateInfo();
+        QVERIFY(!info.supported);
+        QCOMPARE(info.installedVersion, QStringLiteral("0.2.0"));
+        QCOMPARE(info.channel, QStringLiteral("dev"));
+        QVERIFY(info.message.contains(QStringLiteral("image")));
+    }
+
     void readsStatusFromProc()
     {
         QTemporaryDir dir;
