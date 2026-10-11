@@ -4,7 +4,7 @@ A Linux-based gaming operating system built for controller-first gaming.
 
 Nexora OS is intended to be a gaming operating system, built from open-source components, that provides a console-like experience on x86-64 PCs and mini PCs. Its goal is to bring compatible native Linux emulators together in a unified, controller-driven interface. (The license of Nexora OS itself has not been decided yet; see [Licensing](#licensing).)
 
-> **Status:** MVP 2 (version 0.2.0) — a controller-driven gaming dashboard with game library, settings and system integration, running as a desktop prototype. A Buildroot image definition exists, but no image has been built or booted yet. See [Project Status](#project-status).
+> **Status:** MVP 2 (version 0.2.0) — a controller-driven gaming dashboard with game library, settings and system integration, running as a desktop prototype. A Buildroot image definition exists and has been partially built (no Qt/kernel/image yet), but no image has been produced or booted. See [Project Status](#project-status).
 
 ## Contents
 
@@ -57,7 +57,7 @@ Current stage: **MVP 2**, merged into `main` (roadmap phases 1–3 done on a des
 | evdev gamepad backend | Mapping/navigation unit-tested; no real controller tested | Same, plus configurable mapping and remap capture; no real controller tested |
 | SDL3 gamepad backend (optional) | Compiles/links against SDL 3.2.30 | Unchanged; not available in the Buildroot image |
 | Real emulators | None tested | None tested; no compatibility with any real emulator is claimed |
-| Buildroot image | Not started | External tree validated with `check-package`, defconfig-symbol and kernel-fragment checks; full image build in progress and **unverified** — no image built or booted |
+| Buildroot image | Not started | External tree validated (`check-package`, defconfig symbols, kernel fragment); all sources downloaded and hash-checked; a full build compiled 75 of the packages (toolchain, host tools, host + target LLVM, …) before a 2-hour session limit stopped it during target Clang. Qt 6, Mesa, kernel, GRUB, `nexora-os` and the disk image are **not built yet**: **no image exists**, nothing booted |
 
 Nexora OS is experimental software. Hardware compatibility, supported emulators, and release readiness will be documented as development progresses.
 
