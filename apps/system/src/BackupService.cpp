@@ -306,14 +306,37 @@ bool BackupService::restoreBackup(const QString &backupDir, QString *error)
     }
 
     // ---- Apply: move the current files aside, then copy the backup in. ----
+    //
+    // Atomic across the whole file set: besides restoring the item that itself failed (as
+    // before), a failure on item N also rolls back every item 1..N-1 already swapped in
+    // this call, in reverse order, so the live DataLayout never ends up a mix of old and
+    // new files.
+    struct Committed
+    {
+        QString destination;
+        QString aside; // empty if the destination did not exist before this restore
+    };
+    QList<Committed> committed;
+    auto rollbackCommitted = [&] {
+        for (auto it = committed.crbegin(); it != committed.crend(); ++it) {
+            QFile::remove(it->destination);
+            if (!it->aside.isEmpty())
+                QFile::rename(it->aside, it->destination);
+        }
+    };
+
     for (const Item &item : items) {
-        if (!QDir().mkpath(QFileInfo(item.destination).absolutePath()))
+        if (!QDir().mkpath(QFileInfo(item.destination).absolutePath())) {
+            rollbackCommitted();
             return fail(error, QStringLiteral("cannot create directory for %1").arg(item.destination));
+        }
         QString aside;
         if (QFileInfo::exists(item.destination)) {
             aside = shared::moveAside(item.destination, QStringLiteral("pre-restore"));
-            if (aside.isEmpty())
+            if (aside.isEmpty()) {
+                rollbackCommitted();
                 return fail(error, QStringLiteral("cannot move %1 aside").arg(item.destination));
+            }
         }
         // A stale WAL/SHM next to a replaced database would be replayed into the restored one.
         if (item.destination.endsWith(QLatin1String(".sqlite"))) {
@@ -326,8 +349,10 @@ bool BackupService::restoreBackup(const QString &backupDir, QString *error)
             QFile::remove(temp);
             if (!aside.isEmpty() && !QFileInfo::exists(item.destination))
                 QFile::rename(aside, item.destination);
+            rollbackCommitted();
             return fail(error, QStringLiteral("restore of %1 failed: %2").arg(item.destination, copyError));
         }
+        committed.append({item.destination, aside});
     }
     return true;
 }

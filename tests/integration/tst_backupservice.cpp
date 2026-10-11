@@ -11,6 +11,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <unistd.h>
+
 using namespace nexora::system;
 using nexora::shared::DataLayout;
 
@@ -163,6 +165,40 @@ private slots:
                                           .entryList({QStringLiteral("slot1.sav.pre-restore-*")}, QDir::Files);
         QCOMPARE(saveAside.size(), 1);
         QCOMPARE(read(QFileInfo(fx.save).absolutePath() + u'/' + saveAside[0]), QByteArray("NEWER-SAVE"));
+    }
+
+    void midApplyFailureRollsBackAlreadyAppliedFiles()
+    {
+        if (::geteuid() == 0)
+            QSKIP("root ignores file permissions");
+        Fixture fx;
+        BackupService service(fx.layout, copySnapshot(fx.library));
+        QString error;
+        const auto path = service.createBackup(false, &error);
+        QVERIFY2(path.has_value(), qPrintable(error));
+
+        write(fx.settings, "{\"version\":1,\"volume\":99}");
+        write(fx.library, "CHANGED-LIBRARY");
+        write(fx.history, "{\"version\":1,\"entries\":[\"x\"]}");
+
+        // The manifest lists settings.json before library.sqlite. Deny writes into dataDir
+        // so the library item cannot be swapped in, after settings.json has already been
+        // applied -- simulating a permission change partway through a multi-file restore.
+        QVERIFY(QFile::setPermissions(fx.layout.dataDir, QFile::ReadOwner | QFile::ExeOwner));
+        const bool ok = service.restoreBackup(*path, &error);
+        QFile::setPermissions(fx.layout.dataDir, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+
+        QVERIFY(!ok);
+        QVERIFY(!error.isEmpty());
+        // Every live file, including the one already swapped before the failure, keeps its
+        // pre-restore content: nothing is left half-restored.
+        QCOMPARE(read(fx.settings), QByteArray("{\"version\":1,\"volume\":99}"));
+        QCOMPARE(read(fx.library), QByteArray("CHANGED-LIBRARY"));
+        QCOMPARE(read(fx.history), QByteArray("{\"version\":1,\"entries\":[\"x\"]}"));
+        QVERIFY(QDir(fx.layout.configDir).entryList({QStringLiteral("*.pre-restore-*")}, QDir::Files).isEmpty());
+        QVERIFY(QDir(fx.layout.dataDir)
+                    .entryList({QStringLiteral("*.pre-restore-*"), QStringLiteral("*.restore-tmp")}, QDir::Files)
+                    .isEmpty());
     }
 
     void tamperedFileRefusesRestoreAndChangesNothing()

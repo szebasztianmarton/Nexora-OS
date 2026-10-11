@@ -47,8 +47,11 @@ public:
     // Verifies the manifest and every hash first (all or nothing): refuses a path that is
     // absolute, contains "..", is a symlink, is outside the known locations, or a file in
     // the backup that the manifest does not list. Then moves each current file aside to
-    // "<file>.pre-restore-<ts>" and copies the backup in. The caller must have closed the
-    // library database.
+    // "<file>.pre-restore-<ts>" and copies the backup in, one file at a time. The whole
+    // file set is atomic: if any file fails to apply, every file already swapped earlier
+    // in this call is rolled back to its pre-restore content before returning false, so
+    // the live data never ends up a mix of old and new files. The caller must have closed
+    // the library database.
     bool restoreBackup(const QString &backupDir, QString *error);
 
     QStringList listBackups() const; // absolute paths, newest first
