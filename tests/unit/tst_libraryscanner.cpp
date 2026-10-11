@@ -242,6 +242,21 @@ private slots:
         QCOMPARE(roots.first(), QFileInfo(dir.path()).canonicalFilePath());
     }
 
+    void cancelDuringTheWalkKeepsAPartialResult()
+    {
+        QTemporaryDir dir;
+        for (int i = 0; i < 250; ++i)
+            touch(dir.filePath(QStringLiteral("g%1.sfc").arg(i)));
+        std::atomic_bool cancel{false};
+        const auto r = LibraryScanner::scan(options({dir.path()}), &cancel, [&](int filesSeen, const QString &) {
+            if (filesSeen >= 100)
+                cancel.store(true); // first 100-file mark: the walk is in progress
+        });
+        QVERIFY(r.cancelled);
+        QVERIFY(!r.files.isEmpty());
+        QVERIFY(r.files.size() < 250);
+    }
+
     void canBeCancelled()
     {
         QTemporaryDir dir;

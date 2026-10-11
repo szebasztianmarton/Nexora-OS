@@ -177,7 +177,14 @@ bool GameDatabase::migrate()
         m_lastError = QStringLiteral("unsupported library database schema %1").arg(version);
         return false;
     }
-    return backupBeforeMigration(version) && migrateV1ToV2();
+    if (!backupBeforeMigration(version) || !migrateV1ToV2())
+        return false;
+    if (!m_backupPath.isEmpty()) {
+        m_issues.append(QStringLiteral("library database upgraded to schema %1; the previous version was saved as %2")
+                            .arg(SchemaVersion)
+                            .arg(m_backupPath));
+    }
+    return true;
 }
 
 bool GameDatabase::createSchema()
@@ -236,9 +243,6 @@ bool GameDatabase::backupBeforeMigration(int fromVersion)
         return false;
     }
     m_backupPath = backup;
-    m_issues.append(QStringLiteral("library database upgraded to schema %1; the previous version was saved as %2")
-                        .arg(SchemaVersion)
-                        .arg(backup));
     return true;
 }
 
