@@ -114,12 +114,13 @@ Synthesized keys are fixed; the button for each remappable action comes from `in
 | Action | Default button | Xbox / PlayStation / Nintendo label | Synthesized key | In the dashboard |
 | --- | --- | --- | --- | --- |
 | `accept` | `south` | A / ✕ / B | `Return` | Select / launch / confirm (destructive actions such as power off need a second press) |
-| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker, cancel a pending confirmation or remap capture; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
+| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker or game options, cancel a pending confirmation or remap capture; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
 | `menu` | `start` | Menu / Options / + | `Menu` | Open the Diagnostics tab |
-| `favorite` | `north` | Y / △ / X | `Favorites` | Toggle favorite of the focused game (Home rows, Games grid) |
+| `favorite` | `north` | Y / △ / X | `Favorites` | Toggle favorite of the focused game (Home rows, Games grid); in the Emulators tab's profile picker, make the selected profile the default |
 | `search` | `west` | X / □ / Y | `Search` | Open the Games tab with the search field focused |
 | `prevTab` | `l1` | LB / L1 / L | `PageUp` | Previous tab (Home, Games, Emulators, Settings, Diagnostics) |
 | `nextTab` | `r1` | RB / R1 / R | `PageDown` | Next tab |
+| `options` | `select` | View / Share (Create) / − | `Context1` | Open the [game options](game-library.md#game-options) of the focused game (Home rows, Games grid); closes them again |
 | Up/Down/Left/Right | D-pad, hat, left stick | (fixed) | arrow keys | Move focus; Up at the top of a page moves to the tab bar; Left/Right change values on Settings rows |
 
 The dashboard behaviour is defined in `apps/console-ui/qml/` and covered by `tst_qmlsmoke` with key events. The hint bar at the bottom shows the keys that apply to the focused element.
@@ -130,10 +131,10 @@ The `input.mapping` setting maps action → button ([settings.md](settings.md#ke
 
 ```json
 "input.mapping": {"accept": "south", "back": "east", "menu": "start", "favorite": "north",
-                  "search": "west", "prevTab": "l1", "nextTab": "r1"}
+                  "search": "west", "prevTab": "l1", "nextTab": "r1", "options": "select"}
 ```
 
-- Remappable actions: `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`.
+- Remappable actions: `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`, `options`.
 - Buttons: `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1`.
 
 Validation (`ButtonMapping::fromVariantMap()`), applied when the setting is loaded or changed:
@@ -143,7 +144,7 @@ Validation (`ButtonMapping::fromVariantMap()`), applied when the setting is load
 | Action and button names must be known | Whole mapping ignored |
 | A button may be bound to only one action | Whole mapping ignored |
 | `accept` and `back` must be bound | Whole mapping ignored |
-| Other actions may be left out | They are simply unbound |
+| Other actions may be left out | They are simply unbound, except `options` (added in a later version): when a stored mapping does not mention it and `select` is free, it is bound to `select`, so mappings saved before it existed gain it |
 
 An ignored mapping falls back to the **default** mapping; the settings screen lists "Controller mapping ignored (<reasons>); using defaults" and the log has a warning in `nexora.input`.
 
@@ -164,9 +165,9 @@ Not configurable in MVP 2:
 | Directions | D-pad buttons, hat axes and the left stick always navigate. Sticks/hats trigger at \|value\| ≥ 0.5 and release below 0.3 (hysteresis); flicking straight to the opposite side registers. |
 | Auto-repeat | A held direction repeats after 400 ms, then every 120 ms. Only the most recently pressed direction repeats; releasing it stops repeat even if an older direction is still held. Buttons never repeat. |
 | Return to launcher | Hold **Select + Start** on the same controller for **1 second**: the running emulator is asked to stop (SIGTERM, SIGKILL after its stop timeout, 5 s by default). Fires once per hold; releasing either button earlier cancels it. Works while navigation is suspended. Does nothing when no emulator is starting/running. |
-| Guide / Select fallback | If `guide` or `select` is not bound to any action, pressing it triggers `menu`. |
+| Guide / Select fallback | If `guide` or `select` is not bound to any action, pressing it triggers `menu`. With the default mapping `select` is bound to `options`, so only Guide falls back. |
 
-Note: pressing Start or Select also triggers their normal action (by default `menu`) when navigation is not suspended, including at the start of the chord.
+Note: pressing Start or Select also triggers their normal action (by default `menu` and `options`) when navigation is not suspended, including at the start of the chord. While an emulator runs, navigation is suspended, so only the chord counts.
 
 ## Keyboard
 
@@ -186,6 +187,7 @@ The keyboard always works, with or without a controller backend. Because gamepad
 | --- | --- |
 | `F1` | Diagnostics tab (like Menu) |
 | `F` (no modifier) on a focused game | Toggle favorite |
+| `O` (no modifier) on a focused game | Game options (like `options`) |
 | `/` or `Ctrl+F` | Search on the Games tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | `Backspace` | Same as Esc |
@@ -228,7 +230,7 @@ Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --wind
 2. **Permissions:** as a user without `input` group membership, the status explains the permission problem; after adding the group and logging in again, the pad is detected.
 3. **Hotplug:** unplug → "Gamepad disconnected" in the log and device list updates; plug in again → detected within about a second.
 4. **Face buttons by position:** bottom = confirm, right = back, top = favorite, left = search. Note any swapped pair (especially west/north on Xbox pads under evdev).
-5. **Start / Select / Guide:** Start opens the Diagnostics tab (menu action); Guide and Select do the same while unbound.
+5. **Start / Select / Guide:** Start opens the Diagnostics tab (menu action); Select on a game opens its options; Guide opens Diagnostics while unbound.
 6. **Shoulders:** L1/R1 switch to the previous/next tab.
 7. **Directions:** D-pad, left stick and (if the pad reports one) the hat all move focus; a held direction repeats; releasing stops immediately; resting stick does not drift.
 8. **Remap:** remap `favorite` to L1 from the settings screen; check that `prevTab` moved to the old favorite button, the new binding works, it survives a restart, and an unpressed capture times out after 5 s.
