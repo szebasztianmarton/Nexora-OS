@@ -20,3 +20,6 @@ nexora_add_test(tst_systemcatalog SOURCES tst_systemcatalog.cpp LIBS nexora_shar
 nexora_add_test(tst_emulatorhealth SOURCES tst_emulatorhealth.cpp
     LIBS nexora_emulator_manager LABELS unit FAKE_EMULATOR)
 nexora_add_test(tst_launchhistory SOURCES tst_launchhistory.cpp LIBS nexora_emulator_manager LABELS unit)
+nexora_add_test(tst_hardwareinfo SOURCES tst_hardwareinfo.cpp LIBS nexora_system LABELS unit)
+target_compile_definitions(tst_hardwareinfo PRIVATE NEXORA_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures")
+nexora_add_test(tst_diagnosticreport SOURCES tst_diagnosticreport.cpp LIBS nexora_system LABELS unit)

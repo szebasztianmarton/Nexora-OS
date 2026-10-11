@@ -8,3 +8,5 @@ nexora_add_test(tst_uicontext SOURCES tst_uicontext.cpp
     LIBS nexora_ui LABELS integration GUI FAKE_EMULATOR)
 nexora_add_test(tst_qmlsmoke SOURCES tst_qmlsmoke.cpp
     LIBS nexora_uiplugin nexora_ui Qt6::Quick Qt6::QuickControls2 LABELS integration GUI FAKE_EMULATOR)
+nexora_add_test(tst_backupservice SOURCES tst_backupservice.cpp
+    LIBS nexora_system LABELS integration)

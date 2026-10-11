@@ -1,7 +1,13 @@
 add_library(nexora_system STATIC
+    include/nexora/system/BackupService.h
+    include/nexora/system/DiagnosticReport.h
+    include/nexora/system/HardwareInfo.h
     include/nexora/system/SystemIntegration.h
     include/nexora/system/SingleInstanceGuard.h
     include/nexora/system/UnixSignalWatcher.h
+    src/BackupService.cpp
+    src/DiagnosticReport.cpp
+    src/HardwareInfo.cpp
     src/SystemIntegration.cpp
     src/SingleInstanceGuard.cpp
     src/UnixSignalWatcher.cpp
