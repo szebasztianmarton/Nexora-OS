@@ -37,6 +37,7 @@ class LibraryController : public QObject
     Q_PROPERTY(QStringList directories READ directories NOTIFY directoriesChanged)
     Q_PROPERTY(QStringList issues READ issues NOTIFY contentChanged)
     Q_PROPERTY(QString lastScanSummary READ lastScanSummary NOTIFY contentChanged)
+    Q_PROPERTY(int missingCount READ missingCount NOTIFY contentChanged)
 
 public:
     LibraryController(library::GameLibrary *library, shared::Settings *settings, AppController *app,
@@ -59,9 +60,20 @@ public:
     QStringList directories() const;
     QStringList issues() const;
     QString lastScanSummary() const;
+    int missingCount() const { return m_library->missingCount(); }
 
     Q_INVOKABLE bool refresh();
     Q_INVOKABLE bool launch(qint64 gameId);
+    // Launches with an explicit profile; "" = the emulator's own arguments (no profile).
+    Q_INVOKABLE bool launchWithProfile(qint64 gameId, const QString &profileId);
+    // For the game options dialog: title, path, size, play history, the effective emulator,
+    // "emulators" (every emulator declaring the file's extension: id, name, available,
+    // reason, selected), "automatic" (no override set), and "profiles" (enabled launch
+    // profiles of the effective emulator: id, name, isDefault). Empty map if unknown.
+    Q_INVOKABLE QVariantMap gameDetails(qint64 gameId) const;
+    // Chooses which emulator launches the game; "" returns to automatic (first candidate).
+    // Only emulators that declare the file's extension are accepted.
+    Q_INVOKABLE bool setGameEmulator(qint64 gameId, const QString &emulatorId);
     Q_INVOKABLE bool toggleFavorite(qint64 gameId);
     // Adds/removes a library directory (persisted in settings) and rescans.
     Q_INVOKABLE bool addDirectory(const QString &path);
@@ -84,6 +96,7 @@ signals:
 private:
     void rebuildViews();
     void rebuildEmulatorInfo();
+    bool launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile);
 
     library::GameLibrary *m_library;
     shared::Settings *m_settings;

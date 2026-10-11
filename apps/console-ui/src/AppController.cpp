@@ -106,7 +106,7 @@ bool AppController::launchProfile(const QString &emulatorId, const QString &prof
 }
 
 bool AppController::launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                               const QString &profileId)
+                               const QString &profileId, bool applyDefaultProfile)
 {
     const auto config = m_model.find(emulatorId);
     if (!config) {
@@ -117,7 +117,7 @@ bool AppController::launchGame(const QString &emulatorId, const QString &gamePat
         return false;
     }
     QString profile = profileId;
-    if (profile.isEmpty()) {
+    if (profile.isEmpty() && applyDefaultProfile) {
         profile = m_defaultProfiles.value(emulatorId).toString();
         const auto *p = config->profile(profile);
         if (!p || !p->enabled)

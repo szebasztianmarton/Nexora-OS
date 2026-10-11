@@ -22,6 +22,7 @@ struct GameLibrary::ScanJob
     bool merged = false; // the worker attempted the merge
     std::optional<ApplyStats> stats; // set when the worker's merge succeeded
     QList<GameEntry> entries; // database content after the merge
+    int missingCount = 0;
     QString error;
 };
 
@@ -114,6 +115,7 @@ bool GameLibrary::refresh()
         db.setMeta(QStringLiteral("scan-signature"), signature);
         db.setMeta(QStringLiteral("last-scan"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         job->entries = db.entries();
+        job->missingCount = db.missingCount();
         qCDebug(lcLibrary) << "Merged" << job->scan.files.size() << "scanned file(s) on the scan thread in"
                            << timer.elapsed() << "ms";
     });
@@ -158,6 +160,7 @@ void GameLibrary::onScanDone(ScanJob &job, quint64 writeGeneration)
             m_lastStats = *job.stats;
             if (writeGeneration == m_writeGeneration) {
                 m_entries = std::move(job.entries);
+                m_missingCount = job.missingCount;
                 emit entriesChanged();
             } else {
                 reloadEntries(); // a favorite/launch was written meanwhile; the snapshot may lack it
@@ -191,6 +194,7 @@ void GameLibrary::onScanDone(ScanJob &job, quint64 writeGeneration)
 
 void GameLibrary::reloadEntries()
 {
+    m_missingCount = m_db.missingCount();
     m_entries = m_db.entries();
     emit entriesChanged();
 }

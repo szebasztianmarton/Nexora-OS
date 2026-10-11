@@ -7,12 +7,13 @@ FocusScope {
     id: screen
     objectName: "emulatorsScreen"
     required property AppController app
+    required property SettingsController settings
 
     readonly property alias currentIndex: list.currentIndex
     readonly property bool pickerOpen: picker.visible
     readonly property var hints: picker.visible
         ? [{ button: "↑ ↓", action: "Select profile" }, { button: "A / Enter", action: "Launch" },
-           { button: "B / Esc", action: "Cancel" }]
+           { button: "Y / F", action: "Set as default" }, { button: "B / Esc", action: "Cancel" }]
         : [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Launch" },
            { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "Diagnostics" }]
 
@@ -123,16 +124,35 @@ FocusScope {
         property string emulatorName
         property var choices: []
 
-        function open(id, name, profiles) {
+        property var profiles: []
+
+        function buildChoices() {
+            const current = screen.settings.defaultProfile(emulatorId)
+            const c = [{ id: "", name: "Emulator defaults", detail: "No launch profile", isDefault: current === "" }]
+            for (let i = 0; i < profiles.length; ++i)
+                c.push({ id: profiles[i].id, name: profiles[i].name, detail: "Profile “" + profiles[i].id + "”",
+                         isDefault: profiles[i].id === current })
+            choices = c
+        }
+        function open(id, name, profileList_) {
             emulatorId = id
             emulatorName = name
-            const c = [{ id: "", name: "Default", detail: "Emulator defaults" }]
-            for (let i = 0; i < profiles.length; ++i)
-                c.push({ id: profiles[i].id, name: profiles[i].name, detail: "Profile “" + profiles[i].id + "”" })
-            choices = c
-            profileList.currentIndex = 0
+            profiles = profileList_
+            buildChoices()
+            let start = 0
+            for (let i = 0; i < choices.length; ++i) {
+                if (choices[i].isDefault)
+                    start = i
+            }
+            profileList.currentIndex = start
             visible = true
             profileList.forceActiveFocus()
+        }
+        function setCurrentAsDefault() {
+            const index = profileList.currentIndex
+            screen.settings.setDefaultProfile(emulatorId, choices[index].id)
+            buildChoices()
+            profileList.currentIndex = index
         }
         function close() {
             visible = false
@@ -142,10 +162,7 @@ FocusScope {
             const choice = choices[profileList.currentIndex]
             const id = emulatorId
             close()
-            if (choice.id.length > 0)
-                screen.app.launchProfile(id, choice.id)
-            else
-                screen.app.launch(id)
+            screen.app.launchProfile(id, choice.id) // "" = no profile
         }
 
         Rectangle {
@@ -178,7 +195,7 @@ FocusScope {
                     elide: Text.ElideRight
                 }
                 Text {
-                    text: "Choose a launch profile"
+                    text: "Choose a launch profile · Y / F makes it the default for this emulator and its games"
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSmall
                 }
@@ -208,7 +225,7 @@ FocusScope {
                             anchors.leftMargin: Theme.spacing
                             spacing: 2
                             Text {
-                                text: choice.modelData.name
+                                text: choice.modelData.name + (choice.modelData.isDefault ? "   ★ default" : "")
                                 color: Theme.text
                                 font.pixelSize: Theme.fontBody
                                 font.bold: true
@@ -236,6 +253,13 @@ FocusScope {
             case Qt.Key_Back:
             case Qt.Key_Backspace:
                 picker.close()
+                event.accepted = true
+                break
+            case Qt.Key_Favorites:
+            case Qt.Key_F:
+                if (event.key === Qt.Key_F && event.modifiers !== Qt.NoModifier)
+                    break
+                picker.setCurrentAsDefault()
                 event.accepted = true
                 break
             case Qt.Key_Left:

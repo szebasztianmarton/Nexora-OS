@@ -57,6 +57,7 @@ public:
     bool setEmulatorOverride(qint64 id, const QString &emulatorId);
     // Removes entries that are not present (explicit user action).
     int purgeMissing();
+    int missingCount() const;
 
     QString meta(const QString &key) const;
     bool setMeta(const QString &key, const QString &value);

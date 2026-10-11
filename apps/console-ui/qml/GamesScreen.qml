@@ -11,6 +11,7 @@ FocusScope {
     required property LibraryController library
 
     signal navigate(string tab)
+    signal optionsRequested(real gameId)
 
     readonly property alias grid: grid
     readonly property real currentGameId: grid.currentGameId
@@ -29,7 +30,8 @@ FocusScope {
             ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Apply filter" },
                { button: "↓", action: "Sort & games" }, { button: "L1 / R1", action: "Switch tab" }]
             : [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Play" },
-               { button: "Y / F", action: "Favorite" }, { button: "X / “/”", action: "Search" },
+               { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
+               { button: "X / “/”", action: "Search" },
                { button: "L1 / R1", action: "Switch tab" }]
 
     function focusSearch() {
@@ -374,6 +376,9 @@ FocusScope {
             } else if (event.key === Qt.Key_Favorites
                        || (event.key === Qt.Key_F && event.modifiers === Qt.NoModifier)) {
                 screen.library.toggleFavorite(id)
+                event.accepted = true
+            } else if (event.key === Qt.Key_Context1 || (event.key === Qt.Key_O && event.modifiers === Qt.NoModifier)) {
+                screen.optionsRequested(id)
                 event.accepted = true
             }
         }

@@ -22,6 +22,7 @@ set(NEXORA_QML_FILES
     qml/SettingsScreen.qml
     qml/DiagnosticsScreen.qml
     qml/RunningOverlay.qml
+    qml/GameOptionsDialog.qml
 )
 # Serve the files at qrc:/qt/qml/Nexora/Console/<Name>.qml (without the qml/ subdirectory).
 foreach(qml_file IN LISTS NEXORA_QML_FILES)

@@ -85,6 +85,9 @@ ApplicationWindow {
         openTab("games")
         gamesScreen.focusSearch()
     }
+    function openGameOptions(gameId) {
+        gameOptions.open(gameId, window.activeFocusItem)
+    }
     function restoreFocus() {
         if (window.app.busy) {
             overlay.forceActiveFocus()
@@ -129,6 +132,7 @@ ApplicationWindow {
         hints: window.app.busy
                ? [{ button: "A / Enter", action: "Stop emulator" },
                   { button: "Select + Start (hold)", action: "Return to Nexora" }]
+               : gameOptions.visible ? gameOptions.hints
                : tabBar.activeFocus
                  ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
                     { button: "L1 / R1", action: "Switch tab" }]
@@ -169,6 +173,7 @@ ApplicationWindow {
                 app: window.app
                 library: window.library
                 onNavigate: (tab) => window.navigate(tab)
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
             }
             GamesScreen {
                 id: gamesScreen
@@ -177,12 +182,14 @@ ApplicationWindow {
                 app: window.app
                 library: window.library
                 onNavigate: (tab) => window.navigate(tab)
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
             }
             EmulatorsScreen {
                 id: emulatorsScreen
                 anchors.fill: parent
                 visible: window.currentTab === 2
                 app: window.app
+                settings: window.settings
             }
             SettingsScreen {
                 id: settingsScreen
@@ -278,6 +285,12 @@ ApplicationWindow {
             if (window.app.statusIsError)
                 toast.show(window.app.statusMessage, true)
         }
+    }
+
+    GameOptionsDialog {
+        id: gameOptions
+        anchors.fill: parent
+        library: window.library
     }
 
     RunningOverlay {

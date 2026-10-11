@@ -69,7 +69,7 @@ void TestGamepadNavigator::buttonMapping_data()
     QTest::newRow("east") << GamepadButton::East << NavAction::Back;
     QTest::newRow("start") << GamepadButton::Start << NavAction::Menu;
     QTest::newRow("guide") << GamepadButton::Guide << NavAction::Menu;
-    QTest::newRow("select") << GamepadButton::Select << NavAction::Menu;
+    QTest::newRow("select") << GamepadButton::Select << NavAction::Options;
     QTest::newRow("north") << GamepadButton::North << NavAction::Favorite;
     QTest::newRow("west") << GamepadButton::West << NavAction::Search;
     QTest::newRow("l1") << GamepadButton::L1 << NavAction::PrevTab;

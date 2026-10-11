@@ -87,9 +87,11 @@ public:
     Q_INVOKABLE bool launch(const QString &emulatorId);
     // Starts an emulator with an explicit profile ("" = emulator defaults).
     Q_INVOKABLE bool launchProfile(const QString &emulatorId, const QString &profileId);
-    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs.
+    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs. An empty
+    // |profileId| uses the emulator's default profile, unless |applyDefaultProfile| is false
+    // (then the emulator's own arguments are used).
     bool launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                    const QString &profileId = {});
+                    const QString &profileId = {}, bool applyDefaultProfile = true);
 
     // emulator id -> profile id used by launch(); unknown/disabled profiles are ignored.
     void setDefaultProfiles(const QVariantMap &defaults) { m_defaultProfiles = defaults; }

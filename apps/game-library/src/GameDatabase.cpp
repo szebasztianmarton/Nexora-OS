@@ -395,7 +395,8 @@ bool GameDatabase::setEmulatorOverride(qint64 id, const QString &emulatorId)
 {
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
     q.prepare(QStringLiteral("UPDATE games SET emulator_override = ? WHERE id = ?"));
-    q.addBindValue(emulatorId);
+    // A null QString binds as SQL NULL, which the NOT NULL column rejects; "" = automatic.
+    q.addBindValue(emulatorId.isEmpty() ? QStringLiteral("") : emulatorId);
     q.addBindValue(id);
     return q.exec() && q.numRowsAffected() == 1;
 }
@@ -406,6 +407,14 @@ int GameDatabase::purgeMissing()
     if (!q.exec(QStringLiteral("DELETE FROM games WHERE present = 0")))
         return 0;
     return q.numRowsAffected();
+}
+
+int GameDatabase::missingCount() const
+{
+    if (!isOpen())
+        return 0;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    return q.exec(QStringLiteral("SELECT count(*) FROM games WHERE present = 0")) && q.next() ? q.value(0).toInt() : 0;
 }
 
 QString GameDatabase::meta(const QString &key) const

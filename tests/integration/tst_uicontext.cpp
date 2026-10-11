@@ -87,6 +87,97 @@ private slots:
         write(gamesDir() + QStringLiteral("/readme.txt"), "not a game");
     }
 
+    void gameOptionsDefaultProfilesAndPurge()
+    {
+        // A second emulator for the same extension makes the emulator choice meaningful.
+        write(configDir() + QStringLiteral("/fake2.json"),
+              "{\"id\":\"fake2\",\"name\":\"Fake Two\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".rom\"]}");
+        qint64 alpha = 0;
+        {
+            ui::UiContext ctx(options());
+            ctx.start();
+            QVERIFY(ctx.library()->addDirectory(gamesDir()));
+            waitForScan(ctx);
+            for (const auto &e : ctx.gameLibrary().entries()) {
+                if (e.title == QStringLiteral("Alpha"))
+                    alpha = e.id;
+            }
+            QVERIFY(alpha > 0);
+
+            QVariantMap details = ctx.library()->gameDetails(alpha);
+            QCOMPARE(details.value(QStringLiteral("title")).toString(), QStringLiteral("Alpha"));
+            QCOMPARE(details.value(QStringLiteral("emulators")).toList().size(), 2);
+            QVERIFY(details.value(QStringLiteral("automatic")).toBool());
+            QCOMPARE(details.value(QStringLiteral("emulatorId")).toString(), QStringLiteral("fake"));
+            // Only enabled profiles of the effective emulator are offered.
+            const QVariantList profiles = details.value(QStringLiteral("profiles")).toList();
+            QCOMPARE(profiles.size(), 1);
+            QCOMPARE(profiles.first().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("long"));
+            QVERIFY(!profiles.first().toMap().value(QStringLiteral("isDefault")).toBool());
+
+            // Emulator choice: only candidates for the extension are accepted.
+            QSignalSpy notices(ctx.library(), &ui::LibraryController::notice);
+            QVERIFY(!ctx.library()->setGameEmulator(alpha, QStringLiteral("unknown")));
+            QVERIFY(notices.last().at(1).toBool());
+            QVERIFY(ctx.library()->setGameEmulator(alpha, QStringLiteral("fake2")));
+            details = ctx.library()->gameDetails(alpha);
+            QCOMPARE(details.value(QStringLiteral("emulatorId")).toString(), QStringLiteral("fake2"));
+            QVERIFY(!details.value(QStringLiteral("automatic")).toBool());
+            QCOMPARE(
+                ctx.library()->games()->data(ctx.library()->games()->index(ctx.library()->games()->indexOfGame(alpha)),
+                                             ui::GameListModel::EmulatorIdRole),
+                QVariant(QStringLiteral("fake2")));
+        }
+        ui::UiContext ctx(options());
+        ctx.start();
+        // The choice survived the restart; back to automatic.
+        QCOMPARE(ctx.library()->gameDetails(alpha).value(QStringLiteral("emulatorId")).toString(),
+                 QStringLiteral("fake2"));
+        QVERIFY(ctx.library()->setGameEmulator(alpha, QString()));
+        QVERIFY(ctx.library()->gameDetails(alpha).value(QStringLiteral("automatic")).toBool());
+
+        // Default profile: used by a plain launch, skipped by an explicit "no profile" launch.
+        QVERIFY(ctx.settings()->setDefaultProfile(QStringLiteral("fake"), QStringLiteral("long")));
+        QCOMPARE(ctx.settings()->defaultProfile(QStringLiteral("fake")), QStringLiteral("long"));
+        QVERIFY(ctx.library()
+                    ->gameDetails(alpha)
+                    .value(QStringLiteral("profiles"))
+                    .toList()
+                    .first()
+                    .toMap()
+                    .value(QStringLiteral("isDefault"))
+                    .toBool());
+        auto *manager = ctx.app()->manager();
+        QSignalSpy finished(manager, &emulator::EmulatorManager::processFinished);
+        QVERIFY(ctx.library()->launch(alpha));
+        QTRY_COMPARE_WITH_TIMEOUT(manager->state(), emulator::ProcessState::Running, Timeout);
+        QTest::qWait(200);
+        QCOMPARE(manager->state(), emulator::ProcessState::Running); // "long" sleeps
+        QVERIFY(ctx.app()->stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+
+        QVERIFY(ctx.library()->launchWithProfile(alpha, QString()));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, Timeout);
+        QCOMPARE(manager->lastOutcome().finalState, emulator::ProcessState::Exited);
+        QVERIFY2(
+            manager->capturedStdout().contains(QStringLiteral("arg: ") + gamesDir() + QStringLiteral("/Alpha.rom")),
+            qPrintable(manager->capturedStdout()));
+
+        QVERIFY(ctx.settings()->setDefaultProfile(QStringLiteral("fake"), QString()));
+        QCOMPARE(ctx.settings()->defaultProfile(QStringLiteral("fake")), QString());
+
+        // Missing games are kept until removed explicitly.
+        QCOMPARE(ctx.library()->missingCount(), 0);
+        QVERIFY(QFile::remove(gamesDir() + QStringLiteral("/Space Quest.rom")));
+        QVERIFY(ctx.library()->refresh());
+        waitForScan(ctx);
+        QCOMPARE(ctx.library()->missingCount(), 1);
+        QCOMPARE(ctx.library()->purgeMissing(), 1);
+        QCOMPARE(ctx.library()->missingCount(), 0);
+        QCOMPARE(ctx.library()->totalCount(), 1);
+    }
+
     void settingsPersistAcrossRestarts()
     {
         {

@@ -355,6 +355,18 @@ FocusScope {
                 actionText: "Rescan"
                 onAccepted: screen.library.refresh()
             }
+            SettingRow {
+                objectName: "purgeRow"
+                visible: screen.library.missingCount > 0
+                label: "Remove missing games"
+                description: screen.library.missingCount + " game(s) whose files are gone are kept for their favorites "
+                             + "and history; remove them for good"
+                actionText: "Remove"
+                labelColor: Theme.text
+                requireConfirm: true
+                confirmText: "Press A / Enter again to remove " + screen.library.missingCount + " missing game(s)"
+                onAccepted: screen.library.purgeMissing()
+            }
 
             // --- System ----------------------------------------------------------------------
             SectionTitle { text: "System" }

@@ -49,6 +49,8 @@ public:
     bool recordLaunch(qint64 id);
     bool setEmulatorOverride(qint64 id, const QString &emulatorId);
     int purgeMissing();
+    // Entries whose file is currently missing (kept for their favorites and history).
+    int missingCount() const { return m_missingCount; }
 
     const ScanResult &lastScan() const { return m_lastScan; }
     ApplyStats lastStats() const { return m_lastStats; }
@@ -82,6 +84,7 @@ private:
     QString m_databasePath;
     // Bumped by every write through m_db; a worker snapshot taken while it changed is stale.
     quint64 m_writeGeneration = 0;
+    int m_missingCount = 0;
     QPointer<QThread> m_thread;
     std::shared_ptr<std::atomic_bool> m_cancel;
     bool m_rerunQueued = false;
