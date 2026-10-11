@@ -2,13 +2,14 @@
 
 #include "nexora/library/GameEntry.h"
 
+#include <QHash>
 #include <QList>
 #include <QString>
 
 namespace nexora::library {
 
 enum class SortOrder { Title, Recent, Emulator, Added };
-enum class LibraryFilter { All, Favorites, Recent };
+enum class LibraryFilter { All, Favorites, Recent, Missing };
 
 struct QueryOptions
 {
@@ -16,6 +17,8 @@ struct QueryOptions
     LibraryFilter filter = LibraryFilter::All;
     SortOrder sort = SortOrder::Title;
     QString emulatorId; // empty = any
+    QString systemId; // empty = any
+    QHash<QString, QString> systemNames; // system id -> short name, searched as well as the title
     int recentLimit = 20; // LibraryFilter::Recent keeps this many most recent entries
 };
 
@@ -24,7 +27,8 @@ class LibraryQuery
 {
 public:
     static QList<GameEntry> apply(QList<GameEntry> entries, const QueryOptions &options);
-    static bool matchesSearch(const GameEntry &entry, const QString &search);
+    static bool matchesSearch(const GameEntry &entry, const QString &search,
+                              const QHash<QString, QString> &systemNames = {});
 
     static SortOrder sortOrderFromString(const QString &name, SortOrder fallback = SortOrder::Title);
     static QString toString(SortOrder order);

@@ -191,7 +191,7 @@ bool LibraryController::launch(qint64 gameId)
         return false;
     }
     m_pendingLaunch = gameId;
-    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->title)) {
+    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->displayTitle())) {
         m_pendingLaunch = 0;
         return false;
     }

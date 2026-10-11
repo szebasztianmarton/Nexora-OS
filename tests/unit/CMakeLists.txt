@@ -9,6 +9,7 @@ nexora_add_test(tst_gamepadnavigator SOURCES tst_gamepadnavigator.cpp LIBS nexor
 nexora_add_test(tst_inputcontroller SOURCES tst_inputcontroller.cpp LIBS nexora_input LABELS unit GUI)
 nexora_add_test(tst_libraryquery SOURCES tst_libraryquery.cpp LIBS nexora_library LABELS unit)
 nexora_add_test(tst_libraryscanner SOURCES tst_libraryscanner.cpp LIBS nexora_library LABELS unit)
+nexora_add_test(tst_librarymigration SOURCES tst_librarymigration.cpp LIBS nexora_library LABELS unit)
 nexora_add_test(tst_systemintegration SOURCES tst_systemintegration.cpp LIBS nexora_system LABELS unit)
 nexora_add_test(tst_logging SOURCES tst_logging.cpp LIBS nexora_shared LABELS unit)
 nexora_add_test(tst_buttonmapping SOURCES tst_buttonmapping.cpp LIBS nexora_input LABELS unit)

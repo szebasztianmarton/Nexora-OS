@@ -1,6 +1,7 @@
 // GameLibrary end to end: asynchronous scans, SQLite persistence, user data across rescans
 // and restarts, missing files, corrupted database recovery.
 #include "nexora/library/GameLibrary.h"
+#include "nexora/shared/SystemCatalog.h"
 
 #include <QDir>
 #include <QFile>
@@ -236,6 +237,191 @@ private slots:
         QVERIFY(QFile::exists(db()));
         QCOMPARE(QDir(QFileInfo(db()).absolutePath()).entryList({QStringLiteral("library.sqlite.corrupt-*")}).size(),
                  0);
+    }
+
+    void userMetadataSurvivesRescans()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        touch(games() + QStringLiteral("/Disc.iso"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setCatalog(nexora::shared::SystemCatalog::builtIn());
+        auto o = options();
+        o.extensionMap.insert(QStringLiteral(".iso"), {QStringLiteral("multi")});
+        library.setScanOptions(o);
+        scan(library);
+        const auto alpha = byTitle(library, QStringLiteral("Alpha"));
+        const auto disc = byTitle(library, QStringLiteral("Disc"));
+        QVERIFY(alpha && disc);
+        QCOMPARE(alpha->systemId, QStringLiteral("snes")); // unique extension
+        QVERIFY(disc->systemId.isEmpty()); // ambiguous extension
+        QVERIFY(disc->systemCandidates.size() >= 2);
+
+        QVERIFY(library.setMetadata(alpha->id, QStringLiteral("Alpha Deluxe"), QStringLiteral("good\nstuff")));
+        QVERIFY(library.setFavorite(alpha->id, true));
+        QVERIFY(library.recordLaunch(alpha->id));
+        QVERIFY(library.setSystemOverride(disc->id, disc->systemCandidates.first()));
+        QVERIFY(!library.setSystemOverride(disc->id, QStringLiteral("no-such-system")));
+        QVERIFY(!library.setMetadata(alpha->id, QString(201, u'x'), QString()));
+        QCOMPARE(byTitle(library, QStringLiteral("Disc"))->systemId, disc->systemCandidates.first());
+
+        // The file changes on disk (so the row is updated) and the library is rescanned.
+        QFile f(games() + QStringLiteral("/Alpha.sfc"));
+        QVERIFY(f.open(QIODevice::Append));
+        f.write(QByteArray(100, 'x'));
+        f.close();
+        scan(library);
+        QVERIFY(library.lastStats().updated >= 1);
+
+        const auto again = library.entry(alpha->id);
+        QVERIFY(again);
+        QCOMPARE(again->titleOverride, QStringLiteral("Alpha Deluxe"));
+        QCOMPARE(again->displayTitle(), QStringLiteral("Alpha Deluxe"));
+        QCOMPARE(again->title, QStringLiteral("Alpha")); // derived title still follows the file
+        QCOMPARE(again->notes, QStringLiteral("good\nstuff"));
+        QVERIFY(again->favorite);
+        QCOMPARE(again->playCount, 1);
+        QCOMPARE(library.entry(disc->id)->systemId, disc->systemCandidates.first());
+
+        QVERIFY(library.setSystemOverride(disc->id, QString())); // clearing falls back to detection
+        QVERIFY(library.entry(disc->id)->systemId.isEmpty());
+        QVERIFY(!library.setSystemOverride(999999, QStringLiteral("snes")));
+    }
+
+    void removeFromLibraryHidesButNeverDeletes()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        touch(games() + QStringLiteral("/Beta.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        const auto alpha = byTitle(library, QStringLiteral("Alpha"));
+        QVERIFY(alpha);
+        QVERIFY(library.setFavorite(alpha->id, true));
+
+        QVERIFY(library.removeFromLibrary(alpha->id));
+        QVERIFY(QFile::exists(games() + QStringLiteral("/Alpha.sfc")));
+        QVERIFY(!byTitle(library, QStringLiteral("Alpha")));
+        QCOMPARE(library.entries().size(), 1);
+        QCOMPARE(library.hiddenEntries().size(), 1);
+        QVERIFY(!library.removeFromLibrary(999999));
+
+        scan(library); // a rescan does not bring it back
+        QVERIFY(!byTitle(library, QStringLiteral("Alpha")));
+        QCOMPARE(library.lastStats().added, 0);
+        QVERIFY(QFile::exists(games() + QStringLiteral("/Alpha.sfc")));
+
+        // ... also not after a restart.
+        GameLibrary again;
+        QVERIFY(again.open(db()));
+        QCOMPARE(again.entries().size(), 1);
+        QCOMPARE(again.hiddenEntries().size(), 1);
+
+        QVERIFY(again.restoreHidden());
+        QVERIFY(!again.restoreHidden()); // nothing left to restore
+        const auto restored = byTitle(again, QStringLiteral("Alpha"));
+        QVERIFY(restored);
+        QCOMPARE(restored->id, alpha->id);
+        QVERIFY(restored->favorite); // user data was kept while hidden
+        QVERIFY(again.hiddenEntries().isEmpty());
+    }
+
+    void purgeMissingKeepsHiddenEntries()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        QVERIFY(library.removeFromLibrary(library.entries().first().id));
+        QVERIFY(QFile::remove(games() + QStringLiteral("/Alpha.sfc")));
+        scan(library);
+        QCOMPARE(library.purgeMissing(), 0);
+        QCOMPARE(library.hiddenEntries().size(), 1);
+    }
+
+    void reportsScanProgress()
+    {
+        for (int i = 0; i < 250; ++i)
+            touch(games() + QStringLiteral("/g%1.sfc").arg(i));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        QSignalSpy progress(&library, &GameLibrary::scanProgress);
+        scan(library);
+        QVERIFY(progress.size() >= 1);
+        QCOMPARE(progress.first().at(1).toString(), QFileInfo(games()).canonicalFilePath());
+        QCOMPARE(library.entries().size(), 250);
+    }
+
+    void cancelledScanDoesNotMarkEntriesMissing()
+    {
+        for (int i = 0; i < 5000; ++i)
+            touch(games() + QStringLiteral("/d%1/g%2.sfc").arg(i % 50).arg(i));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        QCOMPARE(library.entries().size(), 5000);
+
+        QSignalSpy finished(&library, &GameLibrary::scanFinished);
+        QVERIFY(library.refresh());
+        library.cancelScan();
+        library.waitForScan();
+        QVERIFY(library.lastScan().cancelled);
+        QCOMPARE(finished.size(), 0);
+        QCOMPARE(library.entries().size(), 5000);
+        QVERIFY(library.entries().first().present);
+    }
+
+    void overlappingRootsYieldOneEntry()
+    {
+        touch(games() + QStringLiteral("/snes/Alpha.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        auto o = options();
+        o.roots = {games(), games() + QStringLiteral("/snes")};
+        library.setScanOptions(o);
+        scan(library);
+        QCOMPARE(library.entries().size(), 1);
+        QCOMPARE(library.lastScan().duplicates, 1);
+    }
+
+    void migratesV1LibraryAndRescansForSystems()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        {
+            GameLibrary library; // only to create the file
+            QVERIFY(library.open(db()));
+        }
+        {
+            QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("v1"));
+            raw.setDatabaseName(db());
+            QVERIFY(raw.open());
+            const QStringList downgrade{QStringLiteral("ALTER TABLE games DROP COLUMN system_id"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN system_override"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN system_candidates"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN title_override"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN notes"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN hidden"),
+                                        QStringLiteral("PRAGMA user_version = 1")};
+            for (const QString &s : downgrade)
+                QVERIFY2(QSqlQuery(raw).exec(s), qPrintable(s));
+            raw.close();
+        }
+        QSqlDatabase::removeDatabase(QStringLiteral("v1"));
+
+        GameLibrary library;
+        QVERIFY2(library.open(db()), qPrintable(library.lastError()));
+        QCOMPARE(library.databaseIssues().size(), 1);
+        QCOMPARE(QDir(QFileInfo(db()).absolutePath()).entryList({QStringLiteral("library.sqlite.v1-backup-*")}).size(),
+                 1);
+        library.setCatalog(nexora::shared::SystemCatalog::builtIn());
+        library.setScanOptions(options());
+        QVERIFY(library.needsRescan());
+        scan(library);
+        QCOMPARE(library.entries().first().systemId, QStringLiteral("snes"));
     }
 
     void emulatorOverride()

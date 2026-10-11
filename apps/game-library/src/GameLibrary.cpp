@@ -40,6 +40,23 @@ bool GameLibrary::open(const QString &databasePath)
     return true;
 }
 
+void GameLibrary::setCatalog(const shared::SystemCatalog &catalog)
+{
+    m_catalog = catalog;
+}
+
+ScanOptions GameLibrary::effectiveOptions() const
+{
+    ScanOptions options = m_options;
+    options.extensionSystems.clear();
+    for (auto it = options.extensionMap.cbegin(); it != options.extensionMap.cend(); ++it) {
+        const QStringList systems = m_catalog.systemsForExtension(it.key());
+        if (!systems.isEmpty())
+            options.extensionSystems.insert(it.key(), systems);
+    }
+    return options;
+}
+
 void GameLibrary::setScanOptions(const ScanOptions &options)
 {
     m_options = options;
@@ -47,11 +64,14 @@ void GameLibrary::setScanOptions(const ScanOptions &options)
 
 QString GameLibrary::optionsSignature() const
 {
-    QStringList parts = m_options.roots;
+    const ScanOptions options = effectiveOptions();
+    QStringList parts = options.roots;
     parts.sort();
     QStringList exts;
-    for (auto it = m_options.extensionMap.cbegin(); it != m_options.extensionMap.cend(); ++it)
+    for (auto it = options.extensionMap.cbegin(); it != options.extensionMap.cend(); ++it)
         exts.append(it.key() + u'=' + it.value().join(u'|'));
+    for (auto it = options.extensionSystems.cbegin(); it != options.extensionSystems.cend(); ++it)
+        exts.append(QStringLiteral("system:") + it.key() + u'=' + it.value().join(u'|'));
     exts.sort();
     parts += exts;
     parts.append(m_options.followSymlinks ? QStringLiteral("follow") : QStringLiteral("nofollow"));
@@ -72,10 +92,17 @@ bool GameLibrary::refresh()
     }
     auto result = std::make_shared<ScanResult>();
     m_cancel = std::make_shared<std::atomic_bool>(false);
-    const ScanOptions options = m_options;
+    const ScanOptions options = effectiveOptions();
     const auto cancel = m_cancel;
-    QThread *thread
-        = QThread::create([options, result, cancel] { *result = LibraryScanner::scan(options, cancel.get()); });
+    QThread *thread = QThread::create([this, options, result, cancel] {
+        // Queued to the owner's thread; dropped if the library is destroyed meanwhile.
+        const ScanProgress progress = [this](int filesSeen, const QString &currentRoot) {
+            QMetaObject::invokeMethod(
+                this, [this, filesSeen, currentRoot] { emit scanProgress(filesSeen, currentRoot); },
+                Qt::QueuedConnection);
+        };
+        *result = LibraryScanner::scan(options, cancel.get(), progress);
+    });
     thread->setObjectName(QStringLiteral("nexora-library-scan"));
     connect(thread, &QThread::finished, this, [this, thread, result] {
         if (m_thread == thread)
@@ -179,6 +206,70 @@ bool GameLibrary::setEmulatorOverride(qint64 id, const QString &emulatorId)
         return false;
     updateCached(id, [&emulatorId](GameEntry &e) { e.emulatorOverride = emulatorId; });
     return true;
+}
+
+void GameLibrary::refreshCached(qint64 id)
+{
+    const auto fresh = m_db.entry(id);
+    for (qsizetype i = 0; i < m_entries.size(); ++i) {
+        if (m_entries.at(i).id != id)
+            continue;
+        if (fresh && fresh->present && !fresh->hidden)
+            m_entries[i] = *fresh;
+        else
+            m_entries.removeAt(i);
+        break;
+    }
+    emit entriesChanged();
+}
+
+bool GameLibrary::setMetadata(qint64 id, const QString &title, const QString &notes)
+{
+    if (!m_db.setMetadata(id, title, notes))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+bool GameLibrary::setSystemOverride(qint64 id, const QString &systemId)
+{
+    if (!systemId.isEmpty()) {
+        const auto current = m_db.entry(id);
+        if (!current)
+            return false;
+        if (!current->systemCandidates.contains(systemId) && !m_catalog.find(systemId))
+            return false;
+    }
+    if (!m_db.setSystemOverride(id, systemId))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+bool GameLibrary::removeFromLibrary(qint64 id)
+{
+    if (!m_db.setHidden(id, true))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+bool GameLibrary::restoreHidden()
+{
+    if (m_db.restoreHidden() == 0)
+        return false;
+    reloadEntries();
+    return true;
+}
+
+QList<GameEntry> GameLibrary::hiddenEntries() const
+{
+    QList<GameEntry> hidden;
+    for (const GameEntry &e : m_db.entries(true, true)) {
+        if (e.hidden)
+            hidden.append(e);
+    }
+    return hidden;
 }
 
 int GameLibrary::purgeMissing()

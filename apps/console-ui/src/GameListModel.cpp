@@ -21,7 +21,7 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     const auto info = [&] { return m_info ? m_info(e.emulatorId()) : std::pair<QString, QString>{}; };
     switch (role) {
     case Qt::DisplayRole:
-    case TitleRole: return e.title;
+    case TitleRole: return e.displayTitle();
     case GameIdRole: return e.id;
     case PathRole: return e.path;
     case EmulatorIdRole: return e.emulatorId();

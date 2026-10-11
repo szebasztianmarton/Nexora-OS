@@ -1,6 +1,7 @@
 #include "nexora/library/GameDatabase.h"
 
 #include "nexora/shared/Logging.h"
+#include "nexora/shared/SystemCatalog.h"
 
 #include <QAtomicInteger>
 #include <QDir>
@@ -13,20 +14,38 @@
 #include <QSqlQuery>
 #include <QVariant>
 
+#include <algorithm>
+
 namespace nexora::library {
 
 namespace {
 
 QAtomicInteger<int> connectionCounter;
 
+// SQLite stores a null QString as NULL, which the NOT NULL columns reject.
+QString nonNull(const QString &text)
+{
+    return text.isNull() ? QStringLiteral("") : text;
+}
+
 QString joinList(const QStringList &list)
 {
-    return list.join(u',');
+    return nonNull(list.join(u','));
 }
 
 QStringList splitList(const QString &text)
 {
     return text.isEmpty() ? QStringList{} : text.split(u',', Qt::SkipEmptyParts);
+}
+
+constexpr int MaxTitleLength = 200;
+constexpr int MaxNotesLength = 2000;
+
+bool hasControlCharacters(const QString &text, bool allowNewline)
+{
+    return std::any_of(text.cbegin(), text.cend(), [allowNewline](QChar c) {
+        return c.category() == QChar::Other_Control && !(allowNewline && c == u'\n');
+    });
 }
 
 bool isUnder(const QString &path, const QString &root)
@@ -81,6 +100,8 @@ bool GameDatabase::open(const QString &path)
     close();
     m_issues.clear();
     m_recoverable = true;
+    m_backupPath.clear();
+    m_path = path;
     if (!QSqlDatabase::isDriverAvailable(QStringLiteral("QSQLITE"))) {
         m_lastError = QStringLiteral("Qt SQLite driver (QSQLITE) is not available");
         qCCritical(lcLibrary).noquote() << m_lastError;
@@ -135,6 +156,7 @@ bool GameDatabase::migrate()
     if (!exec(QStringLiteral("SELECT count(*) FROM sqlite_master")))
         return false;
     const int version = q.value(0).toInt();
+    q.finish(); // release the read lock before anything is written or checkpointed
     if (version > SchemaVersion) {
         // Written by a newer Nexora: leave it untouched for that version.
         m_recoverable = false;
@@ -145,7 +167,21 @@ bool GameDatabase::migrate()
     }
     if (version == SchemaVersion)
         return true;
+    if (version == 0)
+        return createSchema();
 
+    // From here on the file is a real Nexora database: whatever goes wrong must not be
+    // mistaken for corruption and must not move it aside.
+    m_recoverable = false;
+    if (version != 1) {
+        m_lastError = QStringLiteral("unsupported library database schema %1").arg(version);
+        return false;
+    }
+    return backupBeforeMigration(version) && migrateV1ToV2();
+}
+
+bool GameDatabase::createSchema()
+{
     const QStringList statements{
         QStringLiteral("CREATE TABLE IF NOT EXISTS games ("
                        " id INTEGER PRIMARY KEY,"
@@ -161,7 +197,13 @@ bool GameDatabase::migrate()
                        " favorite INTEGER NOT NULL DEFAULT 0,"
                        " play_count INTEGER NOT NULL DEFAULT 0,"
                        " last_played INTEGER,"
-                       " added_at INTEGER NOT NULL)"),
+                       " added_at INTEGER NOT NULL,"
+                       " system_id TEXT NOT NULL DEFAULT '',"
+                       " system_override TEXT NOT NULL DEFAULT '',"
+                       " system_candidates TEXT NOT NULL DEFAULT '',"
+                       " title_override TEXT NOT NULL DEFAULT '',"
+                       " notes TEXT NOT NULL DEFAULT '',"
+                       " hidden INTEGER NOT NULL DEFAULT 0)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS games_present ON games(present)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
         QStringLiteral("PRAGMA user_version = %1").arg(SchemaVersion),
@@ -175,6 +217,59 @@ bool GameDatabase::migrate()
         }
     }
     return db.commit();
+}
+
+bool GameDatabase::backupBeforeMigration(int fromVersion)
+{
+    if (m_path == QStringLiteral(":memory:"))
+        return true;
+    // Fold the write-ahead log into the main file so the copy is complete.
+    if (!exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")))
+        return false;
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
+    QString backup = QStringLiteral("%1.v%2-backup-%3").arg(m_path).arg(fromVersion).arg(stamp);
+    for (int n = 2; QFile::exists(backup); ++n)
+        backup = QStringLiteral("%1.v%2-backup-%3-%4").arg(m_path).arg(fromVersion).arg(stamp).arg(n);
+    if (!QFile::copy(m_path, backup)) {
+        m_lastError = QStringLiteral("cannot back up the library database to %1 before migrating it").arg(backup);
+        qCCritical(lcLibrary).noquote() << m_lastError;
+        return false;
+    }
+    m_backupPath = backup;
+    m_issues.append(QStringLiteral("library database upgraded to schema %1; the previous version was saved as %2")
+                        .arg(SchemaVersion)
+                        .arg(backup));
+    return true;
+}
+
+bool GameDatabase::migrateV1ToV2()
+{
+    const QStringList statements{
+        QStringLiteral("ALTER TABLE games ADD COLUMN system_id TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE games ADD COLUMN system_override TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE games ADD COLUMN system_candidates TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE games ADD COLUMN title_override TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE games ADD COLUMN notes TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE games ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"),
+        QStringLiteral("PRAGMA user_version = %1").arg(SchemaVersion),
+    };
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    if (!db.transaction()) {
+        m_lastError = db.lastError().text();
+        return false;
+    }
+    for (const QString &sql : statements) {
+        if (!exec(sql)) {
+            db.rollback();
+            return false;
+        }
+    }
+    if (!db.commit()) {
+        m_lastError = db.lastError().text();
+        db.rollback();
+        return false;
+    }
+    return true;
 }
 
 std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, const QStringList &configuredRoots)
@@ -196,13 +291,16 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
         QString candidates;
         QString root;
         QVariant modified;
+        QString systemId;
+        QString systemCandidates;
     };
     QHash<QString, Existing> existing;
     {
         QSqlQuery all(db);
         all.setForwardOnly(true);
-        if (!all.exec(QStringLiteral(
-                "SELECT id, path, present, title, size, emulator_candidates, root, modified FROM games"))) {
+        if (!all.exec(
+                QStringLiteral("SELECT id, path, present, title, size, emulator_candidates, root, modified, system_id, "
+                               "system_candidates FROM games"))) {
             m_lastError = all.lastError().text();
             db.rollback();
             return std::nullopt;
@@ -210,32 +308,38 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
         while (all.next()) {
             existing.insert(all.value(1).toString(),
                             {all.value(0).toLongLong(), all.value(2).toBool(), all.value(3).toString(),
-                             all.value(4).toLongLong(), all.value(5).toString(), all.value(6).toString(),
-                             all.value(7)});
+                             all.value(4).toLongLong(), all.value(5).toString(), all.value(6).toString(), all.value(7),
+                             all.value(8).toString(), all.value(9).toString()});
         }
     }
 
     QSqlQuery insert(db);
     insert.prepare(QStringLiteral("INSERT INTO games (path, title, extension, root, size, modified, "
-                                  "emulator_candidates, present, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)"));
+                                  "emulator_candidates, system_id, system_candidates, present, added_at) "
+                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)"));
     QSqlQuery update(db);
     update.prepare(QStringLiteral("UPDATE games SET title = ?, extension = ?, root = ?, size = ?, modified = ?, "
-                                  "emulator_candidates = ?, present = 1 WHERE id = ?"));
+                                  "emulator_candidates = ?, system_id = ?, system_candidates = ?, present = 1 "
+                                  "WHERE id = ?"));
 
     QSet<QString> found;
     for (const ScannedFile &f : result.files) {
         found.insert(f.path);
         const QVariant modified = f.modified.isValid() ? QVariant(f.modified.toSecsSinceEpoch()) : QVariant();
         const QString candidates = joinList(f.emulatorIds);
+        // Only an unambiguous extension identifies a system; a user override wins over it.
+        const QString systemId = f.systemIds.size() == 1 ? f.systemIds.first() : QStringLiteral("");
+        const QString systemCandidates = joinList(f.systemIds);
         const auto it = existing.constFind(f.path);
         if (it != existing.cend()) {
             const bool changed = !it->present || it->title != f.title || it->size != f.size
-                || it->candidates != candidates || it->root != f.root
-                || it->modified.toLongLong() != modified.toLongLong();
+                || it->candidates != candidates || it->root != f.root || it->systemId != systemId
+                || it->systemCandidates != systemCandidates || it->modified.toLongLong() != modified.toLongLong();
             if (!changed)
                 continue; // nothing to write; keeps rescans of large libraries cheap
-            for (const QVariant &v : {QVariant(f.title), QVariant(f.extension), QVariant(f.root), QVariant(f.size),
-                                      modified, QVariant(candidates), QVariant(it->id)})
+            for (const QVariant &v :
+                 {QVariant(f.title), QVariant(f.extension), QVariant(f.root), QVariant(f.size), modified,
+                  QVariant(candidates), QVariant(systemId), QVariant(systemCandidates), QVariant(it->id)})
                 update.addBindValue(v);
             if (!update.exec()) {
                 m_lastError = update.lastError().text();
@@ -244,8 +348,9 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
             }
             ++stats.updated;
         } else {
-            for (const QVariant &v : {QVariant(f.path), QVariant(f.title), QVariant(f.extension), QVariant(f.root),
-                                      QVariant(f.size), modified, QVariant(candidates), QVariant(now)})
+            for (const QVariant &v :
+                 {QVariant(f.path), QVariant(f.title), QVariant(f.extension), QVariant(f.root), QVariant(f.size),
+                  modified, QVariant(candidates), QVariant(systemId), QVariant(systemCandidates), QVariant(now)})
                 insert.addBindValue(v);
             if (!insert.exec()) {
                 m_lastError = insert.lastError().text();
@@ -336,22 +441,35 @@ GameEntry entryFromQuery(const QSqlQuery &q)
     if (!q.value(11).isNull())
         e.lastPlayed = QDateTime::fromSecsSinceEpoch(q.value(11).toLongLong(), Qt::UTC);
     e.addedAt = QDateTime::fromSecsSinceEpoch(q.value(12).toLongLong(), Qt::UTC);
+    e.systemId = q.value(13).toString();
+    e.systemCandidates = splitList(q.value(14).toString());
+    e.titleOverride = q.value(15).toString();
+    e.notes = q.value(16).toString();
+    e.hidden = q.value(17).toBool();
     return e;
 }
 
 const QString selectColumns
     = QStringLiteral("SELECT id, path, title, extension, root, size, emulator_candidates, emulator_override, present, "
-                     "favorite, play_count, last_played, added_at FROM games");
+                     "favorite, play_count, last_played, added_at, "
+                     "CASE WHEN system_override <> '' THEN system_override ELSE system_id END, "
+                     "system_candidates, title_override, notes, hidden FROM games");
 
 } // namespace
 
-QList<GameEntry> GameDatabase::entries(bool includeMissing) const
+QList<GameEntry> GameDatabase::entries(bool includeMissing, bool includeHidden) const
 {
     QList<GameEntry> list;
     if (!isOpen())
         return list;
+    QStringList conditions;
+    if (!includeMissing)
+        conditions.append(QStringLiteral("present = 1"));
+    if (!includeHidden)
+        conditions.append(QStringLiteral("hidden = 0"));
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
-    q.exec(selectColumns + (includeMissing ? QString() : QStringLiteral(" WHERE present = 1"))
+    q.exec(selectColumns
+           + (conditions.isEmpty() ? QString() : QStringLiteral(" WHERE ") + conditions.join(QStringLiteral(" AND ")))
            + QStringLiteral(" ORDER BY id"));
     while (q.next())
         list.append(entryFromQuery(q));
@@ -397,10 +515,59 @@ bool GameDatabase::setEmulatorOverride(qint64 id, const QString &emulatorId)
     return q.exec() && q.numRowsAffected() == 1;
 }
 
+bool GameDatabase::setMetadata(qint64 id, const QString &titleOverride, const QString &notes)
+{
+    const QString title = titleOverride.trimmed();
+    if (title.size() > MaxTitleLength || notes.size() > MaxNotesLength || hasControlCharacters(title, false)
+        || hasControlCharacters(notes, true)) {
+        m_lastError = QStringLiteral("title (at most %1 characters) or notes (at most %2) are too long or contain "
+                                     "control characters")
+                          .arg(MaxTitleLength)
+                          .arg(MaxNotesLength);
+        return false;
+    }
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("UPDATE games SET title_override = ?, notes = ? WHERE id = ?"));
+    q.addBindValue(nonNull(title));
+    q.addBindValue(nonNull(notes));
+    q.addBindValue(id);
+    return q.exec() && q.numRowsAffected() == 1;
+}
+
+bool GameDatabase::setSystemOverride(qint64 id, const QString &systemId)
+{
+    if (!systemId.isEmpty() && !shared::SystemCatalog::isValidId(systemId)) {
+        m_lastError = QStringLiteral("invalid system id");
+        return false;
+    }
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("UPDATE games SET system_override = ? WHERE id = ?"));
+    q.addBindValue(nonNull(systemId));
+    q.addBindValue(id);
+    return q.exec() && q.numRowsAffected() == 1;
+}
+
+bool GameDatabase::setHidden(qint64 id, bool hidden)
+{
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("UPDATE games SET hidden = ? WHERE id = ?"));
+    q.addBindValue(hidden ? 1 : 0);
+    q.addBindValue(id);
+    return q.exec() && q.numRowsAffected() == 1;
+}
+
+int GameDatabase::restoreHidden()
+{
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    if (!q.exec(QStringLiteral("UPDATE games SET hidden = 0 WHERE hidden = 1")))
+        return 0;
+    return q.numRowsAffected();
+}
+
 int GameDatabase::purgeMissing()
 {
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
-    if (!q.exec(QStringLiteral("DELETE FROM games WHERE present = 0")))
+    if (!q.exec(QStringLiteral("DELETE FROM games WHERE present = 0 AND hidden = 0")))
         return 0;
     return q.numRowsAffected();
 }

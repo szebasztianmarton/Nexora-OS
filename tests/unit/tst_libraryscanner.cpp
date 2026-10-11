@@ -106,9 +106,9 @@ private slots:
         o.followSymlinks = true;
         const auto r = LibraryScanner::scan(o);
         // inner.sfc found once (via sub/ and sublink/ it is the same file), escapes refused,
-        // the loop back to lib/ terminates.
+        // the loop back to lib/ terminates and is counted.
         QCOMPARE(names(r), QStringList{QStringLiteral("inner.sfc")});
-        QCOMPARE(r.skippedSymlinks, 3);
+        QCOMPARE(r.skippedSymlinks, 4);
         bool sawOutsideIssue = false;
         bool sawBrokenIssue = false;
         for (const auto &i : r.issues) {
@@ -167,6 +167,79 @@ private slots:
         r = LibraryScanner::scan(o);
         QVERIFY(!names(r).contains(QStringLiteral("deep.sfc")));
         QCOMPARE(r.files.size(), 10);
+    }
+
+    void symlinkLoopTerminatesAndIsCounted()
+    {
+        QTemporaryDir dir;
+        touch(dir.filePath(QStringLiteral("a/game.sfc")));
+        QVERIFY(QFile::link(dir.path(), dir.filePath(QStringLiteral("a/link"))));
+        auto o = options({dir.path()});
+        o.followSymlinks = true;
+        const auto r = LibraryScanner::scan(o);
+        QCOMPARE(names(r), QStringList{QStringLiteral("game.sfc")});
+        QCOMPARE(r.skippedSymlinks, 1);
+    }
+
+    void ambiguousExtensionKeepsAllSystems()
+    {
+        QTemporaryDir dir;
+        touch(dir.filePath(QStringLiteral("disc.iso")));
+        touch(dir.filePath(QStringLiteral("zelda.sfc")));
+        touch(dir.filePath(QStringLiteral("other.nes")));
+        auto o = options({dir.path()});
+        o.extensionMap.insert(QStringLiteral(".iso"), {QStringLiteral("multi")});
+        o.extensionSystems = {{QStringLiteral(".iso"), {QStringLiteral("ps1"), QStringLiteral("saturn")}},
+                              {QStringLiteral(".sfc"), {QStringLiteral("snes")}}};
+        const auto r = LibraryScanner::scan(o);
+        QCOMPARE(r.files.size(), 3);
+        for (const auto &f : r.files) {
+            if (f.extension == QStringLiteral(".iso"))
+                QVERIFY(f.systemIds.size() >= 2);
+            else if (f.extension == QStringLiteral(".sfc"))
+                QCOMPARE(f.systemIds, QStringList{QStringLiteral("snes")});
+            else
+                QVERIFY(f.systemIds.isEmpty()); // not in the system map
+        }
+    }
+
+    void doesNotEnterSystemDirectories()
+    {
+        QTemporaryDir dir;
+        touch(dir.filePath(QStringLiteral("ok.sfc")));
+        touch(dir.filePath(QStringLiteral("proc/a.sfc")));
+        touch(dir.filePath(QStringLiteral("sub/sys/b.sfc")));
+        touch(dir.filePath(QStringLiteral("lost+found/c.sfc")));
+        touch(dir.filePath(QStringLiteral(".Trash-1000/d.sfc")));
+        touch(dir.filePath(QStringLiteral("run/e.sfc")));
+        touch(dir.filePath(QStringLiteral("dev/f.sfc")));
+        touch(dir.filePath(QStringLiteral("procs/g.sfc"))); // only exact names
+        const auto r = LibraryScanner::scan(options({dir.path()}));
+        QCOMPARE(names(r), QStringList({QStringLiteral("g.sfc"), QStringLiteral("ok.sfc")}));
+    }
+
+    void refusesSystemLocationsAsRoots()
+    {
+        const auto r = LibraryScanner::scan(options({QStringLiteral("/usr"), QStringLiteral("/etc")}));
+        QVERIFY(r.files.isEmpty());
+        QVERIFY(r.scannedRoots.isEmpty());
+        QCOMPARE(r.issues.size(), 2);
+    }
+
+    void reportsProgress()
+    {
+        QTemporaryDir dir;
+        for (int i = 0; i < 250; ++i)
+            touch(dir.filePath(QStringLiteral("g%1.sfc").arg(i)));
+        QList<int> seen;
+        QStringList roots;
+        const auto r = LibraryScanner::scan(options({dir.path()}), nullptr, [&](int filesSeen, const QString &root) {
+            seen.append(filesSeen);
+            roots.append(root);
+        });
+        QCOMPARE(r.files.size(), 250);
+        QCOMPARE(seen, QList<int>({0, 100, 200})); // at the root, then every 100 files
+        QCOMPARE(roots.first(), QFileInfo(dir.path()).canonicalFilePath());
     }
 
     void canBeCancelled()
