@@ -23,6 +23,11 @@ Rectangle {
 
     signal activated()
 
+    Accessible.role: Accessible.Button
+    Accessible.name: name + ", " + statusText
+    Accessible.description: "Starts the emulator without a game"
+    Accessible.onPressAction: activated()
+
     width: 300
     height: 360
     radius: Theme.radius

@@ -18,6 +18,11 @@ Item {
     signal activated()      // double click: launch
     signal favoriteClicked()
 
+    Accessible.role: Accessible.Button
+    Accessible.name: title
+    Accessible.description: (available ? emulatorName : unavailableReason) + (favorite ? ", favorite" : "")
+    Accessible.onPressAction: pressed()
+
     readonly property int infoHeight: 70
 
     z: selected ? 2 : 1
