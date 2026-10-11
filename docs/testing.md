@@ -2,7 +2,7 @@
 
 The test suite uses Qt Test, registered with CTest. It needs no display, no controller, no real emulator and no network: GUI tests run on the offscreen Qt platform, process tests drive a small fake emulator, and library/settings tests use temporary directories and databases.
 
-**Status (MVP 2, `feature/mvp2`):** locally verified on Ubuntu 24.04 (GCC 13, Qt 6.4.2): the `ci` preset (GCC, Debug) builds cleanly with `-Werror` and **19/19** tests pass, including the rewritten `tst_qmlsmoke` for the MVP 2 dashboard. A separate run as a non-root user of all tests except `tst_qmlsmoke` also passed, so the [root-skipped functions](#tests-skipped-as-root) were executed. On GitHub, all five `ci.yml` jobs passed for the MVP 2 dashboard commit ([run \#8](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38070075614), 2026-10-10).
+**Status (MVP 2 completion, `claude/mvp2-completion`, 2026-10-11):** locally verified on Ubuntu 24.04 (Qt 6.4.2): **19/19** tests pass with GCC 13 Debug `-Werror` (`ci` preset), Clang 18 Debug `-Werror` and GCC Release; all 19 test executables (including `tst_qmlsmoke`) also pass when run as a non-root user, so the [root-skipped functions](#tests-skipped-as-root) were executed. GitHub CI for this branch: [run \#26](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38121100955) (lint passed; build and test jobs still running when this was written). Earlier: all five `ci.yml` jobs passed for the MVP 2 dashboard commit ([run \#8](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38070075614), 2026-10-10).
 
 Testing on Windows 11 (WSL 2): see [testing-windows11.md](testing-windows11.md).
 
@@ -154,7 +154,7 @@ Two test functions check permission handling and cannot work as root, because ro
 | `tst_configloader::reportsUnreadableFiles` | root can read a `chmod 000` definition |
 | `tst_libraryscanner::skipsUnreadableEntries` | root can read unreadable files and directories |
 
-The test still passes overall when skipped. They were executed in the local non-root run (all tests except `tst_qmlsmoke`). Containers and CI jobs that run as root silently lose this coverage; GitHub-hosted `ubuntu-24.04` runners run as a non-root user.
+The test still passes overall when skipped. They were executed in the local non-root run (all 19 test executables, 2026-10-11). Containers and CI jobs that run as root silently lose this coverage; GitHub-hosted `ubuntu-24.04` runners run as a non-root user.
 
 ## Adding a test
 
