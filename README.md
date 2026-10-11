@@ -53,7 +53,7 @@ Current stage: **MVP 2**, merged into `main` (roadmap phases 1–3 done on a des
 | --- | --- | --- |
 | Local build (Ubuntu 24.04, Qt 6.4.2, GCC 13) | `ci` preset clean with `-Werror` | `ci` preset (GCC, Debug) clean with `-Werror` |
 | Local tests | 10/10 passing | **19/19** `ctest` passing with GCC Debug `-Werror`, Clang Debug `-Werror` and GCC Release (2026-10-11); all 19 test executables also pass when run as a non-root user |
-| GitHub Actions CI | Passing ([run \#2](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/37954884460)): GCC/Clang Debug `-Werror`, GCC Release, GCC + SDL3 | Passing on `feature/mvp2` ([run \#13](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38071163228), commit 1716027, 2026-10-10): lint (clang-format, JSON, shellcheck), GCC/Clang Debug `-Werror`, GCC Release (unit, integration, `--check-config`), GCC + SDL3; Buildroot tree validation workflow passing |
+| GitHub Actions CI | Passing ([run \#2](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/37954884460)): GCC/Clang Debug `-Werror`, GCC Release, GCC + SDL3 | Passing on `claude/mvp2-completion` ([run \#27](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38121236221), commit 0701c8a, 2026-10-11): lint (clang-format, JSON, shellcheck), GCC/Clang Debug `-Werror`, GCC Release (unit, integration, `--check-config`, dashboard screenshots), GCC + SDL3 |
 | evdev gamepad backend | Mapping/navigation unit-tested; no real controller tested | Same, plus configurable mapping and remap capture; no real controller tested |
 | SDL3 gamepad backend (optional) | Compiles/links against SDL 3.2.30 | Unchanged; not available in the Buildroot image |
 | Real emulators | None tested | None tested; no compatibility with any real emulator is claimed |
