@@ -11,6 +11,10 @@ FocusScope {
     signal tabRequested(int index)
     signal enterRequested()
 
+    Accessible.role: Accessible.PageTabList
+    Accessible.name: "Navigation tabs"
+    Accessible.description: "Use Left and Right to switch tabs"
+
     implicitHeight: 60
 
     Rectangle {
@@ -69,6 +73,12 @@ FocusScope {
                      : tabMouse.containsMouse ? Theme.surfaceRaised : "transparent"
                 border.width: current && bar.activeFocus ? 2 : 0
                 border.color: Theme.text
+
+                Accessible.role: Accessible.PageTab
+                Accessible.name: modelData.title
+                Accessible.selected: current
+                Accessible.description: "Tab"
+                Accessible.onPressAction: bar.tabRequested(index)
 
                 Text {
                     id: tabLabel

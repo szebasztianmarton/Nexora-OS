@@ -6,6 +6,9 @@ Column {
     id: empty
     required property AppController app
 
+    Accessible.role: Accessible.StaticText
+    Accessible.name: "Empty state"
+
     spacing: Theme.spacing
     width: Math.min(parent ? parent.width - 64 : 800, 900)
 

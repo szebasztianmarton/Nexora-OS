@@ -31,6 +31,11 @@ Rectangle {
         accepted()
     }
 
+    Accessible.role: adjustable ? Accessible.SpinBox : (actionText.length > 0 ? Accessible.Button : Accessible.StaticText)
+    Accessible.name: label + (value.length > 0 ? ": " + value : "")
+    Accessible.description: description
+    Accessible.onPressAction: if (actionText.length > 0 || !adjustable) activate()
+
     activeFocusOnTab: true
     width: parent ? parent.width : 600
     implicitHeight: Math.max(60, texts.implicitHeight + 24)

@@ -14,6 +14,11 @@ Rectangle {
     property bool compact: false
     readonly property bool highlighted: activeFocus || mouse.containsMouse
 
+    Accessible.role: Accessible.Button
+    Accessible.name: text || confirmText || glyph || "Button"
+    Accessible.description: requireConfirm ? "Requires confirmation" : ""
+    Accessible.onPressAction: activate()
+
     signal clicked()
 
     function activate() {
