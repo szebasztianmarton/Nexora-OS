@@ -12,3 +12,7 @@ nexora_add_test(tst_libraryscanner SOURCES tst_libraryscanner.cpp LIBS nexora_li
 nexora_add_test(tst_systemintegration SOURCES tst_systemintegration.cpp LIBS nexora_system LABELS unit)
 nexora_add_test(tst_logging SOURCES tst_logging.cpp LIBS nexora_shared LABELS unit)
 nexora_add_test(tst_buttonmapping SOURCES tst_buttonmapping.cpp LIBS nexora_input LABELS unit)
+nexora_add_test(tst_datalayout SOURCES tst_datalayout.cpp LIBS nexora_shared LABELS unit)
+nexora_add_test(tst_atomicfile SOURCES tst_atomicfile.cpp LIBS nexora_shared LABELS unit)
+nexora_add_test(tst_redaction SOURCES tst_redaction.cpp LIBS nexora_shared LABELS unit)
+nexora_add_test(tst_systemcatalog SOURCES tst_systemcatalog.cpp LIBS nexora_shared LABELS unit)

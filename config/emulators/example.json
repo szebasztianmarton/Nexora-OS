@@ -1,6 +1,7 @@
 {
   "id": "example-true",
   "name": "Example (exits immediately)",
+  "version": "1.0",
   "executable": "/bin/true",
   "arguments": [],
   "enabled": true

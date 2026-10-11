@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(NexoraOS
-    VERSION 0.2.0
-    DESCRIPTION "Controller-first Linux gaming environment (MVP 1 desktop prototype)"
+    VERSION 0.4.0
+    DESCRIPTION "Controller-first Linux gaming environment (MVP 4)"
     LANGUAGES CXX)
 
 if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
@@ -23,6 +23,24 @@ option(NEXORA_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(NEXORA_BUILD_FAKE_EMULATOR "Build the fake emulator used by tests and dev runs" ON)
 set(NEXORA_WITH_SDL3 "AUTO" CACHE STRING "Build the optional SDL3 gamepad backend (AUTO, ON, OFF)")
 set_property(CACHE NEXORA_WITH_SDL3 PROPERTY STRINGS AUTO ON OFF)
+
+set(NEXORA_BOARD "nexora-x86_64" CACHE STRING "Board / hardware profile name reported by the OS")
+if(NOT DEFINED NEXORA_BUILD_ID)
+    set(NEXORA_BUILD_ID "dev")
+    find_package(Git QUIET)
+    if(GIT_FOUND)
+        execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --dirty
+                        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                        OUTPUT_VARIABLE NEXORA_GIT_DESCRIBE
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                        ERROR_QUIET
+                        RESULT_VARIABLE NEXORA_GIT_RESULT)
+        if(NEXORA_GIT_RESULT EQUAL 0 AND NEXORA_GIT_DESCRIBE)
+            set(NEXORA_BUILD_ID "${NEXORA_GIT_DESCRIBE}")
+        endif()
+    endif()
+endif()
+set(NEXORA_BUILD_ID "${NEXORA_BUILD_ID}" CACHE STRING "Build identifier (default: git describe at configure time)")
 
 set(NEXORA_QT_MIN_VERSION 6.4)
 set(NEXORA_QT_COMPONENTS Core Gui Qml Quick QuickControls2 Sql)
@@ -64,6 +82,10 @@ endif()
 configure_file(config/emulators/example.json ${NEXORA_BUILD_CONFIG_DIR}/example.json COPYONLY)
 install(FILES config/emulators/example.json
         DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)
+
+configure_file(config/systems/systems.json ${PROJECT_BINARY_DIR}/share/nexora/systems.json COPYONLY)
+install(FILES config/systems/systems.json
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora)
 
 if(BUILD_TESTING)
     enable_testing()
