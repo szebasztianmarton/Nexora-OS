@@ -14,7 +14,8 @@
       "favorite": "north",
       "search": "west",
       "prevTab": "l1",
-      "nextTab": "r1"
+      "nextTab": "r1",
+      "gameBar": "guide"
     },
     "library.directories": ["/srv/games"],
     "library.extensions": [".zip"],

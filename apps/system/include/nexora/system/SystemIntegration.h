@@ -26,6 +26,15 @@ struct SystemStatus
     qint64 memoryAvailableKiB = -1;
 };
 
+// Aggregate CPU time counters from /proc/stat (in clock ticks). Usage over an interval is
+// 1 - (idle delta / total delta) between two samples.
+struct CpuTimes
+{
+    quint64 total = 0;
+    quint64 idle = 0; // idle + iowait
+    bool valid = false;
+};
+
 // Filesystem locations the integration reads or writes (overridable for tests).
 struct SystemEnvironment
 {
@@ -58,6 +67,8 @@ public:
     QString platformName() const;
     virtual bool supports(Capability capability) const = 0;
     virtual SystemStatus status() const;
+    // Cheap enough to sample about once per second (one small proc file).
+    virtual CpuTimes cpuTimes() const;
 
     // Asks the system to power off / reboot. Never blocks.
     virtual bool requestPower(PowerAction action, QString *error) = 0;

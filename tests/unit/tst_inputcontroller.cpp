@@ -46,6 +46,7 @@ class TestInputController : public QObject
 private slots:
     void newActionsAndCapture();
     void chordWorksWhileSuspended();
+    void gameBarWorksWhileSuspended();
     void acceptSendsReturn();
     void actionMapping_data();
     void actionMapping();
@@ -108,6 +109,7 @@ void TestInputController::keyForAction()
     QCOMPARE(InputController::keyForAction(NavAction::Accept), int(Qt::Key_Return));
     QCOMPARE(InputController::keyForAction(NavAction::Back), int(Qt::Key_Escape));
     QCOMPARE(InputController::keyForAction(NavAction::Menu), int(Qt::Key_Menu));
+    QCOMPARE(InputController::keyForAction(NavAction::GameBar), int(Qt::Key_HomePage));
 }
 
 void TestInputController::navigatorFeedsWindow()
@@ -228,6 +230,32 @@ void TestInputController::chordWorksWhileSuspended()
     QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000);
     QCoreApplication::processEvents();
     QVERIFY(window.events.isEmpty()); // navigation (Menu) still dropped
+}
+
+void TestInputController::gameBarWorksWhileSuspended()
+{
+    InputController controller;
+    RecordingWindow window;
+    controller.setTargetWindowProvider([&window] { return &window; });
+    QSignalSpy gameBar(&controller, &InputController::gameBarRequested);
+
+    // Guide is reported as a request, never as a key, suspended (emulator running) or not.
+    controller.navigator()->buttonEvent(GamepadButton::Guide, true);
+    QCOMPARE(gameBar.size(), 1);
+    controller.setSuspended(true);
+    controller.navigator()->buttonEvent(GamepadButton::Guide, false);
+    controller.navigator()->buttonEvent(GamepadButton::Guide, true);
+    QCOMPARE(gameBar.size(), 2);
+    QCoreApplication::processEvents();
+    QTest::qWait(20);
+    QVERIFY(window.events.isEmpty());
+
+    // While a remap is being captured, Guide is captured like any other button.
+    controller.setSuspended(false);
+    controller.setCapturing(true);
+    controller.navigator()->buttonEvent(GamepadButton::Guide, false);
+    controller.navigator()->buttonEvent(GamepadButton::Guide, true);
+    QCOMPARE(gameBar.size(), 2);
 }
 
 void TestInputController::newActionsAndCapture()

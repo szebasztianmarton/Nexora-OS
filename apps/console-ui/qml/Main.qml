@@ -3,10 +3,11 @@ import QtQuick.Controls
 import Nexora.Console
 
 // Full-screen dashboard: header, top-level tabs (Home, Games, Emulators, Settings,
-// Diagnostics), the running-emulator overlay and transient notices.
+// Diagnostics), the running-emulator overlay, the game bar and transient notices.
 //
 // Controllers arrive as key events (see InputController::keyForAction): arrows, Return
-// (Accept), Escape/Back (Back), Menu/F1, Favorites, Search, PageUp/PageDown (L1/R1).
+// (Accept), Escape/Back (Back), Menu/F1, Favorites, Search, PageUp/PageDown (L1/R1). The
+// game bar button (Guide) arrives through GameBarController instead; Ctrl+G on a keyboard.
 ApplicationWindow {
     id: window
     objectName: "mainWindow"
@@ -14,6 +15,7 @@ ApplicationWindow {
     required property LibraryController library
     required property SettingsController settings
     required property SystemController system
+    required property GameBarController gameBar
 
     width: 1280
     height: 720
@@ -35,6 +37,9 @@ ApplicationWindow {
     // Last focused item per tab (restored when switching back) and before the overlay.
     property var tabFocus: [null, null, null, null, null]
     property Item focusBeforeOverlay: null
+    property Item focusBeforeGameBar: null
+    // The bar raised this window above a running emulator; lower it again on close.
+    property bool raisedForGameBar: false
 
     function tabIndex(key) {
         for (let i = 0; i < tabs.length; ++i) {
@@ -85,7 +90,18 @@ ApplicationWindow {
         openTab("games")
         gamesScreen.focusSearch()
     }
+    function inGameBar(item) {
+        for (let p = item; p; p = p.parent) {
+            if (p === gameBarLayer)
+                return true
+        }
+        return false
+    }
     function restoreFocus() {
+        if (window.gameBar.open) {
+            gameBarLayer.focusDefault()
+            return
+        }
         if (window.app.busy) {
             overlay.forceActiveFocus()
             return
@@ -126,7 +142,9 @@ ApplicationWindow {
     }
     footer: HintBar {
         visible: window.settings.showHints
-        hints: window.app.busy
+        hints: window.gameBar.open
+               ? gameBarLayer.hints
+               : window.app.busy
                ? [{ button: "A / Enter", action: "Stop emulator" },
                   { button: "Select + Start (hold)", action: "Return to Nexora" }]
                : tabBar.activeFocus
@@ -296,6 +314,49 @@ ApplicationWindow {
                 Qt.callLater(window.restoreFocus)
             }
         }
+    }
+
+    GameBar {
+        id: gameBarLayer
+        anchors.fill: parent
+        z: 30
+        gameBar: window.gameBar
+        app: window.app
+        settings: window.settings
+        system: window.system
+        onNavigate: (tab) => window.navigate(tab)
+    }
+    Connections {
+        target: window.gameBar
+        function onOpenChanged() {
+            if (window.gameBar.open) {
+                const item = window.activeFocusItem
+                window.focusBeforeGameBar = item && item !== window.contentItem && !window.inGameBar(item) ? item : null
+                // On top of a running emulator: bring Nexora to the front so it gets input.
+                if (window.app.busy && !window.active) {
+                    window.raisedForGameBar = true
+                    window.raise()
+                    window.requestActivate()
+                }
+                gameBarLayer.focusDefault()
+            } else {
+                const saved = window.focusBeforeGameBar
+                window.focusBeforeGameBar = null
+                if (saved && saved.visible)
+                    saved.forceActiveFocus()
+                else
+                    window.restoreFocus()
+                if (window.raisedForGameBar) {
+                    window.raisedForGameBar = false
+                    if (window.app.busy)
+                        window.lower() // back to the game
+                }
+            }
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+G"
+        onActivated: window.gameBar.toggle()
     }
 
     // Development convenience; the console build will not expose quitting.

@@ -80,6 +80,37 @@ private slots:
         const SystemStatus s = sys.status();
         QCOMPARE(s.uptimeSeconds, -1);
         QCOMPARE(s.memoryTotalKiB, -1);
+        QVERIFY(!sys.cpuTimes().valid);
+    }
+
+    void readsRealProc()
+    {
+        // Real proc files report a size of 0; reading must not depend on it.
+        if (!QFile::exists(QStringLiteral("/proc/meminfo")) || !QFile::exists(QStringLiteral("/proc/stat")))
+            QSKIP("No /proc on this system");
+        DesktopSystemIntegration sys(SystemIntegration::Environment{});
+        const SystemStatus s = sys.status();
+        QVERIFY(s.memoryTotalKiB > 0);
+        QVERIFY(s.memoryAvailableKiB >= 0);
+        QVERIFY(sys.cpuTimes().valid);
+    }
+
+    void readsCpuTimes()
+    {
+        QTemporaryDir dir;
+        const auto env = fakeEnv(dir);
+        DesktopSystemIntegration sys(env);
+        // user nice system idle iowait irq softirq steal guest guest_nice
+        write(env.procRoot + QStringLiteral("/stat"), "cpu  100 5 50 800 20 3 2 0 40 0\ncpu0 1 2 3 4\n");
+        const CpuTimes t = sys.cpuTimes();
+        QVERIFY(t.valid);
+        QCOMPARE(t.total, quint64(980)); // guest time is already part of user time
+        QCOMPARE(t.idle, quint64(820));
+
+        write(env.procRoot + QStringLiteral("/stat"), "intr 1 2 3\n");
+        QVERIFY(!sys.cpuTimes().valid);
+        write(env.procRoot + QStringLiteral("/stat"), "cpu  1 x 3 4\n");
+        QVERIFY(!sys.cpuTimes().valid);
     }
 
     void desktopNeverControlsThePower()

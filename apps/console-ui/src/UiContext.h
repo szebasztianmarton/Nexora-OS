@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AppController.h"
+#include "GameBarController.h"
 #include "LibraryController.h"
 #include "SettingsController.h"
 #include "SystemController.h"
@@ -45,6 +46,7 @@ public:
     LibraryController *library() { return m_libraryController.get(); }
     SettingsController *settings() { return m_settingsController.get(); }
     SystemController *system() { return m_systemController.get(); }
+    GameBarController *gameBar() { return m_gameBarController.get(); }
 
     // Startup: load settings, open the library, apply preferences, scan if needed.
     void start();
@@ -60,6 +62,7 @@ private:
     std::unique_ptr<LibraryController> m_libraryController;
     std::unique_ptr<SettingsController> m_settingsController;
     std::unique_ptr<SystemController> m_systemController;
+    std::unique_ptr<GameBarController> m_gameBarController;
     input::InputController *m_input;
     QString m_databasePath;
 };

@@ -10,9 +10,9 @@ struct ActionName
     const char *name;
 };
 constexpr ActionName kActions[] = {
-    {NavAction::Accept, "accept"},     {NavAction::Back, "back"},     {NavAction::Menu, "menu"},
-    {NavAction::Favorite, "favorite"}, {NavAction::Search, "search"}, {NavAction::PrevTab, "prevTab"},
-    {NavAction::NextTab, "nextTab"},
+    {NavAction::Accept, "accept"},     {NavAction::Back, "back"},       {NavAction::Menu, "menu"},
+    {NavAction::Favorite, "favorite"}, {NavAction::Search, "search"},   {NavAction::PrevTab, "prevTab"},
+    {NavAction::NextTab, "nextTab"},   {NavAction::GameBar, "gameBar"},
 };
 
 struct ButtonName
@@ -35,7 +35,7 @@ ButtonMapping ButtonMapping::defaults()
         {NavAction::Accept, GamepadButton::South}, {NavAction::Back, GamepadButton::East},
         {NavAction::Menu, GamepadButton::Start},   {NavAction::Favorite, GamepadButton::North},
         {NavAction::Search, GamepadButton::West},  {NavAction::PrevTab, GamepadButton::L1},
-        {NavAction::NextTab, GamepadButton::R1},
+        {NavAction::NextTab, GamepadButton::R1},   {NavAction::GameBar, GamepadButton::Guide},
     };
     return m;
 }
@@ -90,8 +90,11 @@ std::optional<NavAction> ButtonMapping::actionFor(GamepadButton button) const
         if (it.value() == button)
             return it.key();
     }
-    // Unassigned Guide and Select still open the menu, as in MVP 1.
-    if (button == GamepadButton::Guide || button == GamepadButton::Select)
+    // An unassigned Guide still opens the game bar (mappings saved before it existed do not
+    // name it); an unassigned Select opens the menu, as in MVP 1.
+    if (button == GamepadButton::Guide)
+        return NavAction::GameBar;
+    if (button == GamepadButton::Select)
         return NavAction::Menu;
     return std::nullopt;
 }

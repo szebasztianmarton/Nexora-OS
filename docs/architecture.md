@@ -78,6 +78,10 @@ graph TD
     ctx --> lc[LibraryController]
     ctx --> sc[SettingsController]
     ctx --> syc[SystemController]
+    ctx --> gbc[GameBarController]
+    gbc --> ac
+    gbc --> sysint
+    ic -- gameBarRequested --> gbc
     ac --> em[EmulatorManager]
     ac --> elm[EmulatorListModel]
     lc --> glm[GameListModel x3<br/>games, recent, favorites]
@@ -97,8 +101,9 @@ graph TD
 | `library` | `LibraryController` | Game lists (`games`, `recentGames`, `favoriteGames`), search/filter/sort, refresh, favorites, folders, scan summary/issues |
 | `settings` | `SettingsController` | All preferences, remapping, reset, settings issues |
 | `system` | `SystemController` | Platform, status lines, power off/restart |
+| `gameBar` | `GameBarController` | Game bar open state, CPU/memory/load samples (only while open), session time |
 
-The QML dashboard (`Main.qml`) has five tabs — Home, Games, Emulators, Settings, Diagnostics — plus a header, a hint bar, transient notices (`Toast`) and the running-emulator overlay. QML only handles key events; controller input arrives as synthesized keys ([Input design](#input-design)).
+The QML dashboard (`Main.qml`) has five tabs — Home, Games, Emulators, Settings, Diagnostics — plus a header, a hint bar, transient notices (`Toast`), the running-emulator overlay and the game bar ([game-bar.md](game-bar.md)). QML only handles key events; controller input arrives as synthesized keys ([Input design](#input-design)).
 
 ## UI to emulator manager
 
@@ -258,8 +263,8 @@ graph LR
 ```
 
 - **Backends** translate device events into backend-neutral `GamepadButton` / `GamepadAxis` calls tagged with a device id; they run on the GUI thread and never block it. Selection: `auto` (SDL3 if built and it starts, else evdev, else keyboard-only; never fails), `evdev`, `sdl3`, `none`; from `--input-backend` or `input.backend`, at start-up.
-- **GamepadNavigator** maps buttons to actions through the configurable `ButtonMapping` (default South → Accept, East → Back, Start → Menu, North → Favorite, West → Search, L1/R1 → previous/next tab; unbound Guide/Select → Menu). D-pad, hat and left stick always give directions with hysteresis (0.5 / 0.3) and auto-repeat (400 ms, then 120 ms). State is kept per device. Holding Select + Start on one device for 1 s emits `returnToLauncherRequested`.
-- **InputController** posts a key press + release for each action (`Up/Down/Left/Right`, `Return`, `Escape`, `Menu`, `Favorites`, `Search`, `PageUp`, `PageDown`) to the focused window. It drops actions while **suspended** (`AppController` suspends it while an emulator is active, because devices are not grabbed), forwards the chord even while suspended, and supports **capture** of the next button for remapping.
+- **GamepadNavigator** maps buttons to actions through the configurable `ButtonMapping` (default South → Accept, East → Back, Start → Menu, North → Favorite, West → Search, L1/R1 → previous/next tab, Guide → GameBar; unbound Guide → GameBar, unbound Select → Menu). D-pad, hat and left stick always give directions with hysteresis (0.5 / 0.3) and auto-repeat (400 ms, then 120 ms). State is kept per device. Holding Select + Start on one device for 1 s emits `returnToLauncherRequested`.
+- **InputController** posts a key press + release for each action (`Up/Down/Left/Right`, `Return`, `Escape`, `Menu`, `Favorites`, `Search`, `PageUp`, `PageDown`) to the focused window. It drops actions while **suspended** (`AppController` suspends it while an emulator is active, because devices are not grabbed), forwards the chord even while suspended, reports the `GameBar` action as `gameBarRequested()` (never as a key, also while suspended), and supports **capture** of the next button for remapping.
 
 Details, layouts, limitations and a hardware test checklist: [controller-support.md](controller-support.md).
 

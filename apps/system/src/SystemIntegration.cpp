@@ -92,8 +92,11 @@ SystemStatus SystemIntegration::status() const
 
     QFile mem(m_env.procRoot + QStringLiteral("/meminfo"));
     if (mem.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        while (!mem.atEnd()) {
-            const QString line = QString::fromLatin1(mem.readLine()).simplified();
+        // Read to the end instead of looping on atEnd(): proc files report a size of 0, so
+        // atEnd() is true before anything has been read.
+        const QStringList lines = QString::fromLatin1(mem.readAll()).split(u'\n');
+        for (const QString &raw : lines) {
+            const QString line = raw.simplified();
             const qint64 kib = line.section(u' ', 1, 1).toLongLong();
             if (line.startsWith(QLatin1String("MemTotal:")))
                 s.memoryTotalKiB = kib;
@@ -102,6 +105,28 @@ SystemStatus SystemIntegration::status() const
         }
     }
     return s;
+}
+
+CpuTimes SystemIntegration::cpuTimes() const
+{
+    // First line: "cpu  user nice system idle iowait irq softirq steal guest guest_nice".
+    // guest/guest_nice are already included in user/nice, so they are not added again.
+    CpuTimes t;
+    const QString line = readFirstLine(m_env.procRoot + QStringLiteral("/stat"));
+    const QStringList fields = line.simplified().split(u' ');
+    if (fields.size() < 5 || fields.first() != QLatin1String("cpu"))
+        return t;
+    for (qsizetype i = 1; i < fields.size() && i <= 8; ++i) {
+        bool ok = false;
+        const quint64 value = fields.at(i).toULongLong(&ok);
+        if (!ok)
+            return CpuTimes{};
+        t.total += value;
+        if (i == 4 || i == 5) // idle, iowait
+            t.idle += value;
+    }
+    t.valid = t.total > 0;
+    return t;
 }
 
 DesktopSystemIntegration::DesktopSystemIntegration(Environment env, QObject *parent)

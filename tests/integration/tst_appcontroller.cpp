@@ -1,8 +1,10 @@
 // AppController wired to a temporary configuration that uses the fake emulator.
 #include "AppController.h"
+#include "GameBarController.h"
 #include "input/GamepadNavigator.h"
 #include "input/InputController.h"
 
+#include <QDir>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -24,6 +26,13 @@ void writeConfig(const QTemporaryDir &dir, const QString &id, const QString &exe
         QStringLiteral("{\"id\":\"%1\",\"name\":\"Emu %1\",\"executable\":\"%2\",\"arguments\":[%3],\"enabled\":%4}")
             .arg(id, executable, arguments, enabled ? QStringLiteral("true") : QStringLiteral("false"))
             .toUtf8());
+}
+
+void write(const QString &path, const QByteArray &content)
+{
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write(content);
 }
 
 QString statusOf(AppController &app, const QString &id)
@@ -161,6 +170,69 @@ private slots:
         input.navigator()->buttonEvent(nexora::input::GamepadButton::Start, true);
         QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("exited"), Timeout);
         QVERIFY(app.statusMessage().contains(QStringLiteral("stopped")));
+        QVERIFY(!input.isSuspended());
+    }
+
+    void gameBarOverRunningEmulator()
+    {
+        QTemporaryDir dir;
+        writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
+                    QStringLiteral("\"--sleep-ms\",\"30000\""));
+        QDir(dir.path()).mkpath(QStringLiteral("proc"));
+        nexora::system::SystemEnvironment env;
+        env.procRoot = dir.filePath(QStringLiteral("proc"));
+        nexora::system::DesktopSystemIntegration system(env);
+        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        nexora::input::InputController input;
+        QVERIFY(input.start(QStringLiteral("none")));
+        app.setInputController(&input);
+        nexora::ui::GameBarController bar(&app, &system, &input);
+        QSignalSpy openSpy(&bar, &nexora::ui::GameBarController::openChanged);
+        QCOMPARE(bar.sessionSeconds(), -1);
+
+        QVERIFY(app.launch(QStringLiteral("long")));
+        QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("running"), Timeout);
+        QVERIFY(input.isSuspended());
+        QVERIFY(bar.sessionSeconds() >= 0);
+
+        // Guide opens the bar on top of the game and hands the pad back to the launcher.
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, true);
+        QVERIFY(bar.isOpen());
+        QCOMPARE(openSpy.size(), 1);
+        QVERIFY(!input.isSuspended());
+
+        // Performance figures: a CPU percentage needs two samples.
+        write(env.procRoot + QStringLiteral("/stat"), "cpu  100 0 100 800 0 0 0 0 0 0\n");
+        write(env.procRoot + QStringLiteral("/meminfo"), "MemTotal: 4194304 kB\nMemAvailable: 1048576 kB\n");
+        bar.refresh();
+        QCOMPARE(bar.cpuPercent(), -1);
+        write(env.procRoot + QStringLiteral("/stat"), "cpu  150 0 150 900 0 0 0 0 0 0\n");
+        bar.refresh();
+        QCOMPARE(bar.cpuPercent(), 50);
+        QCOMPARE(bar.cpuHistory(), QVariantList{50});
+        QCOMPARE(bar.memoryPercent(), 75);
+        QCOMPARE(bar.memoryUsedMiB(), 3072);
+        QCOMPARE(bar.memoryTotalMiB(), 4096);
+        for (int i = 0; i < nexora::ui::GameBarController::kHistoryLength + 5; ++i) {
+            write(env.procRoot + QStringLiteral("/stat"),
+                  QStringLiteral("cpu  %1 0 0 %1 0 0 0 0 0 0\n").arg(1000 + i * 10).toLatin1());
+            bar.refresh();
+        }
+        QCOMPARE(bar.cpuHistory().size(), nexora::ui::GameBarController::kHistoryLength);
+
+        // Guide again closes it: the game gets the pad back.
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, false);
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, true);
+        QVERIFY(!bar.isOpen());
+        QVERIFY(input.isSuspended());
+
+        // Stopping the game from the open bar leaves the launcher with the pad.
+        bar.toggle();
+        QVERIFY(app.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("exited"), Timeout);
+        QVERIFY(!input.isSuspended());
+        QCOMPARE(bar.sessionSeconds(), -1);
+        bar.close();
         QVERIFY(!input.isSuspended());
     }
 

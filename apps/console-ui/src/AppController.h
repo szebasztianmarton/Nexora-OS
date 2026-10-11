@@ -57,6 +57,8 @@ public:
 
     // Optional; the controller works without input devices (keyboard only).
     void setInputController(input::InputController *input);
+    // While the game bar is open the controller drives the launcher even if an emulator runs.
+    void setGameBarOpen(bool open);
 
     emulator::EmulatorManager *manager() { return &m_manager; }
     EmulatorListModel *emulators() { return &m_model; }
@@ -122,6 +124,7 @@ private:
     QString m_statusMessage;
     bool m_statusIsError = false;
     bool m_configDirectoryFound = false;
+    bool m_gameBarOpen = false;
     QStringList m_configIssues;
     QStringList m_disabled;
     QList<shared::EmulatorConfig> m_enabled;

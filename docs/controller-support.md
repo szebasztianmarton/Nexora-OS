@@ -120,6 +120,7 @@ Synthesized keys are fixed; the button for each remappable action comes from `in
 | `search` | `west` | X / □ / Y | `Search` | Open the Games tab with the search field focused |
 | `prevTab` | `l1` | LB / L1 / L | `PageUp` | Previous tab (Home, Games, Emulators, Settings, Diagnostics) |
 | `nextTab` | `r1` | RB / R1 / R | `PageDown` | Next tab |
+| `gameBar` | `guide` | Xbox / PS / Home | (none; `InputController::gameBarRequested`) | Open or close the [game bar](game-bar.md). Works while an emulator runs (navigation suspended). |
 | Up/Down/Left/Right | D-pad, hat, left stick | (fixed) | arrow keys | Move focus; Up at the top of a page moves to the tab bar; Left/Right change values on Settings rows |
 
 The dashboard behaviour is defined in `apps/console-ui/qml/` and covered by `tst_qmlsmoke` with key events. The hint bar at the bottom shows the keys that apply to the focused element.
@@ -130,10 +131,10 @@ The `input.mapping` setting maps action → button ([settings.md](settings.md#ke
 
 ```json
 "input.mapping": {"accept": "south", "back": "east", "menu": "start", "favorite": "north",
-                  "search": "west", "prevTab": "l1", "nextTab": "r1"}
+                  "search": "west", "prevTab": "l1", "nextTab": "r1", "gameBar": "guide"}
 ```
 
-- Remappable actions: `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`.
+- Remappable actions: `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`, `gameBar`.
 - Buttons: `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1`.
 
 Validation (`ButtonMapping::fromVariantMap()`), applied when the setting is loaded or changed:
@@ -164,7 +165,7 @@ Not configurable in MVP 2:
 | Directions | D-pad buttons, hat axes and the left stick always navigate. Sticks/hats trigger at \|value\| ≥ 0.5 and release below 0.3 (hysteresis); flicking straight to the opposite side registers. |
 | Auto-repeat | A held direction repeats after 400 ms, then every 120 ms. Only the most recently pressed direction repeats; releasing it stops repeat even if an older direction is still held. Buttons never repeat. |
 | Return to launcher | Hold **Select + Start** on the same controller for **1 second**: the running emulator is asked to stop (SIGTERM, SIGKILL after its stop timeout, 5 s by default). Fires once per hold; releasing either button earlier cancels it. Works while navigation is suspended. Does nothing when no emulator is starting/running. |
-| Guide / Select fallback | If `guide` or `select` is not bound to any action, pressing it triggers `menu`. |
+| Guide / Select fallback | If `guide` is not bound to any action, pressing it triggers `gameBar` (so mappings saved before the game bar existed still open it); an unbound `select` triggers `menu`. |
 
 Note: pressing Start or Select also triggers their normal action (by default `menu`) when navigation is not suspended, including at the start of the chord.
 
@@ -185,6 +186,7 @@ The keyboard always works, with or without a controller backend. Because gamepad
 | Key | Effect |
 | --- | --- |
 | `F1` | Diagnostics tab (like Menu) |
+| `Ctrl+G` | Open / close the game bar (like Guide) |
 | `F` (no modifier) on a focused game | Toggle favorite |
 | `/` or `Ctrl+F` | Search on the Games tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
@@ -228,16 +230,17 @@ Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --wind
 2. **Permissions:** as a user without `input` group membership, the status explains the permission problem; after adding the group and logging in again, the pad is detected.
 3. **Hotplug:** unplug → "Gamepad disconnected" in the log and device list updates; plug in again → detected within about a second.
 4. **Face buttons by position:** bottom = confirm, right = back, top = favorite, left = search. Note any swapped pair (especially west/north on Xbox pads under evdev).
-5. **Start / Select / Guide:** Start opens the Diagnostics tab (menu action); Guide and Select do the same while unbound.
+5. **Start / Select / Guide:** Start opens the Diagnostics tab (menu action), as does Select while unbound; Guide opens and closes the game bar.
 6. **Shoulders:** L1/R1 switch to the previous/next tab.
 7. **Directions:** D-pad, left stick and (if the pad reports one) the hat all move focus; a held direction repeats; releasing stops immediately; resting stick does not drift.
 8. **Remap:** remap `favorite` to L1 from the settings screen; check that `prevTab` moved to the old favorite button, the new binding works, it survives a restart, and an unpressed capture times out after 5 s.
 9. **Invalid mapping:** put `"accept": "south", "back": "south"` in the settings file; the settings screen reports the problem and the default mapping works.
 10. **Emulator suspension:** launch a game; pressing buttons in the emulator does not navigate the launcher behind it.
-11. **Return chord:** in a running emulator hold Select + Start for 1 s → emulator stops and the launcher has focus again; releasing earlier does nothing; an emulator that ignores SIGTERM is killed after its stop timeout.
-12. **Two pads:** hold a direction on pad 1 while moving the stick on pad 2; holding Select on one pad and Start on the other does not trigger the chord.
-13. **Disconnect while holding:** hold a direction and unplug; repeat stops.
-14. **Keyboard alongside:** arrows/Enter/Esc keep working with a pad connected.
+11. **Game bar over a game:** in a running emulator press Guide → the Nexora window comes to the front with the game bar; the pad navigates it; Guide or "Back to game" returns to the emulator window.
+12. **Return chord:** in a running emulator hold Select + Start for 1 s → emulator stops and the launcher has focus again; releasing earlier does nothing; an emulator that ignores SIGTERM is killed after its stop timeout.
+13. **Two pads:** hold a direction on pad 1 while moving the stick on pad 2; holding Select on one pad and Start on the other does not trigger the chord.
+14. **Disconnect while holding:** hold a direction and unplug; repeat stops.
+15. **Keyboard alongside:** arrows/Enter/Esc keep working with a pad connected.
 15. **Backend `none`:** `--input-backend none` → pad ignored, keyboard works.
 
 ## Planned
