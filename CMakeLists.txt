@@ -25,7 +25,10 @@ set(NEXORA_WITH_SDL3 "AUTO" CACHE STRING "Build the optional SDL3 gamepad backen
 set_property(CACHE NEXORA_WITH_SDL3 PROPERTY STRINGS AUTO ON OFF)
 
 set(NEXORA_BOARD "nexora-x86_64" CACHE STRING "Board / hardware profile name reported by the OS")
-if(NOT DEFINED NEXORA_BUILD_ID)
+# Empty (default) = derive from git on every configure; a non-empty value is an override.
+set(NEXORA_BUILD_ID "" CACHE STRING "Build identifier override (default: git describe at configure time)")
+if(NOT NEXORA_BUILD_ID)
+    # Normal variable: shadows the cache entry and is recomputed on each configure.
     set(NEXORA_BUILD_ID "dev")
     find_package(Git QUIET)
     if(GIT_FOUND)
@@ -39,8 +42,11 @@ if(NOT DEFINED NEXORA_BUILD_ID)
             set(NEXORA_BUILD_ID "${NEXORA_GIT_DESCRIBE}")
         endif()
     endif()
+    # Re-run configure when the checked-out commit changes.
+    if(EXISTS ${PROJECT_SOURCE_DIR}/.git/HEAD)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/.git/HEAD)
+    endif()
 endif()
-set(NEXORA_BUILD_ID "${NEXORA_BUILD_ID}" CACHE STRING "Build identifier (default: git describe at configure time)")
 
 set(NEXORA_QT_MIN_VERSION 6.4)
 set(NEXORA_QT_COMPONENTS Core Gui Qml Quick QuickControls2 Sql)
