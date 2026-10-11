@@ -76,6 +76,7 @@ void GameBarController::refresh()
         m_memoryTotalMiB = m_memoryUsedMiB = m_memoryPercent = -1;
     }
     m_load1 = status.load1;
+    m_device = m_system->deviceStatus();
     emit statsChanged();
 }
 

@@ -36,6 +36,9 @@ class GameBarController : public QObject
     Q_PROPERTY(double load1 READ load1 NOTIFY statsChanged)
     Q_PROPERTY(int sessionSeconds READ sessionSeconds NOTIFY statsChanged)
     Q_PROPERTY(int historyLength READ historyLength CONSTANT)
+    Q_PROPERTY(int batteryPercent READ batteryPercent NOTIFY statsChanged)
+    Q_PROPERTY(bool batteryCharging READ batteryCharging NOTIFY statsChanged)
+    Q_PROPERTY(QString network READ network NOTIFY statsChanged)
 
 public:
     static constexpr int kHistoryLength = 30;
@@ -57,6 +60,10 @@ public:
     int memoryUsedMiB() const { return m_memoryUsedMiB; }
     int memoryTotalMiB() const { return m_memoryTotalMiB; }
     double load1() const { return m_load1; }
+    // Status icons: -1 / "none" when there is no battery / no network link.
+    int batteryPercent() const { return m_device.batteryPercent; }
+    bool batteryCharging() const { return m_device.batteryCharging; }
+    QString network() const { return m_device.network; }
     // How long the current emulator has been running; -1 when none runs.
     int sessionSeconds() const;
 
@@ -76,6 +83,7 @@ private:
     QTimer m_sampleTimer;
     QElapsedTimer m_session;
     system::CpuTimes m_lastCpu;
+    system::DeviceStatus m_device;
     QVariantList m_cpuHistory;
     bool m_open = false;
     int m_cpuPercent = -1;

@@ -142,9 +142,7 @@ ApplicationWindow {
     }
     footer: HintBar {
         visible: window.settings.showHints
-        hints: window.gameBar.open
-               ? gameBarLayer.hints
-               : window.app.busy
+        hints: window.app.busy
                ? [{ button: "A / Enter", action: "Stop emulator" },
                   { button: "Select + Start (hold)", action: "Return to Nexora" }]
                : tabBar.activeFocus
@@ -318,10 +316,12 @@ ApplicationWindow {
 
     GameBar {
         id: gameBarLayer
+        // Above everything, header and hint bar included, like the Xbox Game Bar.
+        parent: Overlay.overlay
         anchors.fill: parent
-        z: 30
         gameBar: window.gameBar
         app: window.app
+        library: window.library
         settings: window.settings
         system: window.system
         onNavigate: (tab) => window.navigate(tab)
@@ -338,11 +338,14 @@ ApplicationWindow {
                     window.raise()
                     window.requestActivate()
                 }
-                gameBarLayer.focusDefault()
+                gameBarLayer.reset()
             } else {
                 const saved = window.focusBeforeGameBar
                 window.focusBeforeGameBar = null
-                if (saved && saved.visible)
+                // A game started from the bar: the running overlay takes focus, not the page.
+                if (window.app.busy && saved !== null && window.pageIndexOf(saved) >= 0)
+                    window.restoreFocus()
+                else if (saved && saved.visible)
                     saved.forceActiveFocus()
                 else
                     window.restoreFocus()

@@ -32,6 +32,7 @@ private:
     {
         SystemIntegration::Environment env;
         env.procRoot = dir.filePath(QStringLiteral("proc"));
+        env.sysRoot = dir.filePath(QStringLiteral("sys"));
         env.osReleaseFile = dir.filePath(QStringLiteral("etc/os-release"));
         env.nexoraReleaseFile = dir.filePath(QStringLiteral("etc/nexora-release"));
         env.powerRequestFifo = dir.filePath(QStringLiteral("run/power-request"));
@@ -93,6 +94,42 @@ private slots:
         QVERIFY(s.memoryTotalKiB > 0);
         QVERIFY(s.memoryAvailableKiB >= 0);
         QVERIFY(sys.cpuTimes().valid);
+    }
+
+    void readsDeviceStatus()
+    {
+        QTemporaryDir dir;
+        const auto env = fakeEnv(dir);
+        DesktopSystemIntegration sys(env);
+        // Nothing there: no battery, no network.
+        DeviceStatus d = sys.deviceStatus();
+        QCOMPARE(d.batteryPercent, -1);
+        QCOMPARE(d.network, QStringLiteral("none"));
+
+        const QString supply = env.sysRoot + QStringLiteral("/class/power_supply/");
+        write(supply + QStringLiteral("AC/type"), "Mains\n");
+        write(supply + QStringLiteral("BAT0/type"), "Battery\n");
+        write(supply + QStringLiteral("BAT0/capacity"), "87\n");
+        write(supply + QStringLiteral("BAT0/status"), "Charging\n");
+        const QString net = env.sysRoot + QStringLiteral("/class/net/");
+        write(net + QStringLiteral("lo/operstate"), "unknown\n");
+        write(net + QStringLiteral("docker0/operstate"), "up\n"); // virtual: no device link
+        write(net + QStringLiteral("wlan0/operstate"), "up\n");
+        write(net + QStringLiteral("wlan0/device"), "");
+        QDir().mkpath(net + QStringLiteral("wlan0/wireless"));
+        write(net + QStringLiteral("eth0/operstate"), "down\n");
+        write(net + QStringLiteral("eth0/device"), "");
+        d = sys.deviceStatus();
+        QCOMPARE(d.batteryPercent, 87);
+        QVERIFY(d.batteryCharging);
+        QCOMPARE(d.network, QStringLiteral("wifi"));
+
+        // A wired link wins over Wi-Fi.
+        write(net + QStringLiteral("eth0/operstate"), "up\n");
+        write(supply + QStringLiteral("BAT0/status"), "Discharging\n");
+        d = sys.deviceStatus();
+        QCOMPARE(d.network, QStringLiteral("ethernet"));
+        QVERIFY(!d.batteryCharging);
     }
 
     void readsCpuTimes()

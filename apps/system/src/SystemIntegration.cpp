@@ -2,6 +2,7 @@
 
 #include "nexora/shared/Logging.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
@@ -127,6 +128,43 @@ CpuTimes SystemIntegration::cpuTimes() const
     }
     t.valid = t.total > 0;
     return t;
+}
+
+DeviceStatus SystemIntegration::deviceStatus() const
+{
+    DeviceStatus d;
+    const QDir supplies(m_env.sysRoot + QStringLiteral("/class/power_supply"));
+    for (const QString &name : supplies.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QString base = supplies.filePath(name) + u'/';
+        if (readFirstLine(base + QStringLiteral("type")) != QLatin1String("Battery"))
+            continue;
+        bool ok = false;
+        const int capacity = readFirstLine(base + QStringLiteral("capacity")).toInt(&ok);
+        if (!ok)
+            continue;
+        d.batteryPercent = qBound(0, capacity, 100);
+        d.batteryCharging = readFirstLine(base + QStringLiteral("status")) == QLatin1String("Charging");
+        break;
+    }
+
+    // A wired link wins over Wi-Fi, like the system's own default route usually does.
+    const QDir interfaces(m_env.sysRoot + QStringLiteral("/class/net"));
+    for (const QString &name : interfaces.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::System, QDir::Name)) {
+        const QString base = interfaces.filePath(name) + u'/';
+        // Only real hardware: loopback, bridges, veth and tunnels have no "device" link.
+        if (!QFileInfo::exists(base + QStringLiteral("device")))
+            continue;
+        if (readFirstLine(base + QStringLiteral("operstate")) != QLatin1String("up"))
+            continue;
+        const bool wireless = QFileInfo::exists(base + QStringLiteral("wireless"))
+            || QFileInfo::exists(base + QStringLiteral("phy80211"));
+        if (!wireless) {
+            d.network = QStringLiteral("ethernet");
+            break;
+        }
+        d.network = QStringLiteral("wifi");
+    }
+    return d;
 }
 
 DesktopSystemIntegration::DesktopSystemIntegration(Environment env, QObject *parent)

@@ -16,10 +16,13 @@
 //   addDirButton, rescanRow, resetRow, rebootRow, powerOffRow, settingsIssues     (Settings)
 //   reloadButton                                                                  (Diagnostics)
 //   runningOverlay, stopButton, runningTitle                                      (overlay)
-//   gameBar, gameBarMenu, gameBarClock, nowPlayingWidget, gameBarTitle, sessionTime,
-//   gameBarResume, gameBarStop, gameBarHome, gameBarGames, gameBarSettings,
-//   performanceWidget, cpuValue, cpuGraph, memoryMeter, audioPowerWidget,
-//   gameBarVolume, gameBarVolumeValue, gameBarReboot, gameBarPowerOff             (game bar)
+//   gameBar, gameBarTabs, barTab_home|settings|audio|performance, gameBarStatus,
+//   controllerStatus, networkStatus, batteryStatus, gameBarClock, gameBarPanel,
+//   homePanel, gameBarArtwork, gameBarTitle, sessionTime, homeActions, tileLabel,
+//   gameBarResume, gameBarStop, gameBarHome, gameBarGames, gameBarRecent_<n>,
+//   settingsPanel, gameBarSettings, gameBarReboot, gameBarPowerOff, audioPanel,
+//   gameBarVolume, gameBarVolumeValue, performancePanel, cpuValue, cpuGraph,
+//   memoryMeter                                                                   (game bar)
 //   stateChip, scanChip, rootChip, clock, hintBar, toast                          (chrome)
 #include "AppController.h"
 #include "LibraryController.h"
@@ -510,7 +513,10 @@ private slots:
     void gameBarOverlay()
     {
         QTemporaryDir dir;
-        writeConfig(dir, QStringLiteral("long"), QStringLiteral("\"--sleep-ms\",\"30000\""));
+        writeConfig(dir, QStringLiteral("long"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        touch(games, QStringLiteral("Alpha Quest.rom"));
         Ui ui;
         load(ui, dir.path());
         if (QTest::currentTestFailed())
@@ -521,21 +527,42 @@ private slots:
         QVERIFY(!layer->isVisible());
         QQuickItem *before = ui.window->activeFocusItem();
         QVERIFY(before);
+        auto focused = [&ui](const char *name) {
+            auto *item = find(ui, name);
+            return item && item->hasActiveFocus();
+        };
+#define CHECK_FOCUS(name) QTRY_VERIFY2_WITH_TIMEOUT(focused(name), qPrintable(focusName(ui)), Timeout)
 
-        // Ctrl+G opens it over the dashboard; idle, it offers the dashboard tabs.
+        // Ctrl+G opens it on the Home widget button; idle, Home offers the dashboard.
         key(ui, Qt::Key_G, Qt::ControlModifier);
         QVERIFY(bar->isOpen());
         QTRY_VERIFY(layer->isVisible());
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "gameBarHome")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
-        QVERIFY(!find(ui, "gameBarResume")->isVisible());
+        CHECK_FOCUS("barTab_home");
+        QVERIFY(find(ui, "homePanel")->isVisible());
         QCOMPARE(find(ui, "gameBarTitle")->property("text").toString(), QStringLiteral("No game running"));
-        QVERIFY(!find(ui, "gameBarPowerOff")->isEnabled()); // desktop: no power control
+        QVERIFY(!find(ui, "gameBarResume")->isVisible());
+        QVERIFY(find(ui, "gameBarClock")->isVisible());
 
-        // Down moves inside a widget, Right to the next one; Left/Right adjust the volume.
+        // Down enters the panel, Left/Right walk the tiles, Up returns to the buttons.
         key(ui, Qt::Key_Down);
-        QVERIFY2(find(ui, "gameBarGames")->hasActiveFocus(), qPrintable(focusName(ui)));
+        CHECK_FOCUS("gameBarHome");
         key(ui, Qt::Key_Right);
-        QVERIFY2(find(ui, "gameBarVolume")->hasActiveFocus(), qPrintable(focusName(ui)));
+        CHECK_FOCUS("gameBarGames");
+        key(ui, Qt::Key_Right); // last tile: stays
+        CHECK_FOCUS("gameBarGames");
+        key(ui, Qt::Key_Up);
+        CHECK_FOCUS("barTab_home");
+
+        // The panel follows the selected widget button.
+        key(ui, Qt::Key_Right);
+        CHECK_FOCUS("barTab_settings");
+        QTRY_VERIFY(find(ui, "settingsPanel")->isVisible());
+        QVERIFY(!find(ui, "homePanel")->isVisible());
+        QVERIFY(!find(ui, "gameBarPowerOff")->isEnabled()); // desktop: no power control
+        key(ui, Qt::Key_Right);
+        CHECK_FOCUS("barTab_audio");
+        key(ui, Qt::Key_Down);
+        CHECK_FOCUS("gameBarVolume");
         const int volume = ui.context->settings()->volume();
         QVERIFY(volume >= 5);
         key(ui, Qt::Key_Left);
@@ -543,9 +570,12 @@ private slots:
         QCOMPARE(find(ui, "gameBarVolumeValue")->property("text").toString(), QString::number(volume - 5) + u'%');
         key(ui, Qt::Key_Right);
         QCOMPARE(ui.context->settings()->volume(), volume);
-        // The power buttons are disabled on the desktop, so Down has nowhere to go.
-        key(ui, Qt::Key_Down);
-        QVERIFY2(find(ui, "gameBarVolume")->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Up);
+        CHECK_FOCUS("barTab_audio");
+        key(ui, Qt::Key_Right);
+        CHECK_FOCUS("barTab_performance");
+        QTRY_VERIFY(find(ui, "cpuValue")->isVisible());
+        QVERIFY(find(ui, "memoryMeter")->isVisible());
 
         // Back closes it and gives focus back; nothing leaked to the dashboard.
         QCOMPARE(currentTab(ui), int(Home));
@@ -554,48 +584,70 @@ private slots:
         QTRY_VERIFY(!layer->isVisible());
         QTRY_COMPARE(ui.window->activeFocusItem(), before);
 
-        // The Guide button (gameBarRequested -> toggle) opens it too; "Settings" jumps there.
+        // The Guide button (gameBarRequested -> toggle) reopens it on Home; "Game library"
+        // jumps to the Games tab.
         bar->toggle();
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "gameBarHome")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        CHECK_FOCUS("barTab_home");
         key(ui, Qt::Key_Down);
-        key(ui, Qt::Key_Down);
-        QVERIFY2(find(ui, "gameBarSettings")->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Right);
+        CHECK_FOCUS("gameBarGames");
         key(ui, Qt::Key_Return);
         QVERIFY(!bar->isOpen());
-        QCOMPARE(currentTab(ui), int(Settings));
-        // No library folder yet: like the Home buttons, it lands on the field to add one.
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "addDirField")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QCOMPARE(currentTab(ui), int(Games));
 
-        // Over a running emulator: "Back to game" first, the session timer runs.
-        QVERIFY(ui.app->launch(QStringLiteral("long")));
+        // A played game shows up as a tile on Home and launches from there.
+        addGames(ui, games);
+        auto *library = ui.context->library();
+        QTRY_COMPARE_WITH_TIMEOUT(library->games()->rowCount(), 1, Timeout);
+        QVERIFY(library->launch(library->games()->gameIdAt(0)));
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QVERIFY(ui.app->stop());
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QTRY_COMPARE_WITH_TIMEOUT(library->recentGames()->rowCount(), 1, Timeout);
         key(ui, Qt::Key_G, Qt::ControlModifier);
-        QVERIFY(bar->isOpen());
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "gameBarResume")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        CHECK_FOCUS("barTab_home");
+        key(ui, Qt::Key_Down);
+        key(ui, Qt::Key_Right);
+        key(ui, Qt::Key_Right);
+        CHECK_FOCUS("gameBarRecent_0");
+        QVERIFY(find(ui, "tileLabel")->property("text").toString().contains(QStringLiteral("Alpha Quest")));
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        QVERIFY(!bar->isOpen());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        // Over a running game: "Back to game" first, the session timer runs, and keys do not
+        // reach the running overlay underneath (Return resumes, it does not stop).
+        key(ui, Qt::Key_G, Qt::ControlModifier);
+        CHECK_FOCUS("barTab_home");
         QVERIFY(find(ui, "sessionTime")->isVisible());
-        QVERIFY(find(ui, "gameBarTitle")->property("text").toString().contains(QStringLiteral("Emu long")));
-        // Keys do not reach the running overlay underneath: Return resumes, it does not stop.
+        QVERIFY(find(ui, "gameBarTitle")->property("text").toString().contains(QStringLiteral("Alpha Quest")));
+        key(ui, Qt::Key_Down);
+        CHECK_FOCUS("gameBarResume");
+        QVERIFY(!find(ui, "gameBarRecent_0")->isEnabled()); // one game at a time
         key(ui, Qt::Key_Return);
         QVERIFY(!bar->isOpen());
         QCOMPARE(ui.app->state(), QStringLiteral("running"));
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
 
-        // Stop from the bar needs a confirmation; the bar then switches to the idle widgets.
+        // Stop needs a confirmation; the panel then switches to its idle tiles.
         bar->toggle();
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "gameBarResume")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        CHECK_FOCUS("barTab_home");
         key(ui, Qt::Key_Down);
-        QVERIFY2(find(ui, "gameBarStop")->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Right);
+        CHECK_FOCUS("gameBarStop");
         key(ui, Qt::Key_Return);
         QCOMPARE(ui.app->state(), QStringLiteral("running"));
+        QCOMPARE(find(ui, "tileLabel")->property("text").toString(), QStringLiteral("Press again to stop"));
         key(ui, Qt::Key_Return);
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
         QVERIFY(bar->isOpen());
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "gameBarHome")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        CHECK_FOCUS("gameBarHome");
         key(ui, Qt::Key_Escape);
         QVERIFY(!bar->isOpen());
         QTRY_VERIFY2_WITH_TIMEOUT(ui.window->activeFocusItem() && !find(ui, "runningOverlay")->isVisible(),
                                   qPrintable(focusName(ui)), Timeout);
+#undef CHECK_FOCUS
 
         CHECK_NO_WARNINGS();
     }
