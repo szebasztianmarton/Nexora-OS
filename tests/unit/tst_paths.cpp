@@ -1,5 +1,6 @@
 #include "nexora/shared/Paths.h"
 
+#include <QDir>
 #include <QTest>
 
 using namespace nexora::shared;
@@ -43,6 +44,19 @@ private slots:
         QVERIFY(toString(ConfigDirSource::CommandLine).contains(QStringLiteral("--config-dir")));
         QVERIFY(toString(ConfigDirSource::Environment).contains(QStringLiteral("NEXORA_CONFIG_DIR")));
         QVERIFY(!toString(ConfigDirSource::Default).isEmpty());
+    }
+
+    void stateDirectoryFollowsXdg()
+    {
+        const QByteArray saved = qgetenv("XDG_STATE_HOME");
+        qputenv("XDG_STATE_HOME", "/srv/state");
+        QCOMPARE(nexora::shared::defaultStateDirectory(), QStringLiteral("/srv/state/nexora"));
+        qputenv("XDG_STATE_HOME", "relative/ignored"); // the XDG spec ignores relative paths
+        QCOMPARE(nexora::shared::defaultStateDirectory(), QDir::homePath() + QStringLiteral("/.local/state/nexora"));
+        qunsetenv("XDG_STATE_HOME");
+        QCOMPARE(nexora::shared::defaultStateDirectory(), QDir::homePath() + QStringLiteral("/.local/state/nexora"));
+        if (!saved.isNull())
+            qputenv("XDG_STATE_HOME", saved);
     }
 };
 

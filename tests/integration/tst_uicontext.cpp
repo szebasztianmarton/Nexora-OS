@@ -52,7 +52,7 @@ private:
     ui::UiContext::Options options() const
     {
         ui::UiContext::Options o;
-        o.app = {configDir(), QStringLiteral("test"), {}, false};
+        o.app = {configDir(), QStringLiteral("test"), {}, false, {}};
         o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))},
                       m_dir.filePath(QStringLiteral("user/settings.json"))};
         o.databasePath = m_dir.filePath(QStringLiteral("data/library.sqlite"));

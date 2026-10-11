@@ -81,7 +81,7 @@ private:
     {
         ui.state = std::make_unique<QTemporaryDir>();
         nexora::ui::UiContext::Options options;
-        options.app = {configDir, QStringLiteral("test"), {}, false};
+        options.app = {configDir, QStringLiteral("test"), {}, false, {}};
         options.settings = {{}, ui.state->filePath(QStringLiteral("settings.json"))};
         options.databasePath = ui.state->filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");

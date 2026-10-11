@@ -50,7 +50,7 @@ private slots:
         broken.write("{ nope");
         broken.close();
 
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         QVERIFY(app.configDirectoryFound());
         QCOMPARE(app.emulators()->rowCount(), 2); // disabled entry hidden
         QCOMPARE(app.disabledEmulators(), QStringList{QStringLiteral("Emu off")});
@@ -64,7 +64,7 @@ private slots:
     void reportsMissingDirectory()
     {
         QTemporaryDir dir;
-        AppController app({dir.filePath(QStringLiteral("absent")), QStringLiteral("test"), {}, false});
+        AppController app({dir.filePath(QStringLiteral("absent")), QStringLiteral("test"), {}, false, {}});
         QVERIFY(!app.configDirectoryFound());
         QCOMPARE(app.emulators()->rowCount(), 0);
         QVERIFY(app.statusIsError());
@@ -75,7 +75,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("ok"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--stdout\",\"hi\",\"--sleep-ms\",\"200\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         QSignalSpy stateSpy(&app, &AppController::stateChanged);
 
         QVERIFY(app.launch(QStringLiteral("ok")));
@@ -103,7 +103,7 @@ private slots:
                     QStringLiteral("\"--exit-code\",\"7\""));
         writeConfig(dir, QStringLiteral("gone"), dir.filePath(QStringLiteral("missing-binary")));
         writeConfig(dir, QStringLiteral("good"), QStringLiteral(NEXORA_FAKE_EMULATOR));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
 
         QVERIFY(!app.launch(QStringLiteral("gone")));
         QCOMPARE(app.state(), QStringLiteral("failed"));
@@ -127,7 +127,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--sleep-ms\",\"30000\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         nexora::input::InputController input;
         QVERIFY(input.start(QStringLiteral("none")));
         app.setInputController(&input);
@@ -148,7 +148,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--sleep-ms\",\"30000\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         nexora::input::InputController input;
         QVERIFY(input.start(QStringLiteral("none")));
         input.navigator()->setChordHoldDuration(std::chrono::milliseconds(30));
@@ -169,7 +169,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--sleep-ms\",\"30000\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
 
         QVERIFY(!app.stop());
         QVERIFY(app.launch(QStringLiteral("long")));

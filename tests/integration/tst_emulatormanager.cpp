@@ -3,6 +3,7 @@
 
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -89,6 +90,77 @@ private slots:
         QCOMPARE(manager.state(), ProcessState::Failed);
         QCOMPARE(manager.lastOutcome().error, EmulatorError::Crashed);
         QVERIFY(!manager.lastOutcome().exitCode.has_value());
+    }
+
+    void outputLogRecordsRunAndKeepsPreviousOnRelaunch()
+    {
+        QTemporaryDir logs;
+        EmulatorManager manager;
+        manager.setOutputLogDirectory(logs.filePath(QStringLiteral("sub")));
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+
+        // First run crashes after printing; its output must survive the relaunch.
+        QVERIFY(manager
+                    .launch(fake({QStringLiteral("--stdout"), QStringLiteral("hello out"), QStringLiteral("--stderr"),
+                                  QStringLiteral("bad thing"), QStringLiteral("--crash"), QStringLiteral("segv")}))
+                    .accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        const QString path = logs.filePath(QStringLiteral("sub/fake.log"));
+        QCOMPARE(manager.outputLogPath(), path);
+        QFile first(path);
+        QVERIFY(first.open(QIODevice::ReadOnly));
+        const QString crashLog = QString::fromUtf8(first.readAll());
+        first.close();
+        QVERIFY2(crashLog.contains(QStringLiteral("# program: ") + QStringLiteral(NEXORA_FAKE_EMULATOR)),
+                 qPrintable(crashLog));
+        QVERIFY2(crashLog.contains(QStringLiteral("out| hello out\n")), qPrintable(crashLog));
+        QVERIFY2(crashLog.contains(QStringLiteral("err| bad thing\n")), qPrintable(crashLog));
+        QVERIFY2(crashLog.contains(QStringLiteral("finished: ")), qPrintable(crashLog));
+        QVERIFY2(crashLog.contains(QStringLiteral("crashed"), Qt::CaseInsensitive), qPrintable(crashLog));
+
+        QVERIFY(manager.launch(fake({QStringLiteral("--stdout"), QStringLiteral("second run")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, Timeout);
+        QFile previous(path + QStringLiteral(".1"));
+        QVERIFY(previous.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(previous.readAll()), crashLog);
+        QFile current(path);
+        QVERIFY(current.open(QIODevice::ReadOnly));
+        const QString second = QString::fromUtf8(current.readAll());
+        QVERIFY(second.contains(QStringLiteral("out| second run\n")));
+        QVERIFY(!second.contains(QStringLiteral("hello out")));
+    }
+
+    void outputLogIsBounded()
+    {
+        QTemporaryDir logs;
+        EmulatorManager manager;
+        manager.setOutputLogDirectory(logs.path());
+        manager.setOutputLogLimit(2048);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QStringList args;
+        for (int i = 0; i < 100; ++i)
+            args << QStringLiteral("--stdout") << QStringLiteral("line %1 %2").arg(i).arg(QString(60, u'x'));
+        QVERIFY(manager.launch(fake(args)).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        const QFileInfo info(manager.outputLogPath());
+        QVERIFY(info.exists());
+        QVERIFY2(info.size() < 2048 + 512, qPrintable(QString::number(info.size())));
+        QFile file(info.filePath());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString text = QString::fromUtf8(file.readAll());
+        QVERIFY(text.contains(QStringLiteral("output log limit reached")));
+        QVERIFY(text.contains(QStringLiteral("finished: ")));
+        QVERIFY(!text.contains(QStringLiteral("line 99 ")));
+    }
+
+    void outputLogDisabledByDefault()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--stdout"), QStringLiteral("x")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(manager.outputLogPath().isEmpty());
+        QCOMPARE(manager.capturedStdout(), QStringLiteral("ready\nx\n"));
     }
 
     void missingExecutable()

@@ -42,6 +42,7 @@ class AppController : public QObject
     Q_PROPERTY(QString inputStatus READ inputStatus NOTIFY inputChanged)
     Q_PROPERTY(QStringList inputDevices READ inputDevices NOTIFY inputChanged)
     Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT)
+    Q_PROPERTY(QString emulatorLogPath READ emulatorLogPath NOTIFY lastOutputChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
 
 public:
@@ -51,6 +52,7 @@ public:
         QString configDirectorySource; // human-readable origin of configDirectory
         QString logFilePath;
         bool runningAsRoot = false;
+        QString emulatorLogDirectory; // per-emulator output logs; empty = disabled
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);
@@ -77,6 +79,8 @@ public:
     QString inputStatus() const;
     QStringList inputDevices() const;
     QString logFilePath() const { return m_options.logFilePath; }
+    // Output log of the current / last launch, or the log directory before the first launch.
+    QString emulatorLogPath() const;
     QString version() const;
 
     // Starts an emulator with its default profile (see setDefaultProfiles()).

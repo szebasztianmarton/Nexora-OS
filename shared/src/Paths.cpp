@@ -27,6 +27,14 @@ QString toString(ConfigDirSource source)
     return {};
 }
 
+QString defaultStateDirectory()
+{
+    QString base = qEnvironmentVariable("XDG_STATE_HOME");
+    if (base.isEmpty() || QDir::isRelativePath(base)) // the XDG spec says to ignore relative paths
+        base = QDir::homePath() + QStringLiteral("/.local/state");
+    return QDir::cleanPath(base + QStringLiteral("/nexora"));
+}
+
 bool isRunningAsRoot()
 {
     return ::geteuid() == 0;

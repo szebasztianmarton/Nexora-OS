@@ -22,6 +22,7 @@ AppController::AppController(const Options &options, QObject *parent)
         if (!m_outputNotifyTimer.isActive())
             m_outputNotifyTimer.start();
     });
+    m_manager.setOutputLogDirectory(options.emulatorLogDirectory);
     reloadConfig();
 }
 
@@ -71,6 +72,11 @@ QString AppController::inputStatus() const
 QStringList AppController::inputDevices() const
 {
     return m_input ? m_input->devices() : QStringList{};
+}
+
+QString AppController::emulatorLogPath() const
+{
+    return m_manager.outputLogPath().isEmpty() ? m_manager.outputLogDirectory() : m_manager.outputLogPath();
 }
 
 QString AppController::version() const

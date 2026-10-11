@@ -12,9 +12,12 @@
 
 namespace nexora::library {
 
-// Owns the game database and runs directory scans on a worker thread. Database writes
-// happen on the owner's thread when a scan completes. At most one scan runs at a time;
-// a refresh requested meanwhile is queued and runs once afterwards.
+// Owns the game database and runs directory scans on a worker thread. The worker also
+// merges the scan into the database through its own SQLite connection and reads the new
+// entry list, so the owner's (UI) thread only swaps the cached list. (An in-memory
+// database cannot be shared between connections; it is merged on the owner's thread.)
+// At most one scan runs at a time; a refresh requested meanwhile is queued and runs once
+// afterwards.
 class GameLibrary : public QObject
 {
     Q_OBJECT
@@ -64,7 +67,8 @@ signals:
     void scanFailed(const QString &error);
 
 private:
-    void onScanDone(const ScanResult &result);
+    struct ScanJob;
+    void onScanDone(ScanJob &job, quint64 writeGeneration);
     void reloadEntries();
     // Applies |update| to the cached entry |id| (avoids reloading the whole table).
     template<typename F> void updateCached(qint64 id, F update);
@@ -75,6 +79,9 @@ private:
     QList<GameEntry> m_entries;
     ScanResult m_lastScan;
     ApplyStats m_lastStats;
+    QString m_databasePath;
+    // Bumped by every write through m_db; a worker snapshot taken while it changed is stale.
+    quint64 m_writeGeneration = 0;
     QPointer<QThread> m_thread;
     std::shared_ptr<std::atomic_bool> m_cancel;
     bool m_rerunQueued = false;

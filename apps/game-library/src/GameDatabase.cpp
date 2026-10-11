@@ -76,7 +76,7 @@ bool GameDatabase::exec(const QString &sql)
     return true;
 }
 
-bool GameDatabase::open(const QString &path)
+bool GameDatabase::open(const QString &path, bool allowRecovery)
 {
     close();
     m_issues.clear();
@@ -102,7 +102,7 @@ bool GameDatabase::open(const QString &path)
                 m_lastError = db.lastError().text();
         }
         close();
-        if (inMemory || attempt == 1 || !QFile::exists(path) || !m_recoverable)
+        if (inMemory || attempt == 1 || !QFile::exists(path) || !m_recoverable || !allowRecovery)
             break;
         const QString aside = path + QStringLiteral(".corrupt-")
             + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
@@ -184,7 +184,10 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
     ApplyStats stats;
     const qint64 now = QDateTime::currentSecsSinceEpoch();
-    db.transaction();
+    // IMMEDIATE takes the write lock before reading: a deferred transaction could not be
+    // upgraded (SQLITE_BUSY_SNAPSHOT) if another connection wrote after our read began.
+    if (!exec(QStringLiteral("BEGIN IMMEDIATE")))
+        return std::nullopt;
 
     // One pass over the existing rows instead of a SELECT per scanned file.
     struct Existing
