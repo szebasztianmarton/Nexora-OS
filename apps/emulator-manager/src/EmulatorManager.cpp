@@ -7,6 +7,8 @@
 
 #include <csignal>
 #include <sys/prctl.h>
+#include <sys/types.h>
+#include <utility>
 
 namespace nexora::emulator {
 
@@ -132,6 +134,11 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
                                                   : config.name;
     m_stopRequested = false;
     m_killed = false;
+    m_activePausable = config.pausable;
+    m_paused = false;
+    m_pid = 0;
+    m_startedAt = QDateTime();
+    m_runClock.invalidate();
     m_stdout.clear();
     m_stderr.clear();
     m_stdoutDecoder.resetState();
@@ -184,11 +191,53 @@ bool EmulatorManager::stop()
         return true; // already in progress; timer is running
 
     m_stopRequested = true;
+    if (m_paused) {
+        // A stopped process cannot handle SIGTERM until it is continued.
+        if (m_pid > 0)
+            ::kill(static_cast<pid_t>(m_pid), SIGCONT);
+        setPaused(false);
+    }
     setState(ProcessState::Stopping);
     qCInfo(lcProcess) << "Stopping" << m_activeId << "(timeout" << m_activeStopTimeout.count() << "ms)";
     m_process->terminate();
     m_killTimer.start(m_activeStopTimeout);
     return true;
+}
+
+bool EmulatorManager::pause()
+{
+    if (!m_process || m_state != ProcessState::Running || !m_activePausable || m_pid <= 0)
+        return false;
+    if (m_paused)
+        return true;
+    if (::kill(static_cast<pid_t>(m_pid), SIGSTOP) != 0) {
+        qCWarning(lcProcess) << "Could not pause" << m_activeId << "pid" << m_pid;
+        return false;
+    }
+    qCInfo(lcProcess) << "Paused" << m_activeId << "pid" << m_pid;
+    setPaused(true);
+    return true;
+}
+
+bool EmulatorManager::resume()
+{
+    if (!m_process || !m_paused || m_pid <= 0)
+        return false;
+    if (::kill(static_cast<pid_t>(m_pid), SIGCONT) != 0) {
+        qCWarning(lcProcess) << "Could not resume" << m_activeId << "pid" << m_pid;
+        return false;
+    }
+    qCInfo(lcProcess) << "Resumed" << m_activeId << "pid" << m_pid;
+    setPaused(false);
+    return true;
+}
+
+void EmulatorManager::setPaused(bool paused)
+{
+    if (m_paused == paused)
+        return;
+    m_paused = paused;
+    emit pausedChanged(m_paused);
 }
 
 void EmulatorManager::shutdown()
@@ -251,7 +300,10 @@ void EmulatorManager::onStarted()
 {
     if (sender() != m_process)
         return;
-    qCInfo(lcProcess) << m_activeId << "started, pid" << m_process->processId();
+    m_pid = m_process->processId();
+    m_startedAt = QDateTime::currentDateTimeUtc();
+    m_runClock.start();
+    qCInfo(lcProcess) << m_activeId << "started, pid" << m_pid;
     // A stop() during Starting already moved us to Stopping; stay there.
     if (m_state == ProcessState::Starting)
         setState(ProcessState::Running);
@@ -279,6 +331,7 @@ void EmulatorManager::onErrorOccurred(QProcess::ProcessError error)
     } else {
         outcome.finalState = ProcessState::Failed;
         outcome.error = EmulatorError::FailedToStart;
+        outcome.startupFailure = true;
         outcome.message = describe(EmulatorError::FailedToStart, m_process->errorString());
     }
     releaseProcess();
@@ -317,6 +370,14 @@ void EmulatorManager::onFinished(int exitCode, QProcess::ExitStatus status)
         outcome.finalState = ProcessState::Exited;
         outcome.message = QStringLiteral("%1 exited normally").arg(m_activeName);
     }
+    // A failure right after the process started is reported as a startup failure.
+    if (outcome.finalState == ProcessState::Failed && m_runClock.isValid() && m_startupGrace.count() > 0
+        && m_runClock.elapsed() < m_startupGrace.count()) {
+        outcome.startupFailure = true;
+        outcome.message = outcome.exitCode
+            ? QStringLiteral("%1 failed during startup (exit %2)").arg(m_activeName).arg(*outcome.exitCode)
+            : QStringLiteral("%1 failed during startup (crashed)").arg(m_activeName);
+    }
     qCInfo(lcProcess).noquote() << m_activeId << "finished:" << outcome.message;
     releaseProcess();
     finish(outcome);
@@ -344,10 +405,18 @@ void EmulatorManager::releaseProcess()
 
 void EmulatorManager::finish(ProcessOutcome outcome)
 {
+    outcome.pid = m_pid;
+    outcome.startedAt = m_startedAt;
+    if (!outcome.endedAt.isValid())
+        outcome.endedAt = QDateTime::currentDateTimeUtc();
+    m_pid = 0;
+    const bool wasPaused = std::exchange(m_paused, false);
     m_lastOutcome = outcome;
     // State is updated (and the process released) before notifying, so listeners may
     // immediately launch again from their slots.
     setState(outcome.finalState);
+    if (wasPaused)
+        emit pausedChanged(false);
     emit processFinished(m_activeId, m_lastOutcome);
 }
 

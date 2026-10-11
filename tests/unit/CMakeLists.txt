@@ -17,3 +17,6 @@ nexora_add_test(tst_datalayout SOURCES tst_datalayout.cpp LIBS nexora_shared LAB
 nexora_add_test(tst_atomicfile SOURCES tst_atomicfile.cpp LIBS nexora_shared LABELS unit)
 nexora_add_test(tst_redaction SOURCES tst_redaction.cpp LIBS nexora_shared LABELS unit)
 nexora_add_test(tst_systemcatalog SOURCES tst_systemcatalog.cpp LIBS nexora_shared LABELS unit)
+nexora_add_test(tst_emulatorhealth SOURCES tst_emulatorhealth.cpp
+    LIBS nexora_emulator_manager LABELS unit FAKE_EMULATOR)
+nexora_add_test(tst_launchhistory SOURCES tst_launchhistory.cpp LIBS nexora_emulator_manager LABELS unit)

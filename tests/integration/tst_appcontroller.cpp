@@ -113,7 +113,7 @@ private slots:
 
         QVERIFY(app.launch(QStringLiteral("bad")));
         QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("failed"), Timeout);
-        QVERIFY(app.statusMessage().contains(QStringLiteral("exit code 7")));
+        QVERIFY(app.statusMessage().contains(QStringLiteral("failed during startup (exit 7)")));
         QCOMPARE(statusOf(app, QStringLiteral("bad")), QStringLiteral("failed"));
         QCOMPARE(statusOf(app, QStringLiteral("gone")), QStringLiteral("unavailable"));
 
