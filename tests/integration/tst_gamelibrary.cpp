@@ -366,13 +366,25 @@ private slots:
         QCOMPARE(library.entries().size(), 5000);
 
         QSignalSpy finished(&library, &GameLibrary::scanFinished);
+        QSignalSpy scanning(&library, &GameLibrary::scanningChanged);
         QVERIFY(library.refresh());
         library.cancelScan();
         library.waitForScan();
-        QVERIFY(library.lastScan().cancelled);
-        QCOMPARE(finished.size(), 0);
+        // The worker may complete before the cancel lands, so only the invariants that hold in
+        // both outcomes are asserted unconditionally; mid-walk cancellation itself is covered
+        // deterministically in tst_libraryscanner.
+        QVERIFY(!library.isScanning());
+        QCOMPARE(scanning.size(), 2); // true, then false
+        QCOMPARE(scanning.last().at(0).toBool(), false);
         QCOMPARE(library.entries().size(), 5000);
-        QVERIFY(library.entries().first().present);
+        for (const GameEntry &e : library.entries())
+            QVERIFY(e.present);
+        if (library.lastScan().cancelled) {
+            QCOMPARE(finished.size(), 0); // a cancelled scan is not applied
+            QCOMPARE(library.lastStats().missing, 0);
+        } else {
+            QCOMPARE(finished.size(), 1);
+        }
     }
 
     void overlappingRootsYieldOneEntry()
