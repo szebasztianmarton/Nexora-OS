@@ -91,12 +91,12 @@ QString Sdl3GamepadBackend::statusText() const
     return m_status;
 }
 
-QStringList Sdl3GamepadBackend::deviceNames() const
+QList<Sdl3GamepadBackend::DeviceInfo> Sdl3GamepadBackend::devices() const
 {
-    QStringList names;
+    QList<DeviceInfo> list;
     for (const auto &[id, pad] : m_pads)
-        names.append(pad.name);
-    return names;
+        list.append({QString::number(id), pad.name});
+    return list;
 }
 
 void Sdl3GamepadBackend::pump()

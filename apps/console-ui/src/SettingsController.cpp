@@ -1,6 +1,7 @@
 #include "SettingsController.h"
 
 #include "input/ButtonMapping.h"
+#include "input/GamepadNavigator.h"
 #include "input/InputController.h"
 
 #include "nexora/shared/Logging.h"
@@ -59,6 +60,8 @@ SettingsController::SettingsController(shared::Settings *settings, input::InputC
     connect(m_settings, &Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == Settings::InputMapping)
             applyMapping();
+        else if (key == Settings::InputDeadzone)
+            applyDeadzone();
         else if (key == Settings::AudioVolume && volumeSupported())
             m_system->applyVolume(value.toInt(), nullptr);
         else if (key == Settings::DisplayMode)
@@ -99,6 +102,10 @@ QString SettingsController::sortOrder() const
 QString SettingsController::inputBackend() const
 {
     return m_settings->stringValue(Settings::InputBackend);
+}
+int SettingsController::deadzone() const
+{
+    return m_settings->intValue(Settings::InputDeadzone);
 }
 QString SettingsController::userFile() const
 {
@@ -232,9 +239,17 @@ void SettingsController::applyMapping()
     m_input->setMapping(mapping.value_or(input::ButtonMapping::defaults()));
 }
 
+void SettingsController::applyDeadzone()
+{
+    if (!m_input)
+        return;
+    m_input->navigator()->setDeadzone(deadzone() / 100.0);
+}
+
 void SettingsController::applyAll()
 {
     applyMapping();
+    applyDeadzone();
     if (volumeSupported())
         m_system->applyVolume(volume(), nullptr);
 }

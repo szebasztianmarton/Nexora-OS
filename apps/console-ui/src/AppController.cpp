@@ -70,7 +70,14 @@ QString AppController::inputStatus() const
 
 QStringList AppController::inputDevices() const
 {
-    return m_input ? m_input->devices() : QStringList{};
+    QStringList names;
+    if (!m_input)
+        return names;
+    const QVariantList devices = m_input->devices();
+    names.reserve(devices.size());
+    for (const QVariant &device : devices)
+        names.append(device.toMap().value(QStringLiteral("name")).toString());
+    return names;
 }
 
 QString AppController::version() const

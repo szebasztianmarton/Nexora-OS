@@ -12,11 +12,52 @@
 #endif
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QGuiApplication>
 #include <QKeyEvent>
+#include <QVariantMap>
 #include <QWindow>
 
+#include <algorithm>
+
 namespace nexora::input {
+
+namespace {
+
+// Names every button, including the directions (ButtonMapping only names the remappable,
+// non-directional ones).
+QString rawButtonName(GamepadButton button)
+{
+    switch (button) {
+    case GamepadButton::South: return QStringLiteral("south");
+    case GamepadButton::East: return QStringLiteral("east");
+    case GamepadButton::West: return QStringLiteral("west");
+    case GamepadButton::North: return QStringLiteral("north");
+    case GamepadButton::Start: return QStringLiteral("start");
+    case GamepadButton::Select: return QStringLiteral("select");
+    case GamepadButton::Guide: return QStringLiteral("guide");
+    case GamepadButton::DpadUp: return QStringLiteral("dpadUp");
+    case GamepadButton::DpadDown: return QStringLiteral("dpadDown");
+    case GamepadButton::DpadLeft: return QStringLiteral("dpadLeft");
+    case GamepadButton::DpadRight: return QStringLiteral("dpadRight");
+    case GamepadButton::L1: return QStringLiteral("l1");
+    case GamepadButton::R1: return QStringLiteral("r1");
+    }
+    return QStringLiteral("button");
+}
+
+QString rawAxisName(GamepadAxis axis)
+{
+    switch (axis) {
+    case GamepadAxis::LeftX: return QStringLiteral("LeftX");
+    case GamepadAxis::LeftY: return QStringLiteral("LeftY");
+    case GamepadAxis::HatX: return QStringLiteral("HatX");
+    case GamepadAxis::HatY: return QStringLiteral("HatY");
+    }
+    return QStringLiteral("axis");
+}
+
+} // namespace
 
 InputController::InputController(QObject *parent)
     : QObject(parent)
@@ -24,7 +65,17 @@ InputController::InputController(QObject *parent)
     , m_targetProvider([] { return QGuiApplication::focusWindow(); })
     , m_statusOverride(QStringLiteral("Controller input not started"))
 {
+    m_testExitTimer.setSingleShot(true);
+    connect(&m_testExitTimer, &QTimer::timeout, this, [this] {
+        if (!m_testMode)
+            return;
+        setTestMode(false);
+        qCInfo(lcInput) << "Controller test mode left (Back held)";
+        emit testModeExited();
+    });
     connect(m_navigator, &GamepadNavigator::actionTriggered, this, [this](NavAction action) {
+        if (m_testMode)
+            return; // reported through rawEvent() instead
         const bool directional = action == NavAction::Up || action == NavAction::Down || action == NavAction::Left
             || action == NavAction::Right;
         if (m_capturing && !directional)
@@ -32,7 +83,7 @@ InputController::InputController(QObject *parent)
         injectAction(action);
     });
     connect(m_navigator, &GamepadNavigator::buttonPressed, this, [this](GamepadButton button, quint32) {
-        if (m_capturing && !m_suspended) {
+        if (m_capturing && !m_testMode && !m_suspended) {
             // Queued: the action for this same press (emitted right after) must still be
             // swallowed by capture mode, not run with the freshly applied mapping.
             const QString name = ButtonMapping::buttonName(button);
@@ -42,6 +93,23 @@ InputController::InputController(QObject *parent)
     connect(m_navigator, &GamepadNavigator::returnToLauncherRequested, this, [this] {
         qCInfo(lcInput) << "Return-to-launcher chord (Select + Start) detected";
         emit returnToLauncherRequested();
+    });
+    connect(m_navigator, &GamepadNavigator::rawButtonEvent, this, [this](GamepadButton button, bool pressed, quint32) {
+        if (!m_testMode)
+            return;
+        if (button == backButton()) {
+            if (!pressed)
+                m_testExitTimer.stop();
+            else if (!m_testExitTimer.isActive())
+                m_testExitTimer.start(m_testExitHold);
+        }
+        report(QStringLiteral("%1 %2").arg(rawButtonName(button),
+                                           pressed ? QStringLiteral("pressed") : QStringLiteral("released")));
+    });
+    connect(m_navigator, &GamepadNavigator::rawAxisEvent, this, [this](GamepadAxis axis, double value, quint32) {
+        if (!m_testMode)
+            return;
+        report(QStringLiteral("%1 %2").arg(rawAxisName(axis)).arg(value, 0, 'f', 2));
     });
 }
 
@@ -103,6 +171,8 @@ bool InputController::start(std::unique_ptr<InputBackend> backend)
 
 bool InputController::startBackend(std::unique_ptr<InputBackend> backend)
 {
+    // Devices first: whoever listens to statusChanged must see an up-to-date device list.
+    connect(backend.get(), &InputBackend::statusChanged, this, &InputController::refreshDevices);
     connect(backend.get(), &InputBackend::statusChanged, this, &InputController::statusChanged);
     if (!backend->start()) {
         qCInfo(lcInput).noquote() << backend->name() << "backend failed:" << backend->statusText();
@@ -112,6 +182,7 @@ bool InputController::startBackend(std::unique_ptr<InputBackend> backend)
     m_backend->setParent(this);
     qCInfo(lcInput).noquote() << "Controller input backend:" << m_backend->name() << '-' << m_backend->statusText();
     emit statusChanged();
+    refreshDevices(); // pads already connected when the backend started
     return true;
 }
 
@@ -123,6 +194,7 @@ void InputController::stopBackend()
     delete m_backend;
     m_backend = nullptr;
     m_navigator->reset();
+    refreshDevices(); // the backend is gone, so every device it reported is now gone too
 }
 
 QString InputController::backendName() const
@@ -135,9 +207,52 @@ QString InputController::statusText() const
     return m_backend ? m_backend->statusText() : m_statusOverride;
 }
 
-QStringList InputController::devices() const
+void InputController::refreshDevices()
 {
-    return m_backend ? m_backend->deviceNames() : QStringList();
+    const QList<InputBackend::DeviceInfo> current
+        = m_backend ? m_backend->devices() : QList<InputBackend::DeviceInfo>{};
+    const QString backend = backendName();
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+
+    QVariantList kept;
+    QStringList connected;
+    for (const InputBackend::DeviceInfo &device : current) {
+        const auto known = std::find_if(m_devices.cbegin(), m_devices.cend(), [&](const QVariant &entry) {
+            return entry.toMap().value(QStringLiteral("id")).toString() == device.id;
+        });
+        if (known != m_devices.cend()) {
+            kept.append(*known); // keeps the original connectedAt
+            continue;
+        }
+        kept.append(QVariantMap{{QStringLiteral("id"), device.id},
+                                {QStringLiteral("name"), device.name},
+                                {QStringLiteral("backend"), backend},
+                                {QStringLiteral("connectedAt"), now}});
+        connected.append(device.name);
+    }
+
+    QStringList disconnected;
+    for (const QVariant &entry : m_devices) {
+        const QVariantMap map = entry.toMap();
+        const QString id = map.value(QStringLiteral("id")).toString();
+        const bool stillThere = std::any_of(current.cbegin(), current.cend(),
+                                            [&](const InputBackend::DeviceInfo &d) { return d.id == id; });
+        if (!stillThere)
+            disconnected.append(map.value(QStringLiteral("name")).toString());
+    }
+
+    if (connected.isEmpty() && disconnected.isEmpty())
+        return;
+    m_devices = kept;
+    emit devicesChanged();
+    for (const QString &name : disconnected) {
+        qCInfo(lcInput).noquote() << "Controller disconnected:" << name;
+        emit deviceDisconnected(name);
+    }
+    for (const QString &name : connected) {
+        qCInfo(lcInput).noquote() << "Controller connected:" << name;
+        emit deviceConnected(name);
+    }
 }
 
 void InputController::setSuspended(bool suspended)
@@ -163,6 +278,35 @@ ButtonMapping InputController::mapping() const
 void InputController::setCapturing(bool capturing)
 {
     m_capturing = capturing;
+}
+
+void InputController::setTestMode(bool enabled)
+{
+    if (m_testMode == enabled)
+        return;
+    m_testMode = enabled;
+    m_testExitTimer.stop();
+    m_navigator->reset(); // no held state or auto-repeat carries across the switch
+    qCInfo(lcInput) << "Controller test mode" << (enabled ? "entered" : "left");
+    emit testModeChanged();
+}
+
+void InputController::setTestModeExitHold(std::chrono::milliseconds duration)
+{
+    m_testExitHold = std::max(duration, std::chrono::milliseconds{1});
+}
+
+GamepadButton InputController::backButton() const
+{
+    // Follows a remapped Back, so the way out of test mode is always the UI's Back button.
+    return m_navigator->mapping().buttonFor(NavAction::Back).value_or(GamepadButton::East);
+}
+
+void InputController::report(const QString &text)
+{
+    m_lastRawEvent = text;
+    qCDebug(lcInput).noquote() << "Test mode:" << text;
+    emit rawEvent(text);
 }
 
 void InputController::setTargetWindowProvider(std::function<QWindow *()> provider)

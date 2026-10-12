@@ -36,6 +36,7 @@ class SettingsController : public QObject
     Q_PROPERTY(bool showHints READ showHints WRITE setShowHints NOTIFY changed)
     Q_PROPERTY(QString sortOrder READ sortOrder WRITE setSortOrder NOTIFY changed)
     Q_PROPERTY(QString inputBackend READ inputBackend WRITE setInputBackend NOTIFY changed)
+    Q_PROPERTY(int deadzone READ deadzone WRITE setDeadzone NOTIFY changed)
     Q_PROPERTY(QVariantList mappingRows READ mappingRows NOTIFY changed)
     Q_PROPERTY(QString capturingAction READ capturingAction NOTIFY capturingChanged)
     Q_PROPERTY(bool controllerAvailable READ controllerAvailable NOTIFY changed)
@@ -64,6 +65,9 @@ public:
     void setSortOrder(const QString &value) { set(QStringLiteral("library.sortOrder"), value); }
     QString inputBackend() const;
     void setInputBackend(const QString &value) { set(QStringLiteral("input.backend"), value); }
+    // Analog stick dead zone in percent (5-60); applied to the running navigator at once.
+    int deadzone() const;
+    void setDeadzone(int percent) { set(QStringLiteral("input.deadzone"), qBound(5, percent, 60)); }
     QVariantList mappingRows() const;
     QString capturingAction() const { return m_capturing; }
     // A gamepad backend is running (remap capture is only offered then).
@@ -92,6 +96,7 @@ signals:
 private:
     bool set(const QString &key, const QVariant &value);
     void applyMapping();
+    void applyDeadzone();
     void onCaptured(const QString &button);
 
     shared::Settings *m_settings;

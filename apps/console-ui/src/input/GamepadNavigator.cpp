@@ -16,6 +16,8 @@ GamepadNavigator::GamepadNavigator(QObject *parent)
 
 void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 device)
 {
+    emit rawButtonEvent(button, pressed, device);
+
     auto directional = [&](int source, NavAction action) {
         if (pressed)
             pressDirection(device, source, action);
@@ -39,8 +41,14 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 d
     case GamepadButton::R1: break;
     }
 
+    DeviceState &state = m_devices[device];
+    bool &held = state.buttonHeld[static_cast<std::size_t>(button)];
+    const bool wasHeld = held;
+    held = pressed;
+    if (pressed && wasHeld)
+        return; // autorepeat of a button that is already down: act once per physical press
+
     if (button == GamepadButton::Start || button == GamepadButton::Select) {
-        DeviceState &state = m_devices[device];
         (button == GamepadButton::Start ? state.startHeld : state.selectHeld) = pressed;
         updateChord();
     }
@@ -55,6 +63,7 @@ void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized, quint32 de
 {
     if (!std::isfinite(normalized))
         return;
+    emit rawAxisEvent(axis, normalized, device);
 
     const auto index = static_cast<std::size_t>(axis);
     int source = SrcLeftX;
@@ -80,14 +89,18 @@ void GamepadNavigator::axisEvent(GamepadAxis axis, double normalized, quint32 de
 
     DeviceState &state = m_devices[device];
     const int previous = state.axisState[index];
-    const double magnitude = std::abs(normalized);
+    const double travel = std::abs(normalized);
+    // Inside the dead zone the stick counts as centred, whatever it actually reports.
+    const double magnitude = travel < m_deadzone ? 0.0 : travel;
+    const double press = axisPressThreshold();
+    const double release = axisReleaseThreshold();
     int next = previous;
     if (previous == 0) {
-        if (magnitude >= kAxisPressThreshold)
+        if (magnitude >= press)
             next = normalized < 0 ? -1 : 1;
-    } else if (magnitude < kAxisReleaseThreshold) {
+    } else if (magnitude < release) {
         next = 0;
-    } else if ((normalized < 0 ? -1 : 1) != previous && magnitude >= kAxisPressThreshold) {
+    } else if ((normalized < 0 ? -1 : 1) != previous && magnitude >= press) {
         next = -previous; // flicked straight to the opposite side
     }
 
@@ -125,6 +138,13 @@ void GamepadNavigator::updateChord()
 void GamepadNavigator::setChordHoldDuration(std::chrono::milliseconds duration)
 {
     m_chordHold = std::max(duration, std::chrono::milliseconds{1});
+}
+
+void GamepadNavigator::setDeadzone(double fraction)
+{
+    if (!std::isfinite(fraction))
+        return;
+    m_deadzone = std::clamp(fraction, kMinDeadzone, kMaxDeadzone);
 }
 
 void GamepadNavigator::reset()

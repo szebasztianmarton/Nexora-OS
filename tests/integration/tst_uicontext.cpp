@@ -36,7 +36,7 @@ public:
     bool start() override { return true; }
     QString name() const override { return QStringLiteral("fake"); }
     QString statusText() const override { return QStringLiteral("fake pad"); }
-    QStringList deviceNames() const override { return {QStringLiteral("Fake Pad")}; }
+    QList<DeviceInfo> devices() const override { return {{QStringLiteral("fake0"), QStringLiteral("Fake Pad")}}; }
 };
 
 class TestUiContext : public QObject
@@ -147,6 +147,31 @@ private slots:
         // Remapping from the UI repairs it.
         QVERIFY(ctx.settings()->remap(QStringLiteral("back"), QStringLiteral("east")));
         QVERIFY(ctx.settings()->issues().isEmpty());
+    }
+
+    void deadzoneIsAppliedLive()
+    {
+        input::InputController input;
+        ui::UiContext ctx(options(), &input);
+        ctx.start();
+        // The stored default (25%) reaches the navigator at start-up.
+        QCOMPARE(ctx.settings()->deadzone(), 25);
+        QCOMPARE(input.navigator()->deadzone(), 0.25);
+
+        ctx.settings()->setDeadzone(40);
+        QCOMPARE(ctx.settings()->deadzone(), 40);
+        QCOMPARE(input.navigator()->deadzone(), 0.4);
+        QCOMPARE(input.navigator()->axisPressThreshold(), 0.64);
+
+        ctx.settings()->setDeadzone(99); // bounded to the 5-60 range the setting allows
+        QCOMPARE(ctx.settings()->deadzone(), 60);
+        QCOMPARE(input.navigator()->deadzone(), 0.6);
+
+        // And it survives a restart.
+        ui::UiContext again(options(), &input);
+        again.start();
+        QCOMPARE(again.settings()->deadzone(), 60);
+        QCOMPARE(input.navigator()->deadzone(), 0.6);
     }
 
     void remapCapturesNextButton()
