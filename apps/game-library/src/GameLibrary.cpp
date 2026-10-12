@@ -57,6 +57,28 @@ bool GameLibrary::open(const QString &databasePath)
     return true;
 }
 
+void GameLibrary::close()
+{
+    m_db.close();
+}
+
+void GameLibrary::setCatalog(const shared::SystemCatalog &catalog)
+{
+    m_catalog = catalog;
+}
+
+ScanOptions GameLibrary::effectiveOptions() const
+{
+    ScanOptions options = m_options;
+    options.extensionSystems.clear();
+    for (auto it = options.extensionMap.cbegin(); it != options.extensionMap.cend(); ++it) {
+        const QStringList systems = m_catalog.systemsForExtension(it.key());
+        if (!systems.isEmpty())
+            options.extensionSystems.insert(it.key(), systems);
+    }
+    return options;
+}
+
 void GameLibrary::setScanOptions(const ScanOptions &options)
 {
     m_options = options;
@@ -64,11 +86,14 @@ void GameLibrary::setScanOptions(const ScanOptions &options)
 
 QString GameLibrary::optionsSignature() const
 {
-    QStringList parts = m_options.roots;
+    const ScanOptions options = effectiveOptions();
+    QStringList parts = options.roots;
     parts.sort();
     QStringList exts;
-    for (auto it = m_options.extensionMap.cbegin(); it != m_options.extensionMap.cend(); ++it)
+    for (auto it = options.extensionMap.cbegin(); it != options.extensionMap.cend(); ++it)
         exts.append(it.key() + u'=' + it.value().join(u'|'));
+    for (auto it = options.extensionSystems.cbegin(); it != options.extensionSystems.cend(); ++it)
+        exts.append(QStringLiteral("system:") + it.key() + u'=' + it.value().join(u'|'));
     exts.sort();
     parts += exts;
     parts.append(m_options.followSymlinks ? QStringLiteral("follow") : QStringLiteral("nofollow"));
@@ -89,14 +114,20 @@ bool GameLibrary::refresh()
     }
     auto job = std::make_shared<ScanJob>();
     m_cancel = std::make_shared<std::atomic_bool>(false);
-    const ScanOptions options = m_options;
+    const ScanOptions options = effectiveOptions();
     const auto cancel = m_cancel;
-    // Everything the worker needs is copied here; it never touches *this.
+    // Everything the worker needs is copied here; it only uses *this to queue progress.
     const QString databasePath = m_db.isOpen() && m_databasePath != InMemory ? m_databasePath : QString();
     const QString signature = optionsSignature();
     const quint64 generation = m_writeGeneration;
-    QThread *thread = QThread::create([options, job, cancel, databasePath, signature] {
-        job->scan = LibraryScanner::scan(options, cancel.get());
+    QThread *thread = QThread::create([this, options, job, cancel, databasePath, signature] {
+        // Queued to the owner's thread; dropped if the library is destroyed meanwhile.
+        const ScanProgress progress = [this](int filesSeen, const QString &currentRoot) {
+            QMetaObject::invokeMethod(
+                this, [this, filesSeen, currentRoot] { emit scanProgress(filesSeen, currentRoot); },
+                Qt::QueuedConnection);
+        };
+        job->scan = LibraryScanner::scan(options, cancel.get(), progress);
         if (databasePath.isEmpty() || job->scan.cancelled)
             return;
         QElapsedTimer timer;
@@ -204,6 +235,16 @@ std::optional<GameEntry> GameLibrary::entry(qint64 id) const
     return m_db.entry(id);
 }
 
+QList<GameEntry> GameLibrary::missingEntries() const
+{
+    QList<GameEntry> missing;
+    for (const GameEntry &e : m_db.entries(true, false)) {
+        if (!e.present)
+            missing.append(e);
+    }
+    return missing;
+}
+
 template<typename F> void GameLibrary::updateCached(qint64 id, F update)
 {
     for (GameEntry &e : m_entries) {
@@ -246,6 +287,74 @@ bool GameLibrary::setEmulatorOverride(qint64 id, const QString &emulatorId)
         return false;
     updateCached(id, [&emulatorId](GameEntry &e) { e.emulatorOverride = emulatorId; });
     return true;
+}
+
+void GameLibrary::refreshCached(qint64 id)
+{
+    const auto fresh = m_db.entry(id);
+    for (qsizetype i = 0; i < m_entries.size(); ++i) {
+        if (m_entries.at(i).id != id)
+            continue;
+        if (fresh && fresh->present && !fresh->hidden)
+            m_entries[i] = *fresh;
+        else
+            m_entries.removeAt(i);
+        break;
+    }
+    emit entriesChanged();
+}
+
+bool GameLibrary::setMetadata(qint64 id, const QString &title, const QString &notes)
+{
+    ++m_writeGeneration;
+    if (!m_db.setMetadata(id, title, notes))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+bool GameLibrary::setSystemOverride(qint64 id, const QString &systemId)
+{
+    ++m_writeGeneration;
+    if (!systemId.isEmpty()) {
+        const auto current = m_db.entry(id);
+        if (!current)
+            return false;
+        if (!current->systemCandidates.contains(systemId) && !m_catalog.find(systemId))
+            return false;
+    }
+    if (!m_db.setSystemOverride(id, systemId))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+bool GameLibrary::removeFromLibrary(qint64 id)
+{
+    ++m_writeGeneration;
+    if (!m_db.setHidden(id, true))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+bool GameLibrary::restoreHidden()
+{
+    ++m_writeGeneration;
+    if (m_db.restoreHidden() == 0)
+        return false;
+    reloadEntries();
+    return true;
+}
+
+QList<GameEntry> GameLibrary::hiddenEntries() const
+{
+    QList<GameEntry> hidden;
+    for (const GameEntry &e : m_db.entries(true, true)) {
+        if (e.hidden)
+            hidden.append(e);
+    }
+    return hidden;
 }
 
 int GameLibrary::purgeMissing()

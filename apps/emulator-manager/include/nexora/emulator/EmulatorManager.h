@@ -3,6 +3,8 @@
 #include "nexora/emulator/EmulatorProcessState.h"
 #include "nexora/shared/EmulatorConfig.h"
 
+#include <QDateTime>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QObject>
 #include <QPointer>
@@ -27,6 +29,10 @@ struct ProcessOutcome
     bool stoppedByRequest = false; // stop() was called
     bool killed = false; // graceful stop timed out and SIGKILL was sent
     QString message; // user-facing summary
+    bool startupFailure = false; // failed (non-zero exit / crash) within the startup grace period
+    qint64 pid = 0; // 0 if the process never started
+    QDateTime startedAt; // UTC; invalid if the process never started
+    QDateTime endedAt; // UTC
 };
 
 // What to start: an emulator, optionally one of its launch profiles and a game file.
@@ -87,6 +93,15 @@ public:
     // Returns false if no process is active.
     bool stop();
 
+    // Suspends / resumes the active process with SIGSTOP / SIGCONT. Only allowed while Running
+    // and only when the active emulator config has pausable=true; otherwise returns false.
+    // Both are idempotent (pause while paused / resume while not paused: see below).
+    bool pause();
+    bool resume();
+    bool isPaused() const { return m_paused; }
+    qint64 activePid() const { return m_pid; }
+    QDateTime startedAt() const { return m_startedAt; }
+
     // Kills any active process and waits (bounded) for it. Use only at application exit.
     void shutdown();
 
@@ -101,6 +116,10 @@ public:
 
     std::chrono::milliseconds stopTimeout() const { return m_stopTimeout; }
     void setStopTimeout(std::chrono::milliseconds timeout) { m_stopTimeout = timeout; }
+    // A non-zero exit or a crash this soon after the process started counts as a startup failure.
+    // Zero disables the detection.
+    std::chrono::milliseconds startupGrace() const { return m_startupGrace; }
+    void setStartupGrace(std::chrono::milliseconds grace) { m_startupGrace = grace; }
     qsizetype outputLimit() const { return m_outputLimit; }
     void setOutputLimit(qsizetype characters) { m_outputLimit = qMax<qsizetype>(1, characters); }
 
@@ -123,6 +142,7 @@ signals:
     void stateChanged(nexora::emulator::ProcessState state, const QString &emulatorId);
     void outputReceived(const QString &emulatorId, nexora::emulator::OutputChannel channel, const QString &text);
     void processFinished(const QString &emulatorId, const nexora::emulator::ProcessOutcome &outcome);
+    void pausedChanged(bool paused);
 
 private:
     void setState(ProcessState state);
@@ -138,6 +158,7 @@ private:
     void writeOutputLog(OutputChannel channel, const QString &text);
     void closeOutputLog(const QString &footer);
     void writeLogBytes(const QByteArray &bytes);
+    void setPaused(bool paused);
 
     ProcessState m_state = ProcessState::Idle;
     QPointer<QProcess> m_process;
@@ -148,6 +169,12 @@ private:
     std::chrono::milliseconds m_activeStopTimeout{5000};
     bool m_stopRequested = false;
     bool m_killed = false;
+    bool m_activePausable = false;
+    bool m_paused = false;
+    qint64 m_pid = 0;
+    QDateTime m_startedAt;
+    QElapsedTimer m_runClock;
+    std::chrono::milliseconds m_startupGrace{3000};
     ProcessOutcome m_lastOutcome;
     QString m_stdout;
     QString m_stderr;

@@ -24,7 +24,7 @@ public:
     bool start() override;
     QString name() const override;
     QString statusText() const override;
-    QStringList deviceNames() const override;
+    QList<DeviceInfo> devices() const override;
 
 private:
     struct Pad

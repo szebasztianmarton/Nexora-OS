@@ -1,11 +1,14 @@
 #include "SettingsController.h"
 
 #include "input/ButtonMapping.h"
+#include "input/GamepadNavigator.h"
 #include "input/InputController.h"
 
 #include "nexora/shared/Logging.h"
 #include "nexora/shared/Settings.h"
 #include "nexora/system/SystemIntegration.h"
+
+#include <QHash>
 
 namespace nexora::ui {
 
@@ -42,6 +45,17 @@ QString actionLabel(const QString &action)
     return labels.value(action, action);
 }
 
+QtMsgType logLevelFromString(const QString &name)
+{
+    if (name == QLatin1String("debug"))
+        return QtDebugMsg;
+    if (name == QLatin1String("warning"))
+        return QtWarningMsg;
+    if (name == QLatin1String("error"))
+        return QtCriticalMsg;
+    return QtInfoMsg; // "info" and anything unrecognised
+}
+
 } // namespace
 
 SettingsController::SettingsController(shared::Settings *settings, input::InputController *input,
@@ -61,8 +75,12 @@ SettingsController::SettingsController(shared::Settings *settings, input::InputC
     connect(m_settings, &Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == Settings::InputMapping)
             applyMapping();
-        else if (key == Settings::AudioVolume && volumeSupported())
-            m_system->applyVolume(value.toInt(), nullptr);
+        else if (key == Settings::InputDeadzone)
+            applyDeadzone();
+        else if ((key == Settings::AudioVolume || key == Settings::AudioMuted) && volumeSupported())
+            applyVolume();
+        else if (key == Settings::LogLevel)
+            applyLogLevel();
         else if (key == Settings::DisplayMode)
             emit displayModeChanged(value.toString());
         emit changed();
@@ -102,9 +120,57 @@ QString SettingsController::inputBackend() const
 {
     return m_settings->stringValue(Settings::InputBackend);
 }
+int SettingsController::deadzone() const
+{
+    return m_settings->intValue(Settings::InputDeadzone);
+}
 QString SettingsController::userFile() const
 {
     return m_settings->paths().userFile;
+}
+QString SettingsController::theme() const
+{
+    return m_settings->stringValue(Settings::UiTheme);
+}
+int SettingsController::uiScale() const
+{
+    return m_settings->intValue(Settings::UiScale);
+}
+bool SettingsController::reducedMotion() const
+{
+    return m_settings->boolValue(Settings::UiReducedMotion);
+}
+QString SettingsController::startScreen() const
+{
+    return m_settings->stringValue(Settings::UiStartScreen);
+}
+bool SettingsController::muted() const
+{
+    return m_settings->boolValue(Settings::AudioMuted);
+}
+QString SettingsController::logLevel() const
+{
+    return m_settings->stringValue(Settings::LogLevel);
+}
+
+bool SettingsController::setDefaultEmulatorForSystem(const QString &systemId, const QString &emulatorId)
+{
+    QVariantMap defaults = m_settings->mapValue(Settings::EmulatorDefaultForSystem);
+    if (emulatorId.isEmpty())
+        defaults.remove(systemId);
+    else
+        defaults.insert(systemId, emulatorId);
+    return set(Settings::EmulatorDefaultForSystem, defaults);
+}
+
+QString SettingsController::defaultEmulatorForSystem(const QString &systemId) const
+{
+    return m_settings->mapValue(Settings::EmulatorDefaultForSystem).value(systemId).toString();
+}
+
+QVariantMap SettingsController::defaultEmulators() const
+{
+    return m_settings->mapValue(Settings::EmulatorDefaultForSystem);
 }
 
 bool SettingsController::volumeSupported() const
@@ -251,11 +317,30 @@ void SettingsController::applyMapping()
     m_input->setMapping(mapping.value_or(input::ButtonMapping::defaults()));
 }
 
+void SettingsController::applyDeadzone()
+{
+    if (!m_input)
+        return;
+    m_input->navigator()->setDeadzone(deadzone() / 100.0);
+}
+
+void SettingsController::applyVolume()
+{
+    m_system->applyVolume(muted() ? 0 : volume(), nullptr);
+}
+
+void SettingsController::applyLogLevel()
+{
+    shared::setLogLevel(logLevelFromString(logLevel()));
+}
+
 void SettingsController::applyAll()
 {
     applyMapping();
+    applyDeadzone();
+    applyLogLevel();
     if (volumeSupported())
-        m_system->applyVolume(volume(), nullptr);
+        applyVolume();
 }
 
 } // namespace nexora::ui

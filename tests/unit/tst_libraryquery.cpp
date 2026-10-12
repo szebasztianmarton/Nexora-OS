@@ -124,6 +124,61 @@ private slots:
                  QStringList({QStringLiteral("mario kart"), QStringLiteral("zelda")}));
     }
 
+    void filtersBySystem()
+    {
+        auto list = sample();
+        list[0].systemId = QStringLiteral("snes");
+        list[4].systemId = QStringLiteral("snes");
+        list[2].systemId = QStringLiteral("nes");
+        QueryOptions o;
+        o.systemId = QStringLiteral("snes");
+        QCOMPARE(titles(LibraryQuery::apply(list, o)),
+                 QStringList({QStringLiteral("mario kart"), QStringLiteral("zelda")}));
+    }
+
+    void missingFilterShowsOnlyAbsentEntries()
+    {
+        QueryOptions o;
+        o.filter = LibraryFilter::Missing;
+        QCOMPARE(titles(LibraryQuery::apply(sample(), o)), QStringList{QStringLiteral("Gone Game")});
+        QCOMPARE(LibraryQuery::filterFromString(QStringLiteral("missing")), LibraryFilter::Missing);
+    }
+
+    void hiddenEntriesNeverAppear()
+    {
+        auto list = sample();
+        list[1].hidden = true;
+        list[3].hidden = true; // missing and hidden
+        QVERIFY(!titles(LibraryQuery::apply(list, {})).contains(QStringLiteral("Asteroids")));
+        QueryOptions o;
+        o.filter = LibraryFilter::Missing;
+        QVERIFY(LibraryQuery::apply(list, o).isEmpty());
+    }
+
+    void searchUsesDisplayTitleAndSystemName()
+    {
+        auto list = sample();
+        list[1].titleOverride = QStringLiteral("Space Rocks");
+        list[1].systemId = QStringLiteral("atari2600");
+        QueryOptions o;
+        o.search = QStringLiteral("rocks");
+        QCOMPARE(titles(LibraryQuery::apply(list, o)), QStringList{QStringLiteral("Asteroids")});
+        o.search = QStringLiteral("asteroids"); // the derived title is replaced, the file name still matches
+        QCOMPARE(titles(LibraryQuery::apply(list, o)), QStringList{QStringLiteral("Asteroids")});
+        o.search = QStringLiteral("rocks 2600");
+        QVERIFY(LibraryQuery::apply(list, o).isEmpty());
+        o.systemNames = {{QStringLiteral("atari2600"), QStringLiteral("A2600")}};
+        QCOMPARE(titles(LibraryQuery::apply(list, o)), QStringList{QStringLiteral("Asteroids")});
+    }
+
+    void sortsByDisplayTitle()
+    {
+        auto list = sample();
+        list[3].present = true;
+        list[0].titleOverride = QStringLiteral("AAA first"); // zelda
+        QCOMPARE(titles(LibraryQuery::apply(list, {})).first(), QStringLiteral("zelda"));
+    }
+
     void effectiveEmulator()
     {
         GameEntry e;
@@ -139,7 +194,7 @@ private slots:
     {
         for (auto s : {SortOrder::Title, SortOrder::Recent, SortOrder::Emulator, SortOrder::Added})
             QCOMPARE(LibraryQuery::sortOrderFromString(LibraryQuery::toString(s)), s);
-        for (auto f : {LibraryFilter::All, LibraryFilter::Favorites, LibraryFilter::Recent})
+        for (auto f : {LibraryFilter::All, LibraryFilter::Favorites, LibraryFilter::Recent, LibraryFilter::Missing})
             QCOMPARE(LibraryQuery::filterFromString(LibraryQuery::toString(f)), f);
         QCOMPARE(LibraryQuery::sortOrderFromString(QStringLiteral("bogus"), SortOrder::Added), SortOrder::Added);
     }

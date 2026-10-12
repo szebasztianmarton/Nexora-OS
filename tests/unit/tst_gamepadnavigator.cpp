@@ -54,6 +54,13 @@ private slots:
     void devicesDoNotInterfere();
     void chordIsPerDevice();
     void resetDeviceDropsOnlyThatDevice();
+    void defaultDeadzoneMatchesSettings();
+    void deadzoneThresholdFormulas();
+    void deadzoneAppliesToAxisEdges();
+    void largeDeadzoneIgnoresMidTravel();
+    void setDeadzoneClamps();
+    void repeatedPressWithoutReleaseActsOnce();
+    void rawEventsAreReportedBeforeThresholds();
 #ifdef NEXORA_HAVE_EVDEV
     void evdevKeyMapping();
     void evdevAbsMapping();
@@ -403,6 +410,135 @@ void TestGamepadNavigator::resetDeviceDropsOnlyThatDevice()
     nav.buttonEvent(GamepadButton::DpadDown, true, 2);
     nav.resetDevice(2);
     QVERIFY(!nav.repeatingAction());
+}
+
+void TestGamepadNavigator::defaultDeadzoneMatchesSettings()
+{
+    GamepadNavigator nav;
+    QCOMPARE(nav.deadzone(), 0.25); // Settings::InputDeadzone defaults to 25%
+}
+
+void TestGamepadNavigator::deadzoneThresholdFormulas()
+{
+    GamepadNavigator nav;
+    nav.setDeadzone(0.25);
+    // press = deadzone + (1 - deadzone) * 0.4, release = deadzone + (1 - deadzone) * 0.15
+    QCOMPARE(nav.axisPressThreshold(), 0.55);
+    QCOMPARE(nav.axisReleaseThreshold(), 0.3625);
+    nav.setDeadzone(0.5);
+    QCOMPARE(nav.axisPressThreshold(), 0.7);
+    QCOMPARE(nav.axisReleaseThreshold(), 0.575);
+}
+
+void TestGamepadNavigator::deadzoneAppliesToAxisEdges()
+{
+    GamepadNavigator nav;
+    nav.setRepeatDelays(10s, 10s); // keep repeat out of the picture
+    nav.setDeadzone(0.25);
+    QSignalSpy spy(&nav, &GamepadNavigator::actionTriggered);
+
+    nav.axisEvent(GamepadAxis::LeftX, 0.2); // inside the dead zone: treated as centred
+    QCOMPARE(spy.count(), 0);
+    nav.axisEvent(GamepadAxis::LeftX, 0.6); // >= 0.55: pressed
+    QCOMPARE(actions(spy), QList<NavAction>{NavAction::Right});
+    nav.axisEvent(GamepadAxis::LeftX, 0.4); // inside the hysteresis band: still held
+    QCOMPARE(nav.repeatingAction(), std::optional<NavAction>(NavAction::Right));
+    nav.axisEvent(GamepadAxis::LeftX, 0.3); // < 0.3625: released
+    QCOMPARE(nav.repeatingAction(), std::nullopt);
+    QCOMPARE(spy.count(), 1);
+}
+
+void TestGamepadNavigator::largeDeadzoneIgnoresMidTravel()
+{
+    GamepadNavigator nav;
+    nav.setRepeatDelays(10s, 10s);
+    nav.setDeadzone(0.5); // press 0.7, release 0.575
+    QSignalSpy spy(&nav, &GamepadNavigator::actionTriggered);
+
+    nav.axisEvent(GamepadAxis::LeftY, -0.6);
+    QCOMPARE(spy.count(), 0);
+    nav.axisEvent(GamepadAxis::LeftY, -0.75);
+    QCOMPARE(actions(spy), QList<NavAction>{NavAction::Up});
+    nav.axisEvent(GamepadAxis::LeftY, -0.6); // still held
+    QCOMPARE(spy.count(), 1);
+    nav.axisEvent(GamepadAxis::LeftY, -0.55);
+    QCOMPARE(nav.repeatingAction(), std::nullopt);
+}
+
+void TestGamepadNavigator::setDeadzoneClamps()
+{
+    GamepadNavigator nav;
+    nav.setDeadzone(0.0);
+    QCOMPARE(nav.deadzone(), GamepadNavigator::kMinDeadzone);
+    QCOMPARE(nav.deadzone(), 0.05);
+    nav.setDeadzone(-3.0);
+    QCOMPARE(nav.deadzone(), 0.05);
+    nav.setDeadzone(1.0);
+    QCOMPARE(nav.deadzone(), GamepadNavigator::kMaxDeadzone);
+    QCOMPARE(nav.deadzone(), 0.6);
+    nav.setDeadzone(std::nan(""));
+    QCOMPARE(nav.deadzone(), 0.6); // not a number: keep the previous value
+    nav.setDeadzone(0.4);
+    QCOMPARE(nav.deadzone(), 0.4);
+}
+
+void TestGamepadNavigator::repeatedPressWithoutReleaseActsOnce()
+{
+    // An OS/kernel key-autorepeat that re-reports a held button as "pressed" must not act
+    // again for Confirm/Back and friends; only navigation repeats (and does so on its own
+    // timer, see heldDirectionRepeats()).
+    GamepadNavigator nav;
+    nav.setRepeatDelays(10s, 10s);
+    QSignalSpy spy(&nav, &GamepadNavigator::actionTriggered);
+    QSignalSpy raw(&nav, &GamepadNavigator::buttonPressed);
+    nav.buttonEvent(GamepadButton::South, true);
+    nav.buttonEvent(GamepadButton::South, true);
+    nav.buttonEvent(GamepadButton::South, true);
+    QCOMPARE(actions(spy), QList<NavAction>{NavAction::Accept});
+    QCOMPARE(raw.count(), 1);
+
+    nav.buttonEvent(GamepadButton::South, false);
+    nav.buttonEvent(GamepadButton::South, true); // a fresh physical press acts again
+    QCOMPARE(spy.count(), 2);
+
+    nav.buttonEvent(GamepadButton::East, true);
+    nav.buttonEvent(GamepadButton::East, true);
+    QCOMPARE(spy.count(), 3);
+
+    // Directions are unaffected: each repeat still navigates.
+    spy.clear();
+    nav.buttonEvent(GamepadButton::DpadDown, true);
+    nav.buttonEvent(GamepadButton::DpadDown, true);
+    QCOMPARE(actions(spy), (QList<NavAction>{NavAction::Down, NavAction::Down}));
+}
+
+void TestGamepadNavigator::rawEventsAreReportedBeforeThresholds()
+{
+    GamepadNavigator nav;
+    nav.setDeadzone(0.25);
+    QSignalSpy buttons(&nav, &GamepadNavigator::rawButtonEvent);
+    QSignalSpy axes(&nav, &GamepadNavigator::rawAxisEvent);
+    QSignalSpy spy(&nav, &GamepadNavigator::actionTriggered);
+
+    nav.buttonEvent(GamepadButton::South, true, 7);
+    nav.buttonEvent(GamepadButton::South, true, 7); // deduped for actions, still raw
+    nav.buttonEvent(GamepadButton::South, false, 7);
+    QCOMPARE(buttons.count(), 3);
+    QCOMPARE(buttons.at(0).at(0).value<GamepadButton>(), GamepadButton::South);
+    QCOMPARE(buttons.at(0).at(1).toBool(), true);
+    QCOMPARE(buttons.at(0).at(2).toUInt(), 7u);
+    QCOMPARE(buttons.at(2).at(1).toBool(), false);
+
+    nav.axisEvent(GamepadAxis::LeftX, -0.1, 7); // inside the dead zone: no action
+    nav.axisEvent(GamepadAxis::LeftX, -0.82, 7);
+    QCOMPARE(axes.count(), 2);
+    QCOMPARE(axes.at(0).at(0).value<GamepadAxis>(), GamepadAxis::LeftX);
+    QCOMPARE(axes.at(0).at(1).toDouble(), -0.1);
+    QCOMPARE(axes.at(1).at(1).toDouble(), -0.82);
+    QCOMPARE(actions(spy), (QList<NavAction>{NavAction::Accept, NavAction::Left}));
+
+    nav.axisEvent(GamepadAxis::LeftX, std::nan(""), 7); // never reported, never acted on
+    QCOMPARE(axes.count(), 2);
 }
 
 QTEST_GUILESS_MAIN(TestGamepadNavigator)

@@ -154,6 +154,7 @@ QVariantMap defaultMapping()
 const QList<Settings::Spec> &Settings::specs()
 {
     static const QRegularExpression id(QStringLiteral("^[a-z0-9][a-z0-9_-]{0,63}$"));
+    static const QRegularExpression systemId(QStringLiteral("^[a-z0-9][a-z0-9_-]{0,31}$"));
     static const QRegularExpression action(
         QStringLiteral("^(accept|back|menu|favorite|search|prevTab|nextTab|gameBar|options)$"));
     static const QRegularExpression button(QStringLiteral("^(south|east|west|north|start|select|guide|l1|r1)$"));
@@ -178,6 +179,18 @@ const QList<Settings::Spec> &Settings::specs()
          stringMap(action, button, QStringLiteral("expected action -> button name"))},
         {EmulatorDefaultProfiles, QVariantMap{}, QStringLiteral("Default launch profile per emulator id"),
          stringMap(id, id, QStringLiteral("expected emulator id -> profile id"))},
+        {UiTheme, QStringLiteral("dark"), QStringLiteral("Colour theme"),
+         oneOf({QStringLiteral("dark"), QStringLiteral("highContrast")})},
+        {UiScale, 100, QStringLiteral("Interface scale in percent (75-150)"), intRange(75, 150)},
+        {UiReducedMotion, false, QStringLiteral("Reduce animations"), boolean()},
+        {UiStartScreen, QStringLiteral("home"), QStringLiteral("Screen shown at startup"),
+         oneOf({QStringLiteral("home"), QStringLiteral("games")})},
+        {InputDeadzone, 25, QStringLiteral("Analog stick dead zone in percent (5-60)"), intRange(5, 60)},
+        {AudioMuted, false, QStringLiteral("Mute audio"), boolean()},
+        {LogLevel, QStringLiteral("info"), QStringLiteral("Minimum severity written to the log"),
+         oneOf({QStringLiteral("error"), QStringLiteral("warning"), QStringLiteral("info"), QStringLiteral("debug")})},
+        {EmulatorDefaultForSystem, QVariantMap{}, QStringLiteral("Default emulator per game system id"),
+         stringMap(systemId, id, QStringLiteral("expected system id -> emulator id"))},
     };
     return list;
 }

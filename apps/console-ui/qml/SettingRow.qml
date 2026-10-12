@@ -39,10 +39,10 @@ Rectangle {
     activeFocusOnTab: true
     width: parent ? parent.width : 600
     implicitHeight: Math.max(60, texts.implicitHeight + 24)
-    radius: 10
+    radius: Theme.radiusSmall
     color: activeFocus ? Theme.surfaceHover : (mouse.containsMouse ? Theme.surfaceRaised : Theme.surface)
     border.width: activeFocus ? Theme.focusWidth : 1
-    border.color: activeFocus ? (armed ? Theme.danger : Theme.accent) : Theme.border
+    border.color: activeFocus ? (armed ? Theme.danger : Theme.focusRing) : Theme.border
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
     onActiveFocusChanged: if (!activeFocus) armed = false

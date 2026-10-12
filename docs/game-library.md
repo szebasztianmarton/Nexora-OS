@@ -196,3 +196,7 @@ Starting an emulator **without** a game (from the emulator list) drops every arg
 - Renamed/moved files lose their favorite and history.
 - Adding a folder requires typing its path; there is no on-screen keyboard or folder browser.
 - Not tested with real collections. A synthetic measurement (Release build, 4-core container, 10 000 files, `NEXORA_LIBRARY_BENCH=1 tst_gamelibrary benchmarkEventLoopStall`): scan + merge 0.16–0.25 s, all on the worker thread; the longest stall of the UI event loop during a scan is 5–6 ms (the timer resolution of the measurement), down from 118–139 ms (first scan) and 72–95 ms (unchanged rescan) when the merge ran on the UI thread. Rebuilding the visible lists afterwards (search + sort) takes about 8 ms on the UI thread. The 100 000-file and depth limits are enforced.
+
+## Planned: RetroArch and PPSSPP
+
+A plan (in Hungarian, not yet implemented) for packaging RetroArch with libretro cores, including PPSSPP: [emulator-integracio.md](emulator-integracio.md).

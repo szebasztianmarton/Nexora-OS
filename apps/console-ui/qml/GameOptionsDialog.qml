@@ -152,7 +152,7 @@ FocusScope {
                                                   + (emulators[0].available ? "" : " — " + emulators[0].reason)
                        : emulators.length + " emulators handle this file type")
                       + "  ·  " + (dialog.details.playCount > 0
-                                   ? "played " + dialog.details.playCount + "×, last " + dialog.details.lastPlayed
+                                   ? "played " + dialog.details.playCount + "×, last " + dialog.details.lastPlayedText
                                    : "never played")
                 color: Theme.textMuted
                 font.pixelSize: Theme.fontSmall

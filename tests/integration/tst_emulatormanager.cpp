@@ -21,6 +21,17 @@ EmulatorConfig fake(const QStringList &arguments, const QString &id = QStringLit
     return EmulatorConfig::make(id, QStringLiteral("Fake Emulator"), QStringLiteral(NEXORA_FAKE_EMULATOR), arguments);
 }
 
+// Field 3 of /proc/<pid>/stat (R, S, T, Z, ...); a NUL character if it cannot be read.
+QChar procState(qint64 pid)
+{
+    QFile file(QStringLiteral("/proc/%1/stat").arg(pid));
+    if (!file.open(QIODevice::ReadOnly))
+        return QChar();
+    const QByteArray text = file.readAll();
+    const qsizetype close = text.lastIndexOf(')'); // the command name may contain spaces
+    return close < 0 || close + 2 >= text.size() ? QChar() : QChar(text.at(close + 2));
+}
+
 QList<ProcessState> statesOf(const QSignalSpy &spy)
 {
     QList<ProcessState> states;
@@ -64,6 +75,7 @@ private slots:
     void nonZeroExit()
     {
         EmulatorManager manager;
+        manager.setStartupGrace(0ms); // an immediate exit is a plain non-zero exit here
         QSignalSpy finished(&manager, &EmulatorManager::processFinished);
         QVERIFY(manager.launch(fake({QStringLiteral("--exit-code"), QStringLiteral("3")})).accepted);
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
@@ -400,6 +412,185 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
         QVERIFY(manager.lastOutcome().killed);
         QVERIFY2(timer.elapsed() < 4000, qPrintable(QString::number(timer.elapsed())));
+    }
+
+    void immediateNonZeroExitIsStartupFailure()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--exit-code"), QStringLiteral("2")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        const ProcessOutcome outcome = manager.lastOutcome();
+        QVERIFY(outcome.startupFailure);
+        QCOMPARE(outcome.finalState, ProcessState::Failed);
+        QCOMPARE(outcome.error, EmulatorError::NonZeroExit);
+        QCOMPARE(outcome.message, QStringLiteral("Fake Emulator failed during startup (exit 2)"));
+        QVERIFY(outcome.pid > 0);
+        QVERIFY(outcome.startedAt.isValid());
+        QVERIFY(outcome.endedAt.isValid());
+        QVERIFY(outcome.endedAt >= outcome.startedAt);
+    }
+
+    void immediateCrashIsStartupFailure()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--crash"), QStringLiteral("abort")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(manager.lastOutcome().startupFailure);
+        QCOMPARE(manager.lastOutcome().error, EmulatorError::Crashed);
+    }
+
+    void failureAfterGraceIsNotStartupFailure()
+    {
+        EmulatorManager manager;
+        manager.setStartupGrace(100ms);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager
+                    .launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("700"), QStringLiteral("--exit-code"),
+                                  QStringLiteral("2")}))
+                    .accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(!manager.lastOutcome().startupFailure);
+        QCOMPARE(manager.lastOutcome().error, EmulatorError::NonZeroExit);
+        QVERIFY(manager.lastOutcome().message.contains(QStringLiteral("exit code 2")));
+    }
+
+    void cleanExitAfterGraceIsNotStartupFailure()
+    {
+        EmulatorManager manager;
+        manager.setStartupGrace(100ms);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("700")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(!manager.lastOutcome().startupFailure);
+        QCOMPARE(manager.lastOutcome().finalState, ProcessState::Exited);
+    }
+
+    void zeroExitWithinGraceIsNotStartupFailure()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(!manager.lastOutcome().startupFailure);
+    }
+
+    void stopIsNeverStartupFailure()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY(!manager.lastOutcome().startupFailure);
+    }
+
+    void pidAndStartTimeArePopulated()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QCOMPARE(manager.activePid(), qint64(0));
+        const QDateTime before = QDateTime::currentDateTimeUtc().addSecs(-1);
+        QVERIFY(manager.launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(manager.state(), ProcessState::Running, Timeout);
+        const qint64 pid = manager.activePid();
+        QVERIFY(pid > 0);
+        QVERIFY(QFile::exists(QStringLiteral("/proc/%1").arg(pid)));
+        QVERIFY(manager.startedAt().isValid());
+        QVERIFY(manager.startedAt() >= before);
+
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QCOMPARE(manager.lastOutcome().pid, pid);
+        QCOMPARE(manager.lastOutcome().startedAt, manager.startedAt());
+        QVERIFY(manager.lastOutcome().endedAt >= manager.lastOutcome().startedAt);
+        QCOMPARE(manager.activePid(), qint64(0));
+    }
+
+    void pauseAndResume()
+    {
+        EmulatorConfig config = fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")});
+        config.pausable = true;
+        EmulatorManager manager;
+        QSignalSpy paused(&manager, &EmulatorManager::pausedChanged);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(!manager.pause()); // nothing running yet
+        QVERIFY(manager.launch(config).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(manager.state(), ProcessState::Running, Timeout);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        const qint64 pid = manager.activePid();
+
+        QVERIFY(manager.pause());
+        QVERIFY(manager.isPaused());
+        QCOMPARE(manager.state(), ProcessState::Running);
+        QTRY_COMPARE_WITH_TIMEOUT(procState(pid), u'T', Timeout);
+        QVERIFY(manager.pause()); // idempotent
+        QCOMPARE(paused.size(), 1);
+        QCOMPARE(paused.last().at(0).toBool(), true);
+
+        QVERIFY(manager.resume());
+        QVERIFY(!manager.isPaused());
+        QTRY_VERIFY_WITH_TIMEOUT(procState(pid) != u'T', Timeout);
+        QCOMPARE(paused.size(), 2);
+        QCOMPARE(paused.last().at(0).toBool(), false);
+        QVERIFY(!manager.resume()); // not paused any more
+
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+    }
+
+    void pauseRejectedWhenNotPausable()
+    {
+        EmulatorManager manager;
+        QSignalSpy paused(&manager, &EmulatorManager::pausedChanged);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        const qint64 pid = manager.activePid();
+        QVERIFY(!manager.pause());
+        QVERIFY(!manager.isPaused());
+        QCOMPARE(paused.size(), 0);
+        QVERIFY(procState(pid) != u'T');
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+    }
+
+    void stopWhilePausedTerminates()
+    {
+        EmulatorConfig config = fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")});
+        config.pausable = true;
+        EmulatorManager manager;
+        QSignalSpy paused(&manager, &EmulatorManager::pausedChanged);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(config).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        const qint64 pid = manager.activePid();
+        QVERIFY(manager.pause());
+        QTRY_COMPARE_WITH_TIMEOUT(procState(pid), u'T', Timeout);
+
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 4000); // well below the 5 s kill timeout
+        QVERIFY(!manager.lastOutcome().killed);
+        QVERIFY(manager.lastOutcome().stoppedByRequest);
+        QVERIFY(!manager.isPaused());
+        QCOMPARE(paused.last().at(0).toBool(), false);
+    }
+
+    void duplicateLaunchKeepsPid()
+    {
+        EmulatorManager manager;
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(manager.state(), ProcessState::Running, Timeout);
+        const qint64 pid = manager.activePid();
+        const auto second = manager.launch(fake({}, QStringLiteral("other")));
+        QVERIFY(!second.accepted);
+        QCOMPARE(second.error, EmulatorError::AlreadyActive);
+        QCOMPARE(manager.activePid(), pid);
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
     }
 
     void destroyWhileRunning()

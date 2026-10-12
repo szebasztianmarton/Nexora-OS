@@ -19,5 +19,7 @@ function(nexora_add_test name)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_LOGGING_RULES=nexora.*.debug=true")
 endfunction()
 
+add_subdirectory(support)
 add_subdirectory(unit)
 add_subdirectory(integration)
+add_subdirectory(qml)

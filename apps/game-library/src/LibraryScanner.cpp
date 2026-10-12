@@ -30,12 +30,27 @@ bool isInside(const QString &canonicalPath, const QString &canonicalRoot)
     return canonicalPath == canonicalRoot || canonicalPath.startsWith(canonicalRoot + u'/');
 }
 
+// System directories that never contain a game library and can be huge or endless
+// (/proc), or hold files that must not be walked (/etc, /usr, ...).
+bool isSystemDirectory(const QString &name, const QString &canonicalPath)
+{
+    static const QSet<QString> names{QStringLiteral("proc"), QStringLiteral("sys"), QStringLiteral("dev"),
+                                     QStringLiteral("run"), QStringLiteral("lost+found")};
+    static const QSet<QString> paths{QStringLiteral("/proc"), QStringLiteral("/sys"),   QStringLiteral("/dev"),
+                                     QStringLiteral("/run"),  QStringLiteral("/boot"),  QStringLiteral("/etc"),
+                                     QStringLiteral("/usr"),  QStringLiteral("/bin"),   QStringLiteral("/sbin"),
+                                     QStringLiteral("/lib"),  QStringLiteral("/lib64"), QStringLiteral("/var")};
+    return names.contains(name) || name.startsWith(QLatin1String(".Trash-")) || name == QLatin1String(".git")
+        || paths.contains(canonicalPath);
+}
+
 class Walker
 {
 public:
-    Walker(const ScanOptions &options, const std::atomic_bool *cancel, ScanResult &result)
+    Walker(const ScanOptions &options, const std::atomic_bool *cancel, const ScanProgress &progress, ScanResult &result)
         : m_options(options)
         , m_cancel(cancel)
+        , m_progress(progress)
         , m_result(result)
     { }
 
@@ -59,9 +74,16 @@ public:
             issue(configuredRoot, QStringLiteral("scanning the whole filesystem is not allowed"));
             return;
         }
+        if (isSystemDirectory(QString(), canonical)) {
+            issue(configuredRoot, QStringLiteral("system directories cannot be library directories"));
+            return;
+        }
         if (!m_result.scannedRoots.contains(canonical))
             m_result.scannedRoots.append(canonical);
         m_visitedDirs.clear();
+        if (m_progress)
+            m_progress(int(m_result.files.size()), canonical);
+        m_currentRoot = canonical;
         walk(canonical, canonical, 0);
     }
 
@@ -87,7 +109,13 @@ private:
         if (m_visitedDirs.contains(dirPath))
             return; // symlink loop
         m_visitedDirs.insert(dirPath);
+        m_activeDirs.insert(dirPath);
+        walkEntries(dirPath, root, depth);
+        m_activeDirs.remove(dirPath);
+    }
 
+    void walkEntries(const QString &dirPath, const QString &root, int depth)
+    {
         QDir dir(dirPath);
         QDir::Filters filters = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System;
         const QFileInfoList entries = dir.entryInfoList(filters, QDir::Name);
@@ -115,6 +143,10 @@ private:
                     continue;
                 }
                 path = target;
+                if (m_activeDirs.contains(target)) {
+                    ++m_result.skippedSymlinks; // loop: the link points at a directory being walked
+                    continue;
+                }
             }
 
             const QFileInfo info(path);
@@ -123,7 +155,10 @@ private:
                     issue(path, QStringLiteral("directory is not accessible; skipped"));
                     continue;
                 }
-                walk(info.canonicalFilePath(), root, depth + 1);
+                const QString canonicalDir = info.canonicalFilePath();
+                if (isSystemDirectory(entry.fileName(), canonicalDir))
+                    continue;
+                walk(canonicalDir, root, depth + 1);
                 continue;
             }
             if (!info.isFile())
@@ -168,14 +203,20 @@ private:
             file.size = info.size();
             file.modified = info.lastModified();
             file.emulatorIds = *handlers;
+            file.systemIds = m_options.extensionSystems.value(extension);
             m_result.files.append(file);
+            if (m_progress && m_result.files.size() % 100 == 0)
+                m_progress(int(m_result.files.size()), m_currentRoot);
         }
     }
 
     const ScanOptions &m_options;
     const std::atomic_bool *m_cancel;
+    const ScanProgress &m_progress;
     ScanResult &m_result;
+    QString m_currentRoot;
     QSet<QString> m_visitedDirs;
+    QSet<QString> m_activeDirs; // the directories from the root down to the current one
     QSet<FileKey> m_seenFiles; // across roots, so overlapping roots do not duplicate
 };
 
@@ -193,10 +234,11 @@ QString LibraryScanner::titleFromFileName(const QString &fileName)
     return base.isEmpty() ? fileName : base;
 }
 
-ScanResult LibraryScanner::scan(const ScanOptions &options, const std::atomic_bool *cancel)
+ScanResult LibraryScanner::scan(const ScanOptions &options, const std::atomic_bool *cancel,
+                                const ScanProgress &progress)
 {
     ScanResult result;
-    Walker walker(options, cancel, result);
+    Walker walker(options, cancel, progress, result);
     for (const QString &root : options.roots) {
         walker.scanRoot(QDir::cleanPath(root));
         if (cancel && cancel->load())

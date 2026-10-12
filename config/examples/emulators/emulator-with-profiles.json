@@ -5,6 +5,9 @@
   "arguments": ["{file}"],
   "workingDirectory": "/tmp",
   "extensions": [".example"],
+  "version": "1.0",
+  "systems": ["snes"],
+  "pausable": true,
   "stopTimeoutMs": 3000,
   "enabled": true,
   "profiles": [

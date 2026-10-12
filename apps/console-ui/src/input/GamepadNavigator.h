@@ -20,9 +20,15 @@ namespace nexora::input {
 // East -> Back, Start -> Menu, North -> Favorite, West -> Search, L1/R1 -> previous/next
 // tab); D-pad, hat and left stick always map to directions.
 //
-// Axes are edge-triggered with hysteresis (press at |v| >= 0.5, release at |v| < 0.3). A
-// held direction auto-repeats (initial delay, then interval); only the most recently
-// pressed direction repeats. Non-directional actions never repeat.
+// Axes are edge-triggered with hysteresis around a configurable dead zone (setDeadzone()):
+// readings with |v| < deadzone count as centred, a direction is pressed at
+// |v| >= deadzone + (1 - deadzone) * 0.4 and released below
+// deadzone + (1 - deadzone) * 0.15. A held direction auto-repeats (initial delay, then
+// interval); only the most recently pressed direction repeats.
+//
+// Non-directional actions never repeat, and neither does a non-directional button that is
+// re-reported as pressed without an intervening release (OS/kernel key autorepeat): Confirm,
+// Back and the rest fire once per physical press. Only navigation repeats.
 //
 // Holding Select + Start together on one device for chordHoldDuration() emits
 // returnToLauncherRequested() once per hold. The chord is tracked independently of
@@ -36,8 +42,12 @@ class GamepadNavigator : public QObject
     Q_OBJECT
 
 public:
-    static constexpr double kAxisPressThreshold = 0.5;
-    static constexpr double kAxisReleaseThreshold = 0.3;
+    // setDeadzone() clamps to this range; it matches the 5-60 percent range of the
+    // "input.deadzone" setting.
+    static constexpr double kMinDeadzone = 0.05;
+    static constexpr double kMaxDeadzone = 0.6;
+    // Same as the "input.deadzone" default of 25 percent.
+    static constexpr double kDefaultDeadzone = 0.25;
 
     explicit GamepadNavigator(QObject *parent = nullptr);
 
@@ -57,6 +67,14 @@ public:
     const ButtonMapping &mapping() const { return m_mapping; }
     std::chrono::milliseconds chordHoldDuration() const { return m_chordHold; }
 
+    // Stick/hat dead zone as a fraction of full travel, clamped to
+    // [kMinDeadzone, kMaxDeadzone]. Non-finite values are ignored. See the class comment
+    // for the press/release formulas.
+    void setDeadzone(double fraction);
+    double deadzone() const { return m_deadzone; }
+    double axisPressThreshold() const { return m_deadzone + (1.0 - m_deadzone) * 0.4; }
+    double axisReleaseThreshold() const { return m_deadzone + (1.0 - m_deadzone) * 0.15; }
+
     // The direction currently auto-repeating, if any.
     std::optional<NavAction> repeatingAction() const;
 
@@ -65,6 +83,12 @@ signals:
     void returnToLauncherRequested();
     // Every non-directional button press, before mapping (used to capture remaps).
     void buttonPressed(nexora::input::GamepadButton button, quint32 device);
+    // Every button edge as it arrived from the backend, before mapping, autorepeat
+    // filtering and the directional split (used by the controller test screen).
+    void rawButtonEvent(nexora::input::GamepadButton button, bool pressed, quint32 device);
+    // Every finite axis reading as it arrived from the backend, before the dead zone and
+    // the press/release thresholds (used by the controller test screen).
+    void rawAxisEvent(nexora::input::GamepadAxis axis, double value, quint32 device);
 
 private:
     // Independent sources that can hold a direction.
@@ -80,10 +104,15 @@ private:
         SourceCount
     };
 
+    // One slot per GamepadButton; used to drop autorepeated presses of non-directional
+    // buttons (directions are deduplicated through |held| instead).
+    static constexpr std::size_t kButtonCount = static_cast<std::size_t>(GamepadButton::R1) + 1;
+
     struct DeviceState
     {
         std::array<std::optional<NavAction>, SourceCount> held{};
         std::array<int, 4> axisState{}; // -1, 0, +1 per GamepadAxis
+        std::array<bool, kButtonCount> buttonHeld{};
         bool selectHeld = false;
         bool startHeld = false;
     };
@@ -108,6 +137,7 @@ private:
     QTimer m_chordTimer;
     std::optional<quint32> m_chordDevice;
     std::chrono::milliseconds m_chordHold{1000};
+    double m_deadzone = kDefaultDeadzone;
 };
 
 } // namespace nexora::input

@@ -85,7 +85,7 @@ private slots:
                                         << QVariant(QVariantMap{{QStringLiteral("jump"), QStringLiteral("south")}});
         QTest::newRow("mapping button") << Settings::InputMapping
                                         << QVariant(QVariantMap{{QStringLiteral("accept"), QStringLiteral("x9")}});
-        QTest::newRow("unknown key") << QStringLiteral("ui.theme") << QVariant(QStringLiteral("dark"));
+        QTest::newRow("unknown key") << QStringLiteral("ui.nonexistent") << QVariant(QStringLiteral("dark"));
     }
 
     void rejectsInvalidValues()
@@ -238,6 +238,61 @@ private slots:
             QVERIFY2(spec.validate(v).isEmpty(), qPrintable(spec.key));
             QVERIFY2(!spec.description.isEmpty(), qPrintable(spec.key));
         }
+    }
+
+    void newUiInputAudioLogKeysHaveDefaultsAndValidate()
+    {
+        QTemporaryDir dir;
+        Settings s({{}, dir.filePath(QStringLiteral("user/settings.json"))});
+        QVERIFY(s.load());
+        QCOMPARE(s.stringValue(Settings::UiTheme), QStringLiteral("dark"));
+        QCOMPARE(s.intValue(Settings::UiScale), 100);
+        QCOMPARE(s.boolValue(Settings::UiReducedMotion), false);
+        QCOMPARE(s.stringValue(Settings::UiStartScreen), QStringLiteral("home"));
+        QCOMPARE(s.intValue(Settings::InputDeadzone), 25);
+        QCOMPARE(s.boolValue(Settings::AudioMuted), false);
+        QCOMPARE(s.stringValue(Settings::LogLevel), QStringLiteral("info"));
+        QVERIFY(s.mapValue(Settings::EmulatorDefaultForSystem).isEmpty());
+
+        QVERIFY(s.setValue(Settings::UiTheme, QStringLiteral("highContrast")));
+        QVERIFY(s.setValue(Settings::UiScale, 150));
+        QVERIFY(s.setValue(Settings::UiScale, 75));
+        QVERIFY(s.setValue(Settings::InputDeadzone, 5));
+        QVERIFY(s.setValue(Settings::InputDeadzone, 60));
+        QVERIFY(s.setValue(Settings::LogLevel, QStringLiteral("debug")));
+
+        QString error;
+        QVERIFY(!s.setValue(Settings::UiTheme, QStringLiteral("neon"), &error));
+        QVERIFY(!s.setValue(Settings::UiScale, 74, &error));
+        QVERIFY(!s.setValue(Settings::UiScale, 151, &error));
+        QVERIFY(!s.setValue(Settings::UiReducedMotion, 1, &error));
+        QVERIFY(!s.setValue(Settings::UiStartScreen, QStringLiteral("settings"), &error));
+        QVERIFY(!s.setValue(Settings::InputDeadzone, 4, &error));
+        QVERIFY(!s.setValue(Settings::InputDeadzone, 61, &error));
+        QVERIFY(!s.setValue(Settings::AudioMuted, QStringLiteral("yes"), &error));
+        QVERIFY(!s.setValue(Settings::LogLevel, QStringLiteral("trace"), &error));
+    }
+
+    void defaultForSystemValidatesKeysAndValues()
+    {
+        QTemporaryDir dir;
+        Settings s({{}, dir.filePath(QStringLiteral("user/settings.json"))});
+        QVERIFY(s.load());
+        QString error;
+        QVERIFY(s.setValue(Settings::EmulatorDefaultForSystem,
+                           QVariantMap{{QStringLiteral("snes"), QStringLiteral("snes9x")}}, &error));
+        QCOMPARE(s.mapValue(Settings::EmulatorDefaultForSystem).value(QStringLiteral("snes")).toString(),
+                 QStringLiteral("snes9x"));
+        QVERIFY(!s.setValue(Settings::EmulatorDefaultForSystem,
+                            QVariantMap{{QStringLiteral("Bad Sys"), QStringLiteral("snes9x")}}, &error));
+        QVERIFY(!s.setValue(Settings::EmulatorDefaultForSystem,
+                            QVariantMap{{QStringLiteral("snes"), QStringLiteral("Bad Emu")}}, &error));
+        QVERIFY(!s.setValue(Settings::EmulatorDefaultForSystem, QVariantMap{{QStringLiteral("snes"), 5}}, &error));
+        // 32 characters is the longest system id.
+        QVERIFY(s.setValue(Settings::EmulatorDefaultForSystem, QVariantMap{{QString(32, u'a'), QStringLiteral("x")}},
+                           &error));
+        QVERIFY(!s.setValue(Settings::EmulatorDefaultForSystem, QVariantMap{{QString(33, u'a'), QStringLiteral("x")}},
+                            &error));
     }
 };
 
