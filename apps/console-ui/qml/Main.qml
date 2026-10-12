@@ -193,6 +193,8 @@ ApplicationWindow {
                 library: window.library
                 settings: window.settings
                 system: window.system
+                updates: window.updates
+                onOpenUpdatePanel: {} // Task 9 opens the actual update panel here.
             }
             DiagnosticsScreen {
                 id: diagnosticsScreen
@@ -305,5 +307,13 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
 
-    Component.onCompleted: focusPage()
+    Component.onCompleted: {
+        // Every screen reads these back off Theme; binding them once here keeps the
+        // accessibility settings (high contrast, UI scale, reduced motion) wired to the
+        // whole interface without each screen having to know about SettingsController.
+        Theme.scale = Qt.binding(() => window.settings.uiScale / 100)
+        Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
+        Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
+        focusPage()
+    }
 }

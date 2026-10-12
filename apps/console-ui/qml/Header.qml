@@ -75,7 +75,9 @@ Rectangle {
                 radius: 4
                 color: chip.tone
                 SequentialAnimation on opacity {
-                    running: chip.pulsing && chip.visible
+                    // A continuous pulse, not a discrete transition: reducedMotion stops it
+                    // outright rather than collapsing its duration to 0.
+                    running: chip.pulsing && chip.visible && !Theme.reducedMotion
                     loops: Animation.Infinite
                     NumberAnimation { to: 0.25; duration: 600 }
                     NumberAnimation { to: 1.0; duration: 600 }

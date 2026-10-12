@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 namespace nexora::shared {
@@ -49,6 +50,10 @@ class SettingsController : public QObject
     Q_PROPERTY(QString startScreen READ startScreen WRITE setStartScreen NOTIFY changed)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY changed)
     Q_PROPERTY(QString logLevel READ logLevel WRITE setLogLevel NOTIFY changed)
+    // Default emulator id per game system id (only systems with an override are present);
+    // a reactive mirror of setDefaultEmulatorForSystem()/defaultEmulatorForSystem() so QML
+    // can bind to it directly instead of re-invoking the getter by hand.
+    Q_PROPERTY(QVariantMap defaultEmulators READ defaultEmulators NOTIFY changed)
 
 public:
     SettingsController(shared::Settings *settings, input::InputController *input, system::SystemIntegration *system,
@@ -93,6 +98,7 @@ public:
     void setMuted(bool value) { set(QStringLiteral("audio.muted"), value); }
     QString logLevel() const;
     void setLogLevel(const QString &value) { set(QStringLiteral("log.level"), value); }
+    QVariantMap defaultEmulators() const;
 
     // Default emulator id for a game system id; "" clears the default / means none set.
     Q_INVOKABLE bool setDefaultEmulatorForSystem(const QString &systemId, const QString &emulatorId);

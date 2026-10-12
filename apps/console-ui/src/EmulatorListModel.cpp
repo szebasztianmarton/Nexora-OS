@@ -141,4 +141,12 @@ QString EmulatorListModel::emulatorIdAt(int row) const
     return m_entries.at(row).config.id;
 }
 
+QString EmulatorListModel::nameForId(const QString &id) const
+{
+    if (id.isEmpty())
+        return {};
+    const int row = indexOf(id);
+    return row < 0 ? id : m_entries.at(row).config.name;
+}
+
 } // namespace nexora::ui

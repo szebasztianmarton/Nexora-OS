@@ -51,7 +51,7 @@ endif()
 set(NEXORA_QT_MIN_VERSION 6.4)
 set(NEXORA_QT_COMPONENTS Core Gui Qml Quick QuickControls2 Sql)
 if(BUILD_TESTING)
-    list(APPEND NEXORA_QT_COMPONENTS Test)
+    list(APPEND NEXORA_QT_COMPONENTS Test QuickTest)
 endif()
 
 find_package(Qt6 ${NEXORA_QT_MIN_VERSION} COMPONENTS ${NEXORA_QT_COMPONENTS})

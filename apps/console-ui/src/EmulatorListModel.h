@@ -53,6 +53,9 @@ public:
     int indexOf(const QString &id) const;
     std::optional<shared::EmulatorConfig> find(const QString &id) const;
     Q_INVOKABLE QString emulatorIdAt(int row) const;
+    // The display name for |id|, or |id| itself if it is not (or no longer) a known
+    // emulator; "" for "" (used by Settings to show "no default" without special-casing it).
+    Q_INVOKABLE QString nameForId(const QString &id) const;
 
 signals:
     void countChanged();

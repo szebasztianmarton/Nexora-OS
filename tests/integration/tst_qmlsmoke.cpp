@@ -11,9 +11,13 @@
 //   searchField, filterChips, filter_all|favorites|recent, sortSelector, gameGrid,
 //   gamesLoading, gamesEmpty, gamesEmptyAction, scanSummary, resultCount         (Games)
 //   emulatorList, emptyState, statusLine, profilePicker, profileList             (Emulators)
-//   settingLanguage, settingHints, settingSort, settingDisplayMode, settingResolution,
-//   settingVolume, settingBackend, mapping_<action>, libraryDir_<n>, addDirField,
-//   addDirButton, rescanRow, resetRow, rebootRow, powerOffRow, settingsIssues     (Settings)
+//   settingLanguage, settingTheme, settingUiScale, settingReducedMotion, settingHints,
+//   settingSort, settingBackend, settingDeadzone, mapping_<action>, testInputRow,
+//   settingDisplayMode, settingResolution, settingVolume, settingMute, libraryDir_<n>,
+//   addDirField, addDirButton, rescanRow, cancelScanRow, restoreRemovedRow,
+//   defaultEmulator_<systemId>, softwareUpdateRow, exportDiagnosticsRow, createBackupRow,
+//   restoreBackupRow, clearArtworkCacheRow, resetRow, rebootRow, powerOffRow,
+//   settingsIssues, sectionTitle_<Name>                                           (Settings)
 //   reloadButton                                                                  (Diagnostics)
 //   runningOverlay, stopButton, runningTitle                                      (overlay)
 //   stateChip, scanChip, rootChip, clock, hintBar, toast                          (chrome)
@@ -77,7 +81,10 @@ private:
         QList<QQmlError> warnings;
     };
 
-    static void load(Ui &ui, const QString &configDir)
+    // |windowSize| is the OS window size (not Theme.scale / the UI-scale accessibility
+    // setting): every test runs at both 1280x720 and 1920x1080 to catch anything that only
+    // breaks at a different physical resolution (responsive layout, column counts, ...).
+    static void load(Ui &ui, const QString &configDir, const QSize &windowSize = {1280, 720})
     {
         ui.state = std::make_unique<QTemporaryDir>();
         nexora::ui::UiContext::Options options;
@@ -93,7 +100,16 @@ private:
                          [&ui](const QList<QQmlError> &warnings) { ui.warnings.append(warnings); });
         ui.window = nexora::ui::loadMainWindow(*ui.engine, ui.context.get());
         QVERIFY(ui.window);
+        ui.window->resize(windowSize);
         QVERIFY(QTest::qWaitForWindowExposed(ui.window));
+    }
+
+    // Shared [[1280x720], [1920x1080]] data table for every *_data() slot below.
+    static void addWindowSizeRows()
+    {
+        QTest::addColumn<QSize>("windowSize");
+        QTest::newRow("1280x720") << QSize(1280, 720);
+        QTest::newRow("1920x1080") << QSize(1920, 1080);
     }
 
     // Adds |dir| as a library directory and waits for the resulting scan.
@@ -442,10 +458,30 @@ private slots:
         QCOMPARE(currentTab(ui), int(Settings));
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "settingLanguage")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
 
-        // Walk down to the volume row; Right raises it by 5, Left lowers it again.
+        // Keyboard remap: Right on a mapping row cycles to the next button. Controllers
+        // (with the mapping rows) comes before Display/Audio (with volume), so this is
+        // reached first.
+        const QString before = mappedButton(ui, QStringLiteral("favorite"));
+        QCOMPARE(before, QStringLiteral("north"));
+        auto *row = find(ui, "mapping_favorite");
+        QVERIFY(row);
+        for (int i = 0; i < 40 && !row->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Down);
+        QVERIFY2(row->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Right);
+        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("start"));
+        // The action that had "start" (menu) swapped onto "north".
+        QCOMPARE(mappedButton(ui, QStringLiteral("menu")), QStringLiteral("north"));
+        // The rows are rebuilt; focus stays on the same action.
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "mapping_favorite")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Left);
+        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("north"));
+
+        // Walk on down to the volume row (Display, then Audio); Right raises it by 5, Left
+        // lowers it again.
         auto *volumeRow = find(ui, "settingVolume");
         QVERIFY(volumeRow);
-        for (int i = 0; i < 10 && !volumeRow->hasActiveFocus(); ++i)
+        for (int i = 0; i < 40 && !volumeRow->hasActiveFocus(); ++i)
             key(ui, Qt::Key_Down);
         QVERIFY2(volumeRow->hasActiveFocus(), qPrintable(focusName(ui)));
         const int volume = settings->volume();
@@ -463,25 +499,10 @@ private slots:
         settings->setShowHints(true);
         QTRY_VERIFY(hintBar->isVisible());
 
-        // Keyboard remap: Right on a mapping row cycles to the next button.
-        const QString before = mappedButton(ui, QStringLiteral("favorite"));
-        QCOMPARE(before, QStringLiteral("north"));
-        auto *row = find(ui, "mapping_favorite");
-        QVERIFY(row);
-        for (int i = 0; i < 20 && !row->hasActiveFocus(); ++i)
-            key(ui, Qt::Key_Down);
-        QVERIFY2(row->hasActiveFocus(), qPrintable(focusName(ui)));
-        key(ui, Qt::Key_Right);
-        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("start"));
-        // The action that had "start" (menu) swapped onto "north".
-        QCOMPARE(mappedButton(ui, QStringLiteral("menu")), QStringLiteral("north"));
-        // The rows are rebuilt; focus stays on the same action.
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "mapping_favorite")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
-        key(ui, Qt::Key_Left);
-        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("north"));
-
-        // Up/Down never leave the screen downwards; the last row stays focused.
-        for (int i = 0; i < 40; ++i)
+        // Up/Down never leave the screen downwards; the last row stays focused (Restart /
+        // Power off are hidden on this "desktop" platform override, so Reset preferences is
+        // the true last one).
+        for (int i = 0; i < 100; ++i)
             key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "resetRow")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(currentTab(ui), int(Settings));
@@ -489,9 +510,8 @@ private slots:
         // Add a library folder from the text field.
         QTemporaryDir games;
         auto *field = find(ui, "addDirField");
-        key(ui, Qt::Key_Up);
-        key(ui, Qt::Key_Up);
-        key(ui, Qt::Key_Up);
+        for (int i = 0; i < 100 && !field->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Up);
         QTRY_VERIFY2_WITH_TIMEOUT(field->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         typeText(ui, games.path());
         key(ui, Qt::Key_Return);

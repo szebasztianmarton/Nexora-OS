@@ -114,7 +114,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "⌕"
                     color: searchField.activeFocus ? Theme.accent : Theme.textMuted
-                    font.pixelSize: 22
+                    font.pixelSize: 22 * Theme.scale
                 }
             }
 
@@ -411,7 +411,9 @@ FocusScope {
                 y: -4
             }
             RotationAnimation on rotation {
-                running: loading.visible
+                // A continuous spin, not a discrete transition: reducedMotion stops it
+                // outright rather than collapsing its duration to 0.
+                running: loading.visible && !Theme.reducedMotion
                 from: 0
                 to: 360
                 duration: 1100

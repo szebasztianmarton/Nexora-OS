@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EmulatorListModel.h"
+#include "input/InputController.h"
 
 #include "nexora/emulator/EmulatorManager.h"
 #include "nexora/shared/ConfigLoader.h"
@@ -12,9 +13,6 @@
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
-namespace nexora::input {
-class InputController;
-}
 namespace nexora::emulator {
 class LaunchHistory;
 }
@@ -45,6 +43,10 @@ class AppController : public QObject
     Q_PROPERTY(QString inputBackend READ inputBackend NOTIFY inputChanged)
     Q_PROPERTY(QString inputStatus READ inputStatus NOTIFY inputChanged)
     Q_PROPERTY(QStringList inputDevices READ inputDevices NOTIFY inputChanged)
+    // The input layer itself (device list with backend/connectedAt, test mode, lastRawEvent);
+    // null until setInputController() is called. Exposed so the Settings screen can offer
+    // "Test input" without AppController having to re-expose every InputController property.
+    Q_PROPERTY(nexora::input::InputController *input READ input NOTIFY inputChanged)
     Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT)
     Q_PROPERTY(QString version READ version CONSTANT)
     Q_PROPERTY(bool paused READ paused NOTIFY pausedChanged)
@@ -85,6 +87,7 @@ public:
     QString inputBackend() const;
     QString inputStatus() const;
     QStringList inputDevices() const;
+    input::InputController *input() const { return m_input.data(); }
     QString logFilePath() const { return m_options.logFilePath; }
     QString version() const;
     bool paused() const { return m_manager.isPaused(); }

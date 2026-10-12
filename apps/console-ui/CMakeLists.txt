@@ -11,6 +11,8 @@ set(NEXORA_QML_FILES
     qml/HintBar.qml
     qml/Toast.qml
     qml/NxButton.qml
+    qml/ConfirmDialog.qml
+    qml/InputTestPanel.qml
     qml/SettingRow.qml
     qml/GameTile.qml
     qml/GameRow.qml

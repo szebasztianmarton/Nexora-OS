@@ -166,6 +166,11 @@ QString SettingsController::defaultEmulatorForSystem(const QString &systemId) co
     return m_settings->mapValue(Settings::EmulatorDefaultForSystem).value(systemId).toString();
 }
 
+QVariantMap SettingsController::defaultEmulators() const
+{
+    return m_settings->mapValue(Settings::EmulatorDefaultForSystem);
+}
+
 bool SettingsController::volumeSupported() const
 {
     return m_system && m_system->supports(system::Capability::Volume);

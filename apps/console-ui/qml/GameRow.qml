@@ -17,8 +17,8 @@ FocusScope {
     signal activated(real gameId)
 
     implicitHeight: heading.height + 10 + (hasGames ? tileHeight + 24 : emptyBox.height)
-    readonly property int tileWidth: 230
-    readonly property int tileHeight: 200
+    readonly property real tileWidth: Theme.cardWidth
+    readonly property real tileHeight: Theme.cardHeight
 
     function selectedGameId() {
         return list.currentIndex >= 0 && list.model ? list.model.gameIdAt(list.currentIndex) : -1
