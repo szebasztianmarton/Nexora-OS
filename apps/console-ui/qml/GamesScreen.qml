@@ -163,6 +163,13 @@ FocusScope {
                         border.width: activeFocus ? Theme.focusWidth : 1
                         border.color: activeFocus ? Theme.accent : (selected ? Theme.accent : Theme.border)
                         onActiveFocusChanged: if (activeFocus) chips.lastFocused = index
+
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: modelData.title
+                        Accessible.description: "Filter"
+                        Accessible.checkable: true
+                        Accessible.checked: selected
+                        Accessible.onPressAction: apply()
                         Text {
                             id: chipLabel
                             anchors.centerIn: parent
@@ -237,6 +244,11 @@ FocusScope {
             color: activeFocus ? Theme.surfaceHover : "transparent"
             border.width: activeFocus ? Theme.focusWidth : 1
             border.color: activeFocus ? Theme.accent : Theme.border
+
+            Accessible.role: Accessible.ComboBox
+            Accessible.name: "Sort by " + Theme.sortLabel(screen.library.sortOrder)
+            Accessible.description: "Change sort order"
+            Accessible.onPressAction: screen.cycleSort(1)
 
             Row {
                 id: sortRow
