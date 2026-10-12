@@ -29,6 +29,10 @@ public:
         AvailableRole, // executable passed validation at load time
         ProfilesRole, // [{id, name, enabled}]
         ExtensionsRole, // ".sfc, .smc"
+        HealthRole, // "available", "disabled", "executablemissing", "notexecutable", "invalidconfig"
+        HealthDetailRole,
+        VersionRole,
+        SystemsRole, // ids of the game systems this emulator can run
     };
     Q_ENUM(Role)
 
@@ -62,6 +66,8 @@ private:
         QString status;
         QString statusText;
         QString detail;
+        QString health;
+        QString healthDetail;
     };
     static void applyBaseStatus(Entry &entry);
 

@@ -5,6 +5,8 @@
 #include "input/InputBackend.h"
 #include "input/InputController.h"
 
+#include "nexora/shared/DataLayout.h"
+
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
@@ -48,14 +50,18 @@ private:
 
     QString configDir() const { return m_dir.filePath(QStringLiteral("emulators")); }
     QString gamesDir() const { return m_dir.filePath(QStringLiteral("games")); }
+    shared::DataLayout layout() const { return shared::DataLayout::underRoot(m_dir.filePath(QStringLiteral("state"))); }
+    // BackupService always restores to <layout.configDir>/settings.json, so the settings
+    // userFile has to be that exact path for backup/restore to round-trip anything real.
+    QString settingsFile() const { return layout().configDir + QStringLiteral("/settings.json"); }
 
     ui::UiContext::Options options() const
     {
         ui::UiContext::Options o;
         o.app = {configDir(), QStringLiteral("test"), {}, false};
-        o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))},
-                      m_dir.filePath(QStringLiteral("user/settings.json"))};
-        o.databasePath = m_dir.filePath(QStringLiteral("data/library.sqlite"));
+        o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))}, settingsFile()};
+        o.layout = layout();
+        o.databasePath = layout().dataDir + QStringLiteral("/library.sqlite");
         o.platformOverride = QStringLiteral("desktop");
         return o;
     }
@@ -121,9 +127,59 @@ private slots:
         QCOMPARE(again.library()->games()->rowCount(), 2);
     }
 
+    void removedGamePersistsAcrossRestart()
+    {
+        qint64 id = 0;
+        {
+            ui::UiContext ctx(options());
+            ctx.start();
+            QVERIFY(ctx.library()->addDirectory(gamesDir()));
+            waitForScan(ctx);
+            id = ctx.library()->games()->gameIdAt(0);
+            QVERIFY(ctx.library()->removeGame(id));
+            QCOMPARE(ctx.library()->games()->rowCount(), 1);
+        }
+        ui::UiContext again(options());
+        again.start();
+        waitForScan(again);
+        QCOMPARE(again.library()->games()->rowCount(), 1);
+        for (int i = 0; i < again.library()->games()->rowCount(); ++i)
+            QVERIFY(again.library()->games()->gameIdAt(i) != id);
+        // Restoring it brings it back.
+        QCOMPARE(again.library()->restoreRemovedGames(), 1);
+        QCOMPARE(again.library()->games()->rowCount(), 2);
+    }
+
+    void gameDetailsHasExpectedKeysAndRedactsThePath()
+    {
+        const QByteArray previousHome = qgetenv("HOME");
+        qputenv("HOME", m_dir.path().toUtf8()); // so defaultRedactionRules() matches gamesDir()
+
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+
+        const QVariantMap details = ctx.library()->gameDetails(id);
+        for (const char *key : {"id", "title", "originalTitle", "path", "systemId", "systemName", "systemCandidates",
+                                "emulatorId", "emulatorName", "emulatorCandidates", "favorite", "playCount",
+                                "lastPlayed", "addedAt", "present", "notes"}) {
+            QVERIFY2(details.contains(QLatin1String(key)), key);
+        }
+        QCOMPARE(details.value(QStringLiteral("id")).toLongLong(), id);
+        QVERIFY(details.value(QStringLiteral("present")).toBool());
+        QVERIFY2(details.value(QStringLiteral("path")).toString().startsWith(QLatin1Char('~')),
+                 qPrintable(details.value(QStringLiteral("path")).toString()));
+        QVERIFY(!details.value(QStringLiteral("path")).toString().contains(m_dir.path()));
+        QCOMPARE(ctx.library()->gameDetails(-1), QVariantMap());
+
+        qputenv("HOME", previousHome);
+    }
+
     void corruptedSettingsFallBackToDefaults()
     {
-        write(m_dir.filePath(QStringLiteral("user/settings.json")), "{ definitely not json");
+        write(settingsFile(), "{ definitely not json");
         write(m_dir.filePath(QStringLiteral("system-defaults.json")),
               "{\"version\":1,\"settings\":{\"audio.volume\":55,\"library.directories\":[\"" + gamesDir().toUtf8()
                   + "\"]}}");
@@ -137,7 +193,7 @@ private slots:
 
     void invalidMappingIsReportedAndIgnored()
     {
-        write(m_dir.filePath(QStringLiteral("user/settings.json")),
+        write(settingsFile(),
               "{\"version\":1,\"settings\":{\"input.mapping\":{\"accept\":\"south\",\"back\":\"south\"}}}");
         input::InputController input;
         ui::UiContext ctx(options(), &input);
@@ -229,6 +285,7 @@ private slots:
                  qPrintable(ctx.app()->lastOutput()));
         QCOMPARE(ctx.library()->recentGames()->rowCount(), 1);
         QCOMPARE(ctx.library()->recentGames()->gameIdAt(0), id);
+        QCOMPARE(ctx.app()->launchHistory().size(), 1);
 
         // Search and filters drive the visible list.
         ctx.library()->setSearchText(QStringLiteral("space"));
@@ -327,6 +384,29 @@ private slots:
         QVERIFY(!ctx.system()->lastError().isEmpty());
         QVERIFY(!ctx.system()->statusLines().isEmpty());
         QVERIFY(!ctx.settings()->volumeSupported());
+    }
+
+    void restoreBackupRoundTripsThroughTheController()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        ctx.settings()->setVolume(42);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
+
+        const QString backupPath = ctx.system()->createBackup(false);
+        QVERIFY2(!backupPath.isEmpty(), qPrintable(ctx.system()->lastError()));
+
+        // Change things, then restore: settings and the library content come back.
+        ctx.settings()->setVolume(7);
+        const qint64 removedId = ctx.library()->games()->gameIdAt(0);
+        QVERIFY(ctx.library()->removeGame(removedId));
+        QCOMPARE(ctx.library()->games()->rowCount(), 1);
+
+        QVERIFY2(ctx.system()->restoreBackup(backupPath), qPrintable(ctx.system()->lastError()));
+        QCOMPARE(ctx.settings()->volume(), 42);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
     }
 };
 

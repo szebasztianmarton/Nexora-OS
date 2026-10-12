@@ -594,4 +594,25 @@ bool GameDatabase::setMeta(const QString &key, const QString &value)
     return q.exec();
 }
 
+bool GameDatabase::backupTo(const QString &destFile, QString *error) const
+{
+    if (!isOpen()) {
+        if (error)
+            *error = QStringLiteral("database is not open");
+        return false;
+    }
+    QFile::remove(destFile); // VACUUM INTO refuses to overwrite an existing file
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    // VACUUM INTO takes a string literal, not a bind parameter; the destination is a path
+    // this process computed itself (never user/metadata-controlled), escaped defensively.
+    QString escaped = destFile;
+    escaped.replace(QLatin1Char('\''), QStringLiteral("''"));
+    if (!q.exec(QStringLiteral("VACUUM INTO '%1'").arg(escaped))) {
+        if (error)
+            *error = q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
 } // namespace nexora::library

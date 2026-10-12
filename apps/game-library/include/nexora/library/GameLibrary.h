@@ -28,8 +28,13 @@ public:
     static QString defaultDatabasePath();
 
     bool open(const QString &databasePath);
+    // Closes the database connection (settings/library restore only: the caller must not be
+    // mid-scan). entries() returns the last cached content until open() is called again.
+    void close();
     bool isOpen() const { return m_db.isOpen(); }
     QString lastError() const { return m_db.lastError(); }
+    // Consistent snapshot of the open database (see GameDatabase::backupTo()).
+    bool backupTo(const QString &destFile, QString *error) const { return m_db.backupTo(destFile, error); }
 
     // The systems used to identify games by extension (default: none, so no game gets a
     // system). Takes effect with the next scan.
@@ -47,6 +52,9 @@ public:
     bool isScanning() const { return m_thread != nullptr; }
 
     QList<GameEntry> entries() const { return m_entries; }
+    // Entries whose file is missing (present == false); not part of the normal cache (see
+    // GameLibrary.h's class comment) because rescans must not resurrect a hidden entry.
+    QList<GameEntry> missingEntries() const;
     std::optional<GameEntry> entry(qint64 id) const;
     bool setFavorite(qint64 id, bool favorite);
     bool recordLaunch(qint64 id);

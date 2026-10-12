@@ -14,6 +14,7 @@ ApplicationWindow {
     required property LibraryController library
     required property SettingsController settings
     required property SystemController system
+    required property UpdateController updates
 
     width: 1280
     height: 720

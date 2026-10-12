@@ -40,6 +40,11 @@ bool GameLibrary::open(const QString &databasePath)
     return true;
 }
 
+void GameLibrary::close()
+{
+    m_db.close();
+}
+
 void GameLibrary::setCatalog(const shared::SystemCatalog &catalog)
 {
     m_catalog = catalog;
@@ -165,6 +170,16 @@ void GameLibrary::reloadEntries()
 std::optional<GameEntry> GameLibrary::entry(qint64 id) const
 {
     return m_db.entry(id);
+}
+
+QList<GameEntry> GameLibrary::missingEntries() const
+{
+    QList<GameEntry> missing;
+    for (const GameEntry &e : m_db.entries(true, false)) {
+        if (!e.present)
+            missing.append(e);
+    }
+    return missing;
 }
 
 template<typename F> void GameLibrary::updateCached(qint64 id, F update)

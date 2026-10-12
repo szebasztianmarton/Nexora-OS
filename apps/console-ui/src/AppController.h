@@ -9,10 +9,14 @@
 #include <QPointer>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
 namespace nexora::input {
 class InputController;
+}
+namespace nexora::emulator {
+class LaunchHistory;
 }
 
 namespace nexora::ui {
@@ -43,6 +47,9 @@ class AppController : public QObject
     Q_PROPERTY(QStringList inputDevices READ inputDevices NOTIFY inputChanged)
     Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT)
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(bool paused READ paused NOTIFY pausedChanged)
+    Q_PROPERTY(bool canPause READ canPause NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList launchHistory READ launchHistory NOTIFY launchHistoryChanged)
 
 public:
     struct Options
@@ -57,6 +64,8 @@ public:
 
     // Optional; the controller works without input devices (keyboard only).
     void setInputController(input::InputController *input);
+    // Optional; when set, every finished launch is recorded (see onProcessFinished()).
+    void setLaunchHistory(emulator::LaunchHistory *history) { m_history = history; }
 
     emulator::EmulatorManager *manager() { return &m_manager; }
     EmulatorListModel *emulators() { return &m_model; }
@@ -78,6 +87,12 @@ public:
     QStringList inputDevices() const;
     QString logFilePath() const { return m_options.logFilePath; }
     QString version() const;
+    bool paused() const { return m_manager.isPaused(); }
+    // The active process may be suspended (its config has pausable=true) and is Running or
+    // already paused. Does not depend on the paused state itself: it stays true throughout
+    // a pause so the UI can offer "Resume" instead of hiding the control.
+    bool canPause() const;
+    QVariantList launchHistory() const;
 
     // Starts an emulator with its default profile (see setDefaultProfiles()).
     Q_INVOKABLE bool launch(const QString &emulatorId);
@@ -93,6 +108,9 @@ public:
     // Empty when |emulatorId| is configured and its executable passed validation.
     QString unavailableReason(const QString &emulatorId) const;
     Q_INVOKABLE bool stop();
+    // Suspends / resumes the active process (SIGSTOP / SIGCONT); see canPause().
+    Q_INVOKABLE bool pause();
+    Q_INVOKABLE bool resume();
     // Controller "return to launcher" chord: stops the running emulator, if any.
     Q_INVOKABLE bool returnToLauncher();
     Q_INVOKABLE bool reloadConfig();
@@ -104,6 +122,8 @@ signals:
     void lastOutputChanged();
     void configChanged();
     void inputChanged();
+    void pausedChanged();
+    void launchHistoryChanged();
     // A launch request was accepted (process is starting).
     void launchStarted(const QString &emulatorId, const QString &gamePath);
 
@@ -117,8 +137,10 @@ private:
     emulator::EmulatorManager m_manager;
     EmulatorListModel m_model;
     QPointer<input::InputController> m_input;
+    emulator::LaunchHistory *m_history = nullptr;
     QTimer m_outputNotifyTimer;
     QString m_activeName;
+    QString m_activeProfileId;
     QString m_statusMessage;
     bool m_statusIsError = false;
     bool m_configDirectoryFound = false;
@@ -127,6 +149,7 @@ private:
     QList<shared::EmulatorConfig> m_enabled;
     QHash<QString, QString> m_unavailable;
     QVariantMap m_defaultProfiles;
+    bool m_activePausable = false;
     bool startLaunch(const emulator::LaunchRequest &request);
 };
 

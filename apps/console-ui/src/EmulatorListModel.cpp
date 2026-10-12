@@ -1,5 +1,7 @@
 #include "EmulatorListModel.h"
 
+#include "nexora/emulator/EmulatorHealth.h"
+
 namespace nexora::ui {
 
 EmulatorListModel::EmulatorListModel(QObject *parent)
@@ -34,6 +36,10 @@ QVariant EmulatorListModel::data(const QModelIndex &index, int role) const
         return profiles;
     }
     case ExtensionsRole: return entry.config.extensions.join(QStringLiteral(", "));
+    case HealthRole: return entry.health;
+    case HealthDetailRole: return entry.healthDetail;
+    case VersionRole: return entry.config.version;
+    case SystemsRole: return entry.config.systems;
     default: return {};
     }
 }
@@ -41,11 +47,13 @@ QVariant EmulatorListModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> EmulatorListModel::roleNames() const
 {
     return {
-        {EmulatorIdRole, "emulatorId"}, {NameRole, "name"},
-        {ExecutableRole, "executable"}, {StatusRole, "status"},
-        {StatusTextRole, "statusText"}, {DetailRole, "detail"},
-        {AvailableRole, "available"},   {ProfilesRole, "profiles"},
-        {ExtensionsRole, "extensions"},
+        {EmulatorIdRole, "emulatorId"},     {NameRole, "name"},
+        {ExecutableRole, "executable"},     {StatusRole, "status"},
+        {StatusTextRole, "statusText"},     {DetailRole, "detail"},
+        {AvailableRole, "available"},       {ProfilesRole, "profiles"},
+        {ExtensionsRole, "extensions"},     {HealthRole, "health"},
+        {HealthDetailRole, "healthDetail"}, {VersionRole, "version"},
+        {SystemsRole, "systems"},
     };
 }
 
@@ -75,6 +83,9 @@ void EmulatorListModel::setEmulators(const QList<shared::EmulatorConfig> &emulat
         entry.unavailableReason = unavailableReasons.value(config.id);
         entry.available = !unavailableReasons.contains(config.id);
         applyBaseStatus(entry);
+        const emulator::HealthReport health = emulator::checkHealth(config);
+        entry.health = emulator::nameOf(health.health).toLower();
+        entry.healthDetail = health.detail;
         m_entries.append(entry);
     }
     endResetModel();

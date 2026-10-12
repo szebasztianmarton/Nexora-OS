@@ -19,6 +19,7 @@ QQuickWindow *loadMainWindow(QQmlApplicationEngine &engine, UiContext *context)
         {QStringLiteral("library"), QVariant::fromValue(context->library())},
         {QStringLiteral("settings"), QVariant::fromValue(context->settings())},
         {QStringLiteral("system"), QVariant::fromValue(context->system())},
+        {QStringLiteral("updates"), QVariant::fromValue(context->updates())},
     });
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Nexora/Console/Main.qml")));
 

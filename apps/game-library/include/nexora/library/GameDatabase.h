@@ -73,6 +73,11 @@ public:
     QString meta(const QString &key) const;
     bool setMeta(const QString &key, const QString &value);
 
+    // Writes a consistent snapshot of the open database to |destFile| via SQLite's
+    // "VACUUM INTO" (safe to run while other connections are reading/writing). |destFile|'s
+    // parent directory must already exist. Returns false with lastError() on failure.
+    bool backupTo(const QString &destFile, QString *error) const;
+
 private:
     bool exec(const QString &sql);
     bool migrate();

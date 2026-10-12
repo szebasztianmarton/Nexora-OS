@@ -38,6 +38,9 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     case UnavailableReasonRole:
         return e.emulatorId().isEmpty() ? QStringLiteral("No emulator handles %1 files").arg(e.extension)
                                         : info().second;
+    case SystemIdRole: return e.systemId;
+    case SystemShortNameRole: return m_systemInfo ? m_systemInfo(e.systemId) : QString();
+    case DisplayTitleRole: return e.displayTitle();
     default: return {};
     }
 }
@@ -53,7 +56,10 @@ QHash<int, QByteArray> GameListModel::roleNames() const
             {PlayCountRole, "playCount"},
             {LastPlayedRole, "lastPlayed"},
             {AvailableRole, "available"},
-            {UnavailableReasonRole, "unavailableReason"}};
+            {UnavailableReasonRole, "unavailableReason"},
+            {SystemIdRole, "systemId"},
+            {SystemShortNameRole, "systemShortName"},
+            {DisplayTitleRole, "displayTitle"}};
 }
 
 void GameListModel::setEntries(const QList<library::GameEntry> &entries)

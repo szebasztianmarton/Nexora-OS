@@ -5,6 +5,7 @@ nexora_add_test(tst_processstate SOURCES tst_processstate.cpp LIBS nexora_emulat
 nexora_add_test(tst_launchprofiles SOURCES tst_launchprofiles.cpp LIBS nexora_emulator_manager LABELS unit)
 nexora_add_test(tst_launchvalidation SOURCES tst_launchvalidation.cpp LIBS nexora_emulator_manager LABELS unit)
 nexora_add_test(tst_emulatorlistmodel SOURCES tst_emulatorlistmodel.cpp LIBS nexora_ui LABELS unit)
+nexora_add_test(tst_systemlistmodel SOURCES tst_systemlistmodel.cpp LIBS nexora_ui LABELS unit)
 nexora_add_test(tst_gamepadnavigator SOURCES tst_gamepadnavigator.cpp LIBS nexora_input LABELS unit)
 nexora_add_test(tst_inputcontroller SOURCES tst_inputcontroller.cpp LIBS nexora_input LABELS unit GUI)
 nexora_add_test(tst_libraryquery SOURCES tst_libraryquery.cpp LIBS nexora_library LABELS unit)

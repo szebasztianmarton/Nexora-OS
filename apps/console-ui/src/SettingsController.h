@@ -43,6 +43,12 @@ class SettingsController : public QObject
     Q_PROPERTY(QStringList issues READ issues NOTIFY changed)
     Q_PROPERTY(QString userFile READ userFile CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY changed)
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY changed)
+    Q_PROPERTY(int uiScale READ uiScale WRITE setUiScale NOTIFY changed)
+    Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY changed)
+    Q_PROPERTY(QString startScreen READ startScreen WRITE setStartScreen NOTIFY changed)
+    Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY changed)
+    Q_PROPERTY(QString logLevel READ logLevel WRITE setLogLevel NOTIFY changed)
 
 public:
     SettingsController(shared::Settings *settings, input::InputController *input, system::SystemIntegration *system,
@@ -75,6 +81,22 @@ public:
     QStringList issues() const;
     QString userFile() const;
     QString lastError() const { return m_lastError; }
+    QString theme() const;
+    void setTheme(const QString &value) { set(QStringLiteral("ui.theme"), value); }
+    int uiScale() const;
+    void setUiScale(int percent) { set(QStringLiteral("ui.scale"), qBound(75, percent, 150)); }
+    bool reducedMotion() const;
+    void setReducedMotion(bool value) { set(QStringLiteral("ui.reducedMotion"), value); }
+    QString startScreen() const;
+    void setStartScreen(const QString &value) { set(QStringLiteral("ui.startScreen"), value); }
+    bool muted() const;
+    void setMuted(bool value) { set(QStringLiteral("audio.muted"), value); }
+    QString logLevel() const;
+    void setLogLevel(const QString &value) { set(QStringLiteral("log.level"), value); }
+
+    // Default emulator id for a game system id; "" clears the default / means none set.
+    Q_INVOKABLE bool setDefaultEmulatorForSystem(const QString &systemId, const QString &emulatorId);
+    Q_INVOKABLE QString defaultEmulatorForSystem(const QString &systemId) const;
 
     // Cycles a list-valued option (display mode, resolution, sort, backend) by |step|.
     Q_INVOKABLE void cycle(const QString &key, int step);
@@ -97,6 +119,8 @@ private:
     bool set(const QString &key, const QVariant &value);
     void applyMapping();
     void applyDeadzone();
+    void applyVolume();
+    void applyLogLevel();
     void onCaptured(const QString &button);
 
     shared::Settings *m_settings;
