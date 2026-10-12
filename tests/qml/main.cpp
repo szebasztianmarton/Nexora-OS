@@ -24,7 +24,7 @@ public slots:
     {
         QQuickStyle::setStyle(QStringLiteral("Basic"));
         nexora::ui::UiContext::Options options;
-        options.app = {m_dir.path(), QStringLiteral("test"), {}, false};
+        options.app = {m_dir.path(), QStringLiteral("test"), {}, false, {}};
         options.settings = {{}, m_dir.filePath(QStringLiteral("settings.json"))};
         options.databasePath = m_dir.filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");

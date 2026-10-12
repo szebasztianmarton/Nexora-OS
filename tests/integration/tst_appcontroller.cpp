@@ -160,7 +160,7 @@ private slots:
         QTemporaryDir dir, stateDir;
         writeConfig(dir, QStringLiteral("ok"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--exit-code\",\"3\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         nexora::emulator::LaunchHistory history(stateDir.filePath(QStringLiteral("launch-history.json")));
         app.setLaunchHistory(&history);
         QSignalSpy historyChanged(&app, &AppController::launchHistoryChanged);
@@ -185,7 +185,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("pausable"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--sleep-ms\",\"30000\""), true, QStringLiteral("\"pausable\":true"));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         QSignalSpy pausedSpy(&app, &AppController::pausedChanged);
 
         QVERIFY(!app.canPause()); // nothing running yet
@@ -214,7 +214,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("plain"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--sleep-ms\",\"30000\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         QVERIFY(app.launch(QStringLiteral("plain")));
         QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("running"), Timeout);
         QVERIFY(!app.canPause());
@@ -249,7 +249,7 @@ private slots:
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
                     QStringLiteral("\"--sleep-ms\",\"30000\""));
-        AppController app({dir.path(), QStringLiteral("test"), {}, false});
+        AppController app({dir.path(), QStringLiteral("test"), {}, false, {}});
         nexora::input::InputController input;
         auto backend = std::make_unique<ControllableBackend>(input.navigator());
         ControllableBackend *rawBackend = backend.get();
