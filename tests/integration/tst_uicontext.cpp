@@ -1,5 +1,6 @@
 // The full backend object graph used by the UI (UiContext), with the fake emulator,
 // temporary settings/database files and a temporary game directory.
+#include "SystemListModel.h"
 #include "UiContext.h"
 #include "input/GamepadNavigator.h"
 #include "input/InputBackend.h"
@@ -407,6 +408,81 @@ private slots:
         QVERIFY2(ctx.system()->restoreBackup(backupPath), qPrintable(ctx.system()->lastError()));
         QCOMPARE(ctx.settings()->volume(), 42);
         QCOMPARE(ctx.library()->games()->rowCount(), 2);
+    }
+
+    // Reloading the Settings store is not enough: a restore must also push the restored
+    // values back out to the live subsystems (volume/mute, controller mapping, deadzone,
+    // log level), or the UI keeps running on stale state until something else re-triggers
+    // it. Deadzone is a good probe: unlike volume it applies unconditionally (no platform
+    // capability check), straight onto the live GamepadNavigator.
+    void restoreBackupReappliesLiveSettingsNotJustTheStore()
+    {
+        input::InputController input;
+        ui::UiContext ctx(options(), &input);
+        ctx.start();
+        ctx.settings()->setDeadzone(40);
+        QCOMPARE(input.navigator()->deadzone(), 0.4);
+
+        const QString backupPath = ctx.system()->createBackup(false);
+        QVERIFY2(!backupPath.isEmpty(), qPrintable(ctx.system()->lastError()));
+
+        // Diverge the live state from the backup without going through another backup.
+        ctx.settings()->setDeadzone(10);
+        QCOMPARE(input.navigator()->deadzone(), 0.1);
+
+        QVERIFY2(ctx.system()->restoreBackup(backupPath), qPrintable(ctx.system()->lastError()));
+        QCOMPARE(ctx.settings()->deadzone(), 40); // the store came back...
+        QCOMPARE(input.navigator()->deadzone(), 0.4); // ...and so did the live navigator state
+    }
+
+    // Exercises LibraryController::rebuildSystems() (the real production path, with a real
+    // GameLibrary, system catalog and emulator set) rather than SystemListModel in
+    // isolation: the "Other" row (unrecognised systemId) must appear exactly when there is
+    // at least one such game, and disappear again once there is none.
+    void systemsModelShowsOtherBucketOnlyWhenUnrecognizedGamesExist()
+    {
+        // .sfc is uniquely "snes" in the built-in catalog; .rom is not in the catalog at
+        // all, so a .rom game ends up with no recognised system ("Other").
+        write(configDir() + QStringLiteral("/fake2.json"),
+              "{\"id\":\"fake2\",\"name\":\"Fake2\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".sfc\"]}");
+        QTemporaryDir mixedGames;
+        write(mixedGames.filePath(QStringLiteral("Mario.sfc")), "rom");
+        write(mixedGames.filePath(QStringLiteral("Alpha.rom")), "rom");
+
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(mixedGames.path()));
+        waitForScan(ctx);
+
+        auto rowOf = [&](const QString &systemId) -> int {
+            auto *model = ctx.library()->systems();
+            for (int i = 0; i < model->rowCount(); ++i) {
+                if (model->index(i).data(ui::SystemListModel::SystemIdRole).toString() == systemId)
+                    return i;
+            }
+            return -1;
+        };
+
+        const int snesRow = rowOf(QStringLiteral("snes"));
+        QVERIFY(snesRow >= 0);
+        QCOMPARE(ctx.library()->systems()->index(snesRow).data(ui::SystemListModel::GameCountRole).toInt(), 1);
+        const int otherRow = rowOf(QString());
+        QVERIFY2(otherRow >= 0, "Other should be present: Alpha.rom has no recognised system");
+        QCOMPARE(ctx.library()->systems()->index(otherRow).data(ui::SystemListModel::GameCountRole).toInt(), 1);
+
+        // Hide the one unrecognised-system game: Other must disappear entirely, not shrink
+        // to a zero-count row.
+        qint64 romId = 0;
+        for (int i = 0; i < ctx.library()->games()->rowCount() && romId == 0; ++i) {
+            const qint64 id = ctx.library()->games()->gameIdAt(i);
+            if (ctx.library()->gameDetails(id).value(QStringLiteral("systemId")).toString().isEmpty())
+                romId = id;
+        }
+        QVERIFY(romId != 0);
+        QVERIFY(ctx.library()->removeGame(romId));
+        QCOMPARE(rowOf(QString()), -1);
+        QVERIFY(rowOf(QStringLiteral("snes")) >= 0); // the recognised bucket is unaffected
     }
 };
 

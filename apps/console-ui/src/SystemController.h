@@ -25,6 +25,7 @@ namespace nexora::ui {
 
 class AppController;
 class LibraryController;
+class SettingsController;
 
 // QML-facing system status, hardware snapshot, power actions, backups and diagnostics.
 class SystemController : public QObject
@@ -52,6 +53,7 @@ public:
         system::BackupService *backup = nullptr;
         library::GameLibrary *library = nullptr;
         shared::Settings *settings = nullptr;
+        SettingsController *settingsController = nullptr; // re-applied to live subsystems after restoreBackup()
         emulator::LaunchHistory *history = nullptr;
         AppController *app = nullptr;
         LibraryController *libraryController = nullptr;
@@ -83,8 +85,10 @@ public:
     // Returns the new backup's directory, or "" on failure (lastError()).
     Q_INVOKABLE QString createBackup(bool includeSaves);
     Q_INVOKABLE QStringList backups() const;
-    // Closes the library database, restores the backup, reopens the database and reloads
-    // settings. Returns false on failure (lastError()); the library is reopened either way.
+    // Closes the library database, restores the backup, reopens the database, reloads
+    // settings and re-applies them to the live subsystems (volume/mute, controller mapping,
+    // deadzone, log level) so a restore takes effect immediately, not just in the Settings
+    // store. Returns false on failure (lastError()); the library is reopened either way.
     Q_INVOKABLE bool restoreBackup(const QString &dir);
     // Deletes only the contents of layout.cacheDir (artwork cache); never touches saves,
     // settings or the library database.

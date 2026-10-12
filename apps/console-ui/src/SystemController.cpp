@@ -2,6 +2,7 @@
 
 #include "AppController.h"
 #include "LibraryController.h"
+#include "SettingsController.h"
 
 #include "nexora/emulator/LaunchHistory.h"
 #include "nexora/library/GameLibrary.h"
@@ -206,6 +207,10 @@ bool SystemController::restoreBackup(const QString &dir)
         m_deps.library->open(m_deps.databasePath);
     if (m_deps.settings)
         m_deps.settings->load();
+    // Reloading the store alone leaves live subsystems (volume/mute, controller mapping,
+    // deadzone, log level) on their pre-restore values; push the restored settings out too.
+    if (m_deps.settingsController)
+        m_deps.settingsController->applyAll();
     m_lastError = ok ? QString() : error;
     emit statusChanged();
     return ok;

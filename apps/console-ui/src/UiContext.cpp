@@ -53,6 +53,7 @@ UiContext::UiContext(const Options &options, input::InputController *input, QObj
     systemDeps.backup = m_backupService.get();
     systemDeps.library = &m_library;
     systemDeps.settings = &m_settings;
+    systemDeps.settingsController = m_settingsController.get();
     systemDeps.history = &m_launchHistory;
     systemDeps.app = m_app.get();
     systemDeps.libraryController = m_libraryController.get();
