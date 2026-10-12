@@ -82,6 +82,38 @@ QString nameOf(UpdateError error);
 // appended when relevant.
 QString describe(UpdateError error, const QString &detail = {});
 
+// Result of verifyBundle(): a parsed and signature-verified manifest, the absolute bundle
+// directory it came from, and the image file's absolute path.
+struct VerifiedBundle
+{
+    UpdateManifest manifest;
+    QString bundleDir;
+    QString imagePath;
+};
+
+// The one place that reads a bundle's manifest, verifies its signature, and checks
+// product/board/version compatibility and image presence/size. Shared by
+// UpdateService::checkBundle() and nexora-update-tool's "verify" command, so a future
+// change to this sequence cannot drift between the two.
+//
+// Reads manifest.json and manifest.json.sig from |bundleDir|, verifies the signature using
+// *.pem keys loaded from |keyDir| (fails closed with zero keys), and checks the manifest's
+// product against the fixed "nexora-os" product id. |board| and |currentVersion|, when
+// given, additionally check board compatibility and that the manifest's version is newer
+// than |currentVersion| and not older than its minimumVersion; when either is unset, that
+// specific check is skipped (used by the CLI tool, where both flags are optional). Finally
+// checks that the image file named in the manifest exists and is the expected size. Does
+// NOT hash the image's contents — callers that need the full hash (UpdateService::verify(),
+// nexora-update-tool) do that separately via sha256File().
+//
+// On success returns the parsed manifest, the absolute bundle directory, and the image's
+// absolute path. On failure returns std::nullopt and sets *error and *detail (suitable for
+// describe()).
+std::optional<VerifiedBundle> verifyBundle(const QString &bundleDir, const QString &keyDir,
+                                           const std::optional<QString> &board,
+                                           const std::optional<Version> &currentVersion, UpdateError *error,
+                                           QString *detail);
+
 // Everything UpdateService needs that is not part of the bundle itself.
 struct UpdateEnvironment
 {

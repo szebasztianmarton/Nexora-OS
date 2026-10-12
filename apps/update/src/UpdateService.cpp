@@ -117,6 +117,72 @@ QString describe(UpdateError error, const QString &detail)
     return withDetail(QStringLiteral("Unknown error"));
 }
 
+std::optional<VerifiedBundle> verifyBundle(const QString &bundleDir, const QString &keyDir,
+                                           const std::optional<QString> &board,
+                                           const std::optional<Version> &currentVersion, UpdateError *error,
+                                           QString *detail)
+{
+    auto fail = [&](UpdateError e, const QString &d) {
+        if (error)
+            *error = e;
+        if (detail)
+            *detail = d;
+        return std::optional<VerifiedBundle>();
+    };
+
+    const QString dir = QFileInfo(bundleDir).absoluteFilePath();
+
+    QString readError;
+    const auto manifestBytes
+        = shared::readFileLimited(dir + QStringLiteral("/manifest.json"), MaxManifestFileBytes, &readError);
+    if (!manifestBytes)
+        return fail(UpdateError::BadManifest, readError);
+
+    QString parseError;
+    const auto manifest = UpdateManifest::parse(*manifestBytes, &parseError);
+    if (!manifest)
+        return fail(UpdateError::BadManifest, parseError);
+
+    QString sigError;
+    const auto signature
+        = shared::readFileLimited(dir + QStringLiteral("/manifest.json.sig"), SignatureBytes, &sigError);
+    if (!signature || signature->size() != SignatureBytes)
+        return fail(UpdateError::BadSignature,
+                    sigError.isEmpty() ? QStringLiteral("signature must be 64 bytes") : sigError);
+
+    QStringList issues;
+    const SignatureVerifier verifier = SignatureVerifier::fromDirectory(keyDir, &issues);
+    if (verifier.keyCount() == 0)
+        return fail(UpdateError::NoKeys, issues.join(QStringLiteral("; ")));
+    if (!verifier.verify(*manifestBytes, *signature))
+        return fail(UpdateError::BadSignature, {});
+
+    if (manifest->product != QLatin1String(ExpectedProduct))
+        return fail(UpdateError::WrongProduct, manifest->product);
+    if (board && manifest->board != *board)
+        return fail(UpdateError::WrongBoard, manifest->board);
+    if (currentVersion) {
+        if (!(*currentVersion < manifest->version))
+            return fail(UpdateError::NotNewer, manifest->version.toString());
+        if (*currentVersion < manifest->minimumVersion)
+            return fail(UpdateError::TooOld, manifest->minimumVersion.toString());
+    }
+
+    const QString imagePath = dir + u'/' + manifest->image.file;
+    const QFileInfo imageInfo(imagePath);
+    if (!imageInfo.isFile())
+        return fail(UpdateError::ImageMissing, manifest->image.file);
+    if (imageInfo.size() != manifest->image.size)
+        return fail(UpdateError::SizeMismatch,
+                    QStringLiteral("expected %1 bytes, found %2").arg(manifest->image.size).arg(imageInfo.size()));
+
+    if (error)
+        *error = UpdateError::None;
+    if (detail)
+        detail->clear();
+    return VerifiedBundle{*manifest, dir, imagePath};
+}
+
 UpdateService::UpdateService(UpdateEnvironment env, QObject *parent)
     : QObject(parent)
     , m_env(std::move(env))
@@ -152,58 +218,18 @@ bool UpdateService::checkBundle(const QString &bundleDir)
     m_bundleDir.clear();
     setState(UpdateState::Checking);
 
-    const QString dir = QFileInfo(bundleDir).absoluteFilePath();
-    auto fail = [&](UpdateError error, const QString &detail) {
+    UpdateError error = UpdateError::None;
+    QString detail;
+    const auto verified = verifyBundle(bundleDir, m_env.keyDir, m_env.board, m_env.currentVersion, &error, &detail);
+    if (!verified) {
         setState(UpdateState::Failed, error, describe(error, detail));
         return true; // the check ran; see state()/error() for the outcome
-    };
+    }
 
-    QString readError;
-    const auto manifestBytes
-        = shared::readFileLimited(dir + QStringLiteral("/manifest.json"), MaxManifestFileBytes, &readError);
-    if (!manifestBytes)
-        return fail(UpdateError::BadManifest, readError);
-
-    QString parseError;
-    const auto manifest = UpdateManifest::parse(*manifestBytes, &parseError);
-    if (!manifest)
-        return fail(UpdateError::BadManifest, parseError);
-
-    QString sigError;
-    const auto signature
-        = shared::readFileLimited(dir + QStringLiteral("/manifest.json.sig"), SignatureBytes, &sigError);
-    if (!signature || signature->size() != SignatureBytes)
-        return fail(UpdateError::BadSignature,
-                    sigError.isEmpty() ? QStringLiteral("signature must be 64 bytes") : sigError);
-
-    QStringList issues;
-    const SignatureVerifier verifier = SignatureVerifier::fromDirectory(m_env.keyDir, &issues);
-    if (verifier.keyCount() == 0)
-        return fail(UpdateError::NoKeys, issues.join(QStringLiteral("; ")));
-    if (!verifier.verify(*manifestBytes, *signature))
-        return fail(UpdateError::BadSignature, {});
-
-    if (manifest->product != QLatin1String(ExpectedProduct))
-        return fail(UpdateError::WrongProduct, manifest->product);
-    if (manifest->board != m_env.board)
-        return fail(UpdateError::WrongBoard, manifest->board);
-    if (!(m_env.currentVersion < manifest->version))
-        return fail(UpdateError::NotNewer, manifest->version.toString());
-    if (m_env.currentVersion < manifest->minimumVersion)
-        return fail(UpdateError::TooOld, manifest->minimumVersion.toString());
-
-    const QString imagePath = dir + u'/' + manifest->image.file;
-    const QFileInfo imageInfo(imagePath);
-    if (!imageInfo.isFile())
-        return fail(UpdateError::ImageMissing, manifest->image.file);
-    if (imageInfo.size() != manifest->image.size)
-        return fail(UpdateError::SizeMismatch,
-                    QStringLiteral("expected %1 bytes, found %2").arg(manifest->image.size).arg(imageInfo.size()));
-
-    m_bundleDir = dir;
-    m_pending = manifest;
+    m_bundleDir = verified->bundleDir;
+    m_pending = verified->manifest;
     setState(UpdateState::Available, UpdateError::None,
-             QStringLiteral("update %1 available").arg(manifest->version.toString()));
+             QStringLiteral("update %1 available").arg(verified->manifest.version.toString()));
     return true;
 }
 
