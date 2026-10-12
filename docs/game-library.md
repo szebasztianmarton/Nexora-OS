@@ -181,3 +181,7 @@ Starting an emulator **without** a game (from the emulator list) drops every arg
 - Per-game emulator override and purging missing entries have no UI yet.
 - Adding a folder requires typing its path; there is no on-screen keyboard or folder browser.
 - Not tested with real collections. A synthetic measurement (Release build, 4-core container, 10 000 files): scan ≈0.2 s on the worker thread, first database merge 138 ms, unchanged-rescan merge 77 ms, loading the entries 30 ms, search + sort 8 ms. The 100 000-file and depth limits are enforced.
+
+## Planned: RetroArch and PPSSPP
+
+A plan (in Hungarian, not yet implemented) for packaging RetroArch with libretro cores, including PPSSPP: [emulator-integracio.md](emulator-integracio.md).
