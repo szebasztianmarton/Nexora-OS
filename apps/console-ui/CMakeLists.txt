@@ -22,6 +22,8 @@ set(NEXORA_QML_FILES
     qml/SettingsScreen.qml
     qml/DiagnosticsScreen.qml
     qml/RunningOverlay.qml
+    qml/GameBar.qml
+    qml/BarIcon.qml
 )
 # Serve the files at qrc:/qt/qml/Nexora/Console/<Name>.qml (without the qml/ subdirectory).
 foreach(qml_file IN LISTS NEXORA_QML_FILES)
@@ -39,6 +41,7 @@ qt_add_qml_module(nexora_ui
     SOURCES
         src/AppController.h src/AppController.cpp
         src/EmulatorListModel.h src/EmulatorListModel.cpp
+        src/GameBarController.h src/GameBarController.cpp
         src/UiBootstrap.h src/UiBootstrap.cpp
         src/GameListModel.h src/GameListModel.cpp
         src/LibraryController.h src/LibraryController.cpp
@@ -55,7 +58,7 @@ target_link_libraries(nexora_ui
 target_compile_definitions(nexora_ui PRIVATE
     QT_NO_NARROWING_CONVERSIONS_IN_CONNECT QT_NO_URL_CAST_FROM_STRING)
 # Warnings only for hand-written sources; qmlcachegen output is not -Wshadow clean.
-nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/UiBootstrap.cpp
+nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/GameBarController.cpp src/UiBootstrap.cpp
     src/GameListModel.cpp src/LibraryController.cpp src/SettingsController.cpp src/SystemController.cpp
     src/UiContext.cpp)
 

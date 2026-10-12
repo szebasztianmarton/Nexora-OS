@@ -26,10 +26,29 @@ struct SystemStatus
     qint64 memoryAvailableKiB = -1;
 };
 
+// Aggregate CPU time counters from /proc/stat (in clock ticks). Usage over an interval is
+// 1 - (idle delta / total delta) between two samples.
+struct CpuTimes
+{
+    quint64 total = 0;
+    quint64 idle = 0; // idle + iowait
+    bool valid = false;
+};
+
+// Battery and network state from sysfs, for status icons. Absent hardware is reported as
+// such (batteryPercent -1, network "none"), never guessed.
+struct DeviceStatus
+{
+    int batteryPercent = -1; // first battery; -1 when there is none
+    bool batteryCharging = false;
+    QString network = QStringLiteral("none"); // "ethernet", "wifi" or "none" (no interface up)
+};
+
 // Filesystem locations the integration reads or writes (overridable for tests).
 struct SystemEnvironment
 {
     QString procRoot = QStringLiteral("/proc");
+    QString sysRoot = QStringLiteral("/sys");
     QString osReleaseFile = QStringLiteral("/etc/os-release");
     QString nexoraReleaseFile = QStringLiteral("/etc/nexora-release");
     QString powerRequestFifo = QStringLiteral("/run/nexora/power-request");
@@ -58,6 +77,10 @@ public:
     QString platformName() const;
     virtual bool supports(Capability capability) const = 0;
     virtual SystemStatus status() const;
+    // Cheap enough to sample about once per second (one small proc file).
+    virtual CpuTimes cpuTimes() const;
+    // A handful of small sysfs reads; fine to call about once per second.
+    virtual DeviceStatus deviceStatus() const;
 
     // Asks the system to power off / reboot. Never blocks.
     virtual bool requestPower(PowerAction action, QString *error) = 0;

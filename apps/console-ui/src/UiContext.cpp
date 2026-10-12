@@ -21,6 +21,7 @@ UiContext::UiContext(const Options &options, input::InputController *input, QObj
     m_libraryController = std::make_unique<LibraryController>(&m_library, &m_settings, m_app.get());
     m_settingsController = std::make_unique<SettingsController>(&m_settings, m_input, m_system.get());
     m_systemController = std::make_unique<SystemController>(m_system.get());
+    m_gameBarController = std::make_unique<GameBarController>(m_app.get(), m_system.get(), m_input);
 
     connect(&m_settings, &shared::Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == shared::Settings::EmulatorDefaultProfiles)

@@ -62,7 +62,8 @@ public:
     // Overrides where synthesized key events go (default: QGuiApplication::focusWindow()).
     void setTargetWindowProvider(std::function<QWindow *()> provider);
 
-    // Delivers |action| exactly as if it came from a gamepad (respects suspension).
+    // Delivers |action| exactly as if it came from a gamepad (respects suspension, except
+    // for GameBar, which is reported through gameBarRequested() and never becomes a key).
     Q_INVOKABLE void injectAction(nexora::input::NavAction action);
 
     GamepadNavigator *navigator() const { return m_navigator; }
@@ -79,6 +80,9 @@ signals:
     // suspended: this is how a controller-only user leaves a running emulator.
     void returnToLauncherRequested();
     void buttonCaptured(const QString &buttonName);
+    // The game bar button (Guide by default) was pressed. Emitted even while suspended, so
+    // the bar can be opened on top of a running emulator.
+    void gameBarRequested();
 
 private:
     bool startBackend(std::unique_ptr<InputBackend> backend);

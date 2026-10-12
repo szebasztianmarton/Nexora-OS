@@ -2,6 +2,7 @@
 
 #include "nexora/shared/Logging.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
@@ -92,8 +93,11 @@ SystemStatus SystemIntegration::status() const
 
     QFile mem(m_env.procRoot + QStringLiteral("/meminfo"));
     if (mem.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        while (!mem.atEnd()) {
-            const QString line = QString::fromLatin1(mem.readLine()).simplified();
+        // Read to the end instead of looping on atEnd(): proc files report a size of 0, so
+        // atEnd() is true before anything has been read.
+        const QStringList lines = QString::fromLatin1(mem.readAll()).split(u'\n');
+        for (const QString &raw : lines) {
+            const QString line = raw.simplified();
             const qint64 kib = line.section(u' ', 1, 1).toLongLong();
             if (line.startsWith(QLatin1String("MemTotal:")))
                 s.memoryTotalKiB = kib;
@@ -102,6 +106,65 @@ SystemStatus SystemIntegration::status() const
         }
     }
     return s;
+}
+
+CpuTimes SystemIntegration::cpuTimes() const
+{
+    // First line: "cpu  user nice system idle iowait irq softirq steal guest guest_nice".
+    // guest/guest_nice are already included in user/nice, so they are not added again.
+    CpuTimes t;
+    const QString line = readFirstLine(m_env.procRoot + QStringLiteral("/stat"));
+    const QStringList fields = line.simplified().split(u' ');
+    if (fields.size() < 5 || fields.first() != QLatin1String("cpu"))
+        return t;
+    for (qsizetype i = 1; i < fields.size() && i <= 8; ++i) {
+        bool ok = false;
+        const quint64 value = fields.at(i).toULongLong(&ok);
+        if (!ok)
+            return CpuTimes{};
+        t.total += value;
+        if (i == 4 || i == 5) // idle, iowait
+            t.idle += value;
+    }
+    t.valid = t.total > 0;
+    return t;
+}
+
+DeviceStatus SystemIntegration::deviceStatus() const
+{
+    DeviceStatus d;
+    const QDir supplies(m_env.sysRoot + QStringLiteral("/class/power_supply"));
+    for (const QString &name : supplies.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QString base = supplies.filePath(name) + u'/';
+        if (readFirstLine(base + QStringLiteral("type")) != QLatin1String("Battery"))
+            continue;
+        bool ok = false;
+        const int capacity = readFirstLine(base + QStringLiteral("capacity")).toInt(&ok);
+        if (!ok)
+            continue;
+        d.batteryPercent = qBound(0, capacity, 100);
+        d.batteryCharging = readFirstLine(base + QStringLiteral("status")) == QLatin1String("Charging");
+        break;
+    }
+
+    // A wired link wins over Wi-Fi, like the system's own default route usually does.
+    const QDir interfaces(m_env.sysRoot + QStringLiteral("/class/net"));
+    for (const QString &name : interfaces.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::System, QDir::Name)) {
+        const QString base = interfaces.filePath(name) + u'/';
+        // Only real hardware: loopback, bridges, veth and tunnels have no "device" link.
+        if (!QFileInfo::exists(base + QStringLiteral("device")))
+            continue;
+        if (readFirstLine(base + QStringLiteral("operstate")) != QLatin1String("up"))
+            continue;
+        const bool wireless = QFileInfo::exists(base + QStringLiteral("wireless"))
+            || QFileInfo::exists(base + QStringLiteral("phy80211"));
+        if (!wireless) {
+            d.network = QStringLiteral("ethernet");
+            break;
+        }
+        d.network = QStringLiteral("wifi");
+    }
+    return d;
 }
 
 DesktopSystemIntegration::DesktopSystemIntegration(Environment env, QObject *parent)

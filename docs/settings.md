@@ -77,7 +77,7 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | `display.resolution` | string | `"auto"` | `"auto"` or `WIDTHxHEIGHT` (each 3–5 digits, no leading zero), e.g. `"1920x1080"`. The settings UI cycles `auto`, `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`. | Initial **window size** only. It does **not** change the display mode/monitor resolution; in full-screen mode the window covers the screen regardless. | At start-up only, and only when neither `--fullscreen` nor `--windowed` is given. |
 | `audio.volume` | int | `80` | integer 0–100 (JSON `40.0` is accepted as 40) | Master volume. | **Embedded platform only**, and only if `/usr/bin/amixer` is executable: runs `amixer -q sset Master <n>%`, falling back to the `PCM` control if `Master` fails; asynchronous; applied at start-up and on every change. On the **desktop** platform the value is stored as a preference only and the desktop mixer is left alone. |
 | `input.backend` | string | `"auto"` | `"auto"`, `"evdev"`, `"sdl3"`, `"none"` | Controller backend ([controller-support.md](controller-support.md#backends)). | At the **next start**. `--input-backend` overrides it. |
-| `input.mapping` | object | see below | action → button; actions `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`; buttons `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1` | Controller button for each action. | Immediately. A second, stricter check happens when it is applied (see below). |
+| `input.mapping` | object | see below | action → button; actions `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`, `gameBar`; buttons `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1` | Controller button for each action. | Immediately. A second, stricter check happens when it is applied (see below). |
 | `library.directories` | string array | `[]` | absolute paths, max 64 entries; `"/"` refused; paths are cleaned (`/srv/games/` → `/srv/games`) and de-duplicated | Directories scanned for games. | Immediately; triggers a rescan. |
 | `library.extensions` | string array | `[]` | `".ext"` with 1–16 lower-case letters/digits, max 128 entries; normalised to lower case and a missing leading dot is added (`"ZIP"` → `".zip"`) | Extra extensions treated as games in addition to those declared by emulator definitions. Files found only through this list have no emulator. | Immediately; triggers a rescan. |
 | `library.followSymlinks` | bool | `false` | `true`, `false` | Follow symbolic links that stay inside the same library directory ([game-library.md](game-library.md#symbolic-links)). | Immediately; triggers a rescan. |
@@ -88,7 +88,7 @@ Default `input.mapping`:
 
 ```json
 {"accept": "south", "back": "east", "menu": "start", "favorite": "north",
- "search": "west", "prevTab": "l1", "nextTab": "r1"}
+ "search": "west", "prevTab": "l1", "nextTab": "r1", "gameBar": "guide"}
 ```
 
 The value is replaced as a whole, not merged with the defaults: actions left out are unbound. When the mapping is applied, `ButtonMapping::fromVariantMap()` additionally rejects a button bound to two actions and a mapping without `accept` or `back`. Such a mapping is accepted by the settings store (and reported by [`--check-config`](#checking-a-configuration---check-config)); the controller then uses the **default** mapping and the settings screen reports "Controller mapping ignored (...); using defaults". Remapping from the UI repairs it. Details: [controller-support.md](controller-support.md#configurable-mapping).

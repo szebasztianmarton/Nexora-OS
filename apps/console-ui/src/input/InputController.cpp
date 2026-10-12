@@ -172,6 +172,11 @@ void InputController::setTargetWindowProvider(std::function<QWindow *()> provide
 
 void InputController::injectAction(NavAction action)
 {
+    if (action == NavAction::GameBar) {
+        qCDebug(lcInput) << "Game bar requested";
+        emit gameBarRequested();
+        return;
+    }
     if (m_suspended) {
         qCDebug(lcInput) << "Dropping" << action << "(suspended)";
         return;
@@ -193,6 +198,7 @@ int InputController::keyForAction(NavAction action)
     case NavAction::Search: return Qt::Key_Search;
     case NavAction::PrevTab: return Qt::Key_PageUp;
     case NavAction::NextTab: return Qt::Key_PageDown;
+    case NavAction::GameBar: return Qt::Key_HomePage;
     }
     return Qt::Key_unknown;
 }

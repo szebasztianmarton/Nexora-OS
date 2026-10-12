@@ -36,6 +36,7 @@ Documentation:
 | [docs/settings.md](docs/settings.md) | Settings files, all keys, validation and recovery, backups |
 | [docs/game-library.md](docs/game-library.md) | Library folders, scanning, database, search, launching games |
 | [docs/controller-support.md](docs/controller-support.md) | Backends, button layouts, mapping, remapping, hardware test checklist |
+| [docs/game-bar.md](docs/game-bar.md) | The game bar overlay: widgets, controls, behaviour over a running emulator, limitations |
 | [docs/testing.md](docs/testing.md) | Test suite, fake emulator, CI, manual tests |
 | [docs/buildroot.md](docs/buildroot.md) | Buildroot external tree, image, start-up, power helper, QEMU |
 | [docs/testing-windows11.md](docs/testing-windows11.md) | Building and testing on Windows 11 (WSL 2, WSLg, usbipd, QEMU) — in Hungarian |
@@ -72,6 +73,7 @@ Implemented (runs as an ordinary Qt application on desktop Linux; the same binar
   - **Settings:** language, hints, default sort, display mode, window size, volume, controller backend, button remapping, library folders, rescan, reset, restart/power off (image only, with confirmation).
   - **Diagnostics:** version, configuration and its issues, emulator state and last output, input backend and devices, system status, library and settings issues, recent log.
   - A running-emulator overlay, a context-sensitive hint bar and transient notices.
+  - **Game bar** (laid out like the Xbox Game Bar): the Guide button (keyboard: Ctrl+G) opens an overlay on top of the dashboard or a running emulator, with widget buttons for Home (the running game with play time, back to game, stop, recently played games), quick settings (restart, power off), audio and performance (CPU usage with a 30-second graph, memory, load), plus controller, network and battery status and a large clock. → [docs/game-bar.md](docs/game-bar.md)
 - **Game library:** scans configured folders on a worker thread for the file extensions your emulators declare, stores games, favorites and play history in SQLite, keeps them across rescans and temporarily missing drives. Never executes or opens game files. → [docs/game-library.md](docs/game-library.md)
 - **Emulator manager:** one supervised process at a time via `QProcess` (never a shell), launch profiles, game path substitution with `{file}`, per-emulator working directory and stop timeout, crash/exit/failure handling, SIGTERM then SIGKILL on stop.
 - **Settings:** layered (built-in ← system defaults ← user file), validated, saved atomically on every change, corrupted files moved aside. → [docs/settings.md](docs/settings.md)
@@ -96,6 +98,7 @@ Implemented (runs as an ordinary Qt application on desktop Linux; the same binar
 - Library database merges run on the UI thread (≈0.1 s for 10 000 files in a synthetic test).
 - Licensing is undecided (see [Licensing](#licensing)).
 - `Ctrl+Q` quits the prototype (development convenience).
+- The game bar cannot pause the game or keep the pad away from it: devices are not grabbed, so the emulator also sees the buttons pressed while the bar is open. It has no capture (screenshot/recording) widget and no GPU or FPS figures.
 
 ## Tech stack
 
@@ -202,7 +205,8 @@ The dashboard works entirely with a controller; a keyboard works too.
 | Previous / next tab | L1 / R1 (LB / RB) | Page Up / Page Down, Ctrl+Shift+Tab / Ctrl+Tab |
 | Toggle favorite | North (Y) | F |
 | Search | West (X) | `/`, Ctrl+F |
-| Diagnostics | Start (Guide/Select if unbound) | Menu key, F1 |
+| Diagnostics | Start (Select if unbound) | Menu key, F1 |
+| Game bar (open / close) | Guide (Xbox button) | Ctrl+G (Esc closes) |
 | Return to Nexora from a running emulator | Hold Select + Start for 1 s | Enter on the overlay's Stop button |
 
 Buttons are named by position, so the "A" role is Cross on PlayStation and B on Nintendo-layout pads. All non-directional actions can be remapped on the Settings tab. While an emulator runs, controller navigation of the launcher is paused (the emulator receives the pad). Details, supported layouts, permissions (`input` group) and a hardware test checklist: [docs/controller-support.md](docs/controller-support.md).

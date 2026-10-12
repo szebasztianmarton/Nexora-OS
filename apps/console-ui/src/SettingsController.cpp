@@ -36,6 +36,7 @@ QString actionLabel(const QString &action)
         {QStringLiteral("search"), QStringLiteral("Search")},
         {QStringLiteral("prevTab"), QStringLiteral("Previous tab")},
         {QStringLiteral("nextTab"), QStringLiteral("Next tab")},
+        {QStringLiteral("gameBar"), QStringLiteral("Game bar")},
     };
     return labels.value(action, action);
 }

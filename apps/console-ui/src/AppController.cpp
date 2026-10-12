@@ -33,9 +33,15 @@ void AppController::setInputController(input::InputController *input)
     if (m_input) {
         connect(m_input, &input::InputController::statusChanged, this, &AppController::inputChanged);
         connect(m_input, &input::InputController::returnToLauncherRequested, this, &AppController::returnToLauncher);
-        m_input->setSuspended(m_manager.isActive());
     }
+    updateInputSuspension();
     emit inputChanged();
+}
+
+void AppController::setGameBarOpen(bool open)
+{
+    m_gameBarOpen = open;
+    updateInputSuspension();
 }
 
 QString AppController::state() const
@@ -256,9 +262,10 @@ void AppController::onProcessFinished(const QString &emulatorId, const emulator:
 void AppController::updateInputSuspension()
 {
     // Gamepad input is not grabbed, so while an emulator runs the pad must not drive the
-    // launcher (pressing A in a game would otherwise hit "Stop emulator").
+    // launcher (pressing A in a game would otherwise hit "Stop emulator"). The game bar is
+    // the exception: the user summoned it on purpose and navigates it with the pad.
     if (m_input)
-        m_input->setSuspended(m_manager.isActive());
+        m_input->setSuspended(m_manager.isActive() && !m_gameBarOpen);
 }
 
 void AppController::setStatusMessage(const QString &message, bool isError)
