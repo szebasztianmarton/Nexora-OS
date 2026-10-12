@@ -2,7 +2,7 @@
 
 This document describes the `BR2_EXTERNAL` tree in [`buildroot-external/`](../buildroot-external) that turns the Nexora source tree into a bootable x86-64 disk image: Linux + BusyBox init + Mesa + Qt 6 (EGLFS/KMS) + `nexora-console-ui`.
 
-> **Status:** the configuration is validated (Kconfig symbol survival, kernel fragment, `check-package`; see [What was validated](#what-was-validated)). A complete image build had been started but **had not finished** when this document was written. No image has been booted yet, in QEMU or on hardware.
+> **Status (2026-10-11):** the configuration is validated (Kconfig symbol survival, kernel fragment, `check-package`), **all package sources download and pass their hash checks** (`make source`), and a full build compiled the first 75 packages (toolchain, host tools, host and target LLVM 21.1.8, eudev, ALSA, fonts, libdrm, linux-firmware, …) without an error before it was stopped by a 2-hour session time limit while building target Clang. Qt 6, Mesa, the kernel, GRUB, the `nexora-os` package and the disk image have **not** been built yet, so **no image exists** and nothing has been booted, in QEMU or on hardware. See [What was validated](#what-was-validated).
 
 ## Contents
 
@@ -273,13 +273,15 @@ Done in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 20
 | Kernel fragment | `make linux-configure` + `scripts/check-kernel-fragment.sh` | all 68 options of `linux.fragment` present in the kernel `.config` of Linux 6.12.91 |
 | Lint | `utils/check-package --br2-external` on every file of the tree | 0 warnings (covers `Config.in`, `.mk`, defconfig, `.hash`, init scripts incl. shellcheck, all shell scripts) |
 | Supervisor logic | `nexora-session` run under BusyBox `sh` with a fake application (paths substituted) | correct arguments/environment; the app is a session leader with the VT as stdin; restart with 1/2/4 s backoff; gives up after the configured number of rapid failures; SIGTERM stops supervisor and app |
+| Source downloads | `make source` (with `BR2_DOWNLOAD_FORCE_CHECK_HASHES=y`) | exit 0, no errors: every package source was fetched and matched its hash, including Linux 6.12.91 against the tree's own `patches/linux/linux.hash`, Qt 6.9.1, Mesa 26.0.1 and GRUB 2.12 (2026-10-11) |
+| Partial image build | `make` from a clean output directory, `nexora_x86_64_defconfig`, source tree at commit d4c35b4 | 75 packages built and installed without an error (2026-10-11): the Bootlin x86-64 glibc toolchain 2025.08-1, the host tools (Python 3.14, Meson, Ninja, genimage, e2fsprogs, dosfstools, fakeroot, …), host LLVM 21.1.8 and target LLVM 21.1.8, BusyBox, eudev, util-linux, kmod, elfutils, ALSA lib/utils, fontconfig, freetype, HarfBuzz, DejaVu, libdrm, libpng, PCRE2, double-conversion, linux-firmware. Stopped by the session's 2-hour limit after ≈ 2 h while compiling target Clang; not resumed. |
 | Power daemon logic | `nexora-powerd` under BusyBox `sh` with stubbed `poweroff`/`reboot`/`logger` | rejected `hello world`, `$(touch /tmp/pwn)` (not executed), a 200-byte line, `rebootx`; accepted `poweroff` → `sync` + `poweroff` |
 
 **Not validated (yet):**
 
-- A full image build had been started (see the status note at the top) but had not completed; whether every package (in particular `nexora-os` against Qt 6.9.1 cross-compiled, Mesa with LLVM, GRUB, genimage) builds is unproven.
+- The rest of the image build: target Clang, Mesa, host and target Qt 6.9.1 (`qt6base`, `qt6shadertools`, `qt6declarative`), the Linux kernel, GRUB, the `nexora-os` package itself (cross-compiled against Qt 6.9.1) and `genimage`. Whether these build is unproven. The build resumes where it stopped when `make` is run again in the same output directory; on 4 cores the remaining part is expected to take several more hours (an estimate, not measured).
 - Booting the image in QEMU or on any PC; EGLFS/KMS start-up of the UI; GPU drivers; input devices (keyboard, gamepads) under EGLFS; audio; the power-request round trip with the real C++ client; VT switching while the UI runs.
-- The GitHub Actions workflow has not run on GitHub.
+- The opt-in full-image job of `buildroot.yml` has never been run on GitHub (the `validate` job has passed).
 
 ## Known limitations
 

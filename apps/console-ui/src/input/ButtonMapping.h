@@ -23,7 +23,9 @@ public:
     static ButtonMapping defaults();
 
     // Validates |actionToButton|. Unknown names, a button bound twice or a missing
-    // accept/back binding are errors; the result is then std::nullopt.
+    // accept/back binding are errors; the result is then std::nullopt. Actions added in later
+    // versions (currently "options") that the map does not mention get their default button
+    // when it is free.
     static std::optional<ButtonMapping> fromVariantMap(const QVariantMap &actionToButton, QStringList *errors);
     QVariantMap toVariantMap() const;
 

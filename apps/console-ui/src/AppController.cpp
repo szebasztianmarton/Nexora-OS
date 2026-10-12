@@ -22,6 +22,7 @@ AppController::AppController(const Options &options, QObject *parent)
         if (!m_outputNotifyTimer.isActive())
             m_outputNotifyTimer.start();
     });
+    m_manager.setOutputLogDirectory(options.emulatorLogDirectory);
     reloadConfig();
 }
 
@@ -79,6 +80,11 @@ QStringList AppController::inputDevices() const
     return m_input ? m_input->devices() : QStringList{};
 }
 
+QString AppController::emulatorLogPath() const
+{
+    return m_manager.outputLogPath().isEmpty() ? m_manager.outputLogDirectory() : m_manager.outputLogPath();
+}
+
 QString AppController::version() const
 {
     return QStringLiteral(NEXORA_VERSION);
@@ -106,7 +112,7 @@ bool AppController::launchProfile(const QString &emulatorId, const QString &prof
 }
 
 bool AppController::launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                               const QString &profileId)
+                               const QString &profileId, bool applyDefaultProfile)
 {
     const auto config = m_model.find(emulatorId);
     if (!config) {
@@ -117,7 +123,7 @@ bool AppController::launchGame(const QString &emulatorId, const QString &gamePat
         return false;
     }
     QString profile = profileId;
-    if (profile.isEmpty()) {
+    if (profile.isEmpty() && applyDefaultProfile) {
         profile = m_defaultProfiles.value(emulatorId).toString();
         const auto *p = config->profile(profile);
         if (!p || !p->enabled)

@@ -10,6 +10,7 @@ FocusScope {
     required property LibraryController library
 
     signal navigate(string tab)   // "games" or "settings"
+    signal optionsRequested(real gameId)
 
     readonly property bool noDirectories: library.directories.length === 0
     readonly property bool noGames: library.totalCount === 0
@@ -17,7 +18,8 @@ FocusScope {
         ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Open" },
            { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "Diagnostics" }]
         : [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Play" },
-           { button: "Y / F", action: "Favorite" }, { button: "↑ ↓", action: "Sections" },
+           { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
+           { button: "↑ ↓", action: "Sections" },
            { button: "L1 / R1", action: "Switch tab" }]
 
     // Focusable sections in visual order (rows without games are skipped).
@@ -223,6 +225,7 @@ FocusScope {
                 title: "Continue playing"
                 emptyText: "Games you play show up here. Pick one from Browse games to get started."
                 onActivated: (gameId) => screen.library.launch(gameId)
+                onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
                 onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
             }
 
@@ -236,6 +239,7 @@ FocusScope {
                 title: "Favorites"
                 emptyText: "Press Y / F on any game to add it to your favorites."
                 onActivated: (gameId) => screen.library.launch(gameId)
+                onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
                 onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
             }
         }

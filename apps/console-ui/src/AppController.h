@@ -42,6 +42,7 @@ class AppController : public QObject
     Q_PROPERTY(QString inputStatus READ inputStatus NOTIFY inputChanged)
     Q_PROPERTY(QStringList inputDevices READ inputDevices NOTIFY inputChanged)
     Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT)
+    Q_PROPERTY(QString emulatorLogPath READ emulatorLogPath NOTIFY lastOutputChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
 
 public:
@@ -51,6 +52,7 @@ public:
         QString configDirectorySource; // human-readable origin of configDirectory
         QString logFilePath;
         bool runningAsRoot = false;
+        QString emulatorLogDirectory; // per-emulator output logs; empty = disabled
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);
@@ -79,15 +81,19 @@ public:
     QString inputStatus() const;
     QStringList inputDevices() const;
     QString logFilePath() const { return m_options.logFilePath; }
+    // Output log of the current / last launch, or the log directory before the first launch.
+    QString emulatorLogPath() const;
     QString version() const;
 
     // Starts an emulator with its default profile (see setDefaultProfiles()).
     Q_INVOKABLE bool launch(const QString &emulatorId);
     // Starts an emulator with an explicit profile ("" = emulator defaults).
     Q_INVOKABLE bool launchProfile(const QString &emulatorId, const QString &profileId);
-    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs.
+    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs. An empty
+    // |profileId| uses the emulator's default profile, unless |applyDefaultProfile| is false
+    // (then the emulator's own arguments are used).
     bool launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                    const QString &profileId = {});
+                    const QString &profileId = {}, bool applyDefaultProfile = true);
 
     // emulator id -> profile id used by launch(); unknown/disabled profiles are ignored.
     void setDefaultProfiles(const QVariantMap &defaults) { m_defaultProfiles = defaults; }

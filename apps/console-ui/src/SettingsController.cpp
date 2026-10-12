@@ -37,6 +37,7 @@ QString actionLabel(const QString &action)
         {QStringLiteral("prevTab"), QStringLiteral("Previous tab")},
         {QStringLiteral("nextTab"), QStringLiteral("Next tab")},
         {QStringLiteral("gameBar"), QStringLiteral("Game bar")},
+        {QStringLiteral("options"), QStringLiteral("Game options")},
     };
     return labels.value(action, action);
 }
@@ -149,6 +150,23 @@ bool SettingsController::set(const QString &key, const QVariant &value)
         return false;
     }
     return true;
+}
+
+QString SettingsController::defaultProfile(const QString &emulatorId) const
+{
+    return m_settings->mapValue(Settings::EmulatorDefaultProfiles).value(emulatorId).toString();
+}
+
+bool SettingsController::setDefaultProfile(const QString &emulatorId, const QString &profileId)
+{
+    QVariantMap defaults = m_settings->mapValue(Settings::EmulatorDefaultProfiles);
+    if (profileId.isEmpty())
+        defaults.remove(emulatorId);
+    else
+        defaults.insert(emulatorId, profileId);
+    const bool ok = set(Settings::EmulatorDefaultProfiles, defaults);
+    emit changed();
+    return ok;
 }
 
 void SettingsController::cycle(const QString &key, int step)

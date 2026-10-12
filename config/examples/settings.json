@@ -15,7 +15,8 @@
       "search": "west",
       "prevTab": "l1",
       "nextTab": "r1",
-      "gameBar": "guide"
+      "gameBar": "guide",
+      "options": "select"
     },
     "library.directories": ["/srv/games"],
     "library.extensions": [".zip"],

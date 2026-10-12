@@ -23,4 +23,7 @@ QString toString(ConfigDirSource source);
 
 bool isRunningAsRoot();
 
+// $XDG_STATE_HOME/nexora, or ~/.local/state/nexora (logs and other non-essential state).
+QString defaultStateDirectory();
+
 } // namespace nexora::shared

@@ -4,7 +4,7 @@ A Linux-based gaming operating system built for controller-first gaming.
 
 Nexora OS is intended to be a gaming operating system, built from open-source components, that provides a console-like experience on x86-64 PCs and mini PCs. Its goal is to bring compatible native Linux emulators together in a unified, controller-driven interface. (The license of Nexora OS itself has not been decided yet; see [Licensing](#licensing).)
 
-> **Status:** MVP 2 (version 0.2.0) — a controller-driven gaming dashboard with game library, settings and system integration, running as a desktop prototype. A Buildroot image definition exists, but no image has been built or booted yet. See [Project Status](#project-status).
+> **Status:** MVP 2 (version 0.2.0) — a controller-driven gaming dashboard with game library, settings and system integration, running as a desktop prototype. A Buildroot image definition exists and has been partially built (no Qt/kernel/image yet), but no image has been produced or booted. See [Project Status](#project-status).
 
 ## Contents
 
@@ -48,17 +48,17 @@ Create a dedicated gaming environment that boots directly into a simple, polishe
 
 ## Project Status
 
-Current stage: **MVP 2** on `feature/mvp2` (roadmap phases 1–3 largely done on a desktop host, phase 4 started).
+Current stage: **MVP 2**, merged into `main` (roadmap phases 1–3 done on a desktop host, phase 4 in progress). The MVP 2 completion work (game options, default profiles, missing-game removal, emulator output logs, library merge off the UI thread, update-info seam) is on `claude/mvp2-completion`.
 
-| Area | MVP 1 (`feature/mvp1`) | MVP 2 (`feature/mvp2`) |
+| Area | MVP 1 (`feature/mvp1`) | MVP 2 (`main` + `claude/mvp2-completion`) |
 | --- | --- | --- |
 | Local build (Ubuntu 24.04, Qt 6.4.2, GCC 13) | `ci` preset clean with `-Werror` | `ci` preset (GCC, Debug) clean with `-Werror` |
-| Local tests | 10/10 passing | **19/19** `ctest` passing (GCC Debug, `-Werror`); a separate non-root run of all tests except the QML smoke test also passed |
-| GitHub Actions CI | Passing ([run \#2](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/37954884460)): GCC/Clang Debug `-Werror`, GCC Release, GCC + SDL3 | Passing on `feature/mvp2` ([run \#13](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38071163228), commit 1716027, 2026-10-10): lint (clang-format, JSON, shellcheck), GCC/Clang Debug `-Werror`, GCC Release (unit, integration, `--check-config`), GCC + SDL3; Buildroot tree validation workflow passing |
+| Local tests | 10/10 passing | **19/19** `ctest` passing with GCC Debug `-Werror`, Clang Debug `-Werror` and GCC Release (2026-10-11); all 19 test executables also pass when run as a non-root user |
+| GitHub Actions CI | Passing ([run \#2](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/37954884460)): GCC/Clang Debug `-Werror`, GCC Release, GCC + SDL3 | Passing on `claude/mvp2-completion` ([run \#27](https://github.com/szebasztianmarton/Nexora-OS/actions/runs/38121236221), commit 0701c8a, 2026-10-11): lint (clang-format, JSON, shellcheck), GCC/Clang Debug `-Werror`, GCC Release (unit, integration, `--check-config`, dashboard screenshots), GCC + SDL3 |
 | evdev gamepad backend | Mapping/navigation unit-tested; no real controller tested | Same, plus configurable mapping and remap capture; no real controller tested |
 | SDL3 gamepad backend (optional) | Compiles/links against SDL 3.2.30 | Unchanged; not available in the Buildroot image |
 | Real emulators | None tested | None tested; no compatibility with any real emulator is claimed |
-| Buildroot image | Not started | External tree validated with `check-package`, defconfig-symbol and kernel-fragment checks; full image build in progress and **unverified** — no image built or booted |
+| Buildroot image | Not started | External tree validated (`check-package`, defconfig symbols, kernel fragment); all sources downloaded and hash-checked; a full build compiled 75 of the packages (toolchain, host tools, host + target LLVM, …) before a 2-hour session limit stopped it during target Clang. Qt 6, Mesa, kernel, GRUB, `nexora-os` and the disk image are **not built yet**: **no image exists**, nothing booted |
 
 Nexora OS is experimental software. Hardware compatibility, supported emulators, and release readiness will be documented as development progresses.
 
@@ -68,34 +68,34 @@ Implemented (runs as an ordinary Qt application on desktop Linux; the same binar
 
 - **Gaming dashboard** (`nexora-console-ui`, Qt 6 / QML) with five tabs:
   - **Home:** quick actions, "Continue playing" and "Favorites" rows, getting-started help while the library is empty.
-  - **Games:** search, filters (All / Favorites / Recent), sort order, game grid, launch and favorite.
-  - **Emulators:** all configured emulators, launch directly or pick a launch profile.
-  - **Settings:** language, hints, default sort, display mode, window size, volume, controller backend, button remapping, library folders, rescan, reset, restart/power off (image only, with confirmation).
+  - **Games:** search, filters (All / Favorites / Recent), sort order, game grid, launch and favorite; **game options** (Select / `O`): play with a specific launch profile, choose which compatible emulator runs the game, favorite.
+  - **Emulators:** all configured emulators, launch directly or pick a launch profile; set the default profile per emulator (Y / `F` in the picker).
+  - **Settings:** language, hints, default sort, display mode, window size, volume, controller backend, button remapping, library folders, rescan, remove missing games, reset, restart/power off (image only, with confirmation).
   - **Diagnostics:** version, configuration and its issues, emulator state and last output, input backend and devices, system status, library and settings issues, recent log.
   - A running-emulator overlay, a context-sensitive hint bar and transient notices.
   - **Game bar** (laid out like the Xbox Game Bar): the Guide button (keyboard: Ctrl+G) opens an overlay on top of the dashboard or a running emulator, with widget buttons for Home (the running game with play time, back to game, stop, recently played games), quick settings (restart, power off), audio and performance (CPU usage with a 30-second graph, memory, load), plus controller, network and battery status and a large clock. → [docs/game-bar.md](docs/game-bar.md)
-- **Game library:** scans configured folders on a worker thread for the file extensions your emulators declare, stores games, favorites and play history in SQLite, keeps them across rescans and temporarily missing drives. Never executes or opens game files. → [docs/game-library.md](docs/game-library.md)
-- **Emulator manager:** one supervised process at a time via `QProcess` (never a shell), launch profiles, game path substitution with `{file}`, per-emulator working directory and stop timeout, crash/exit/failure handling, SIGTERM then SIGKILL on stop.
+- **Game library:** scans configured folders and merges the results into SQLite on a worker thread (the UI thread stalls ≈5 ms instead of ≈120 ms for 10 000 files), for the file extensions your emulators declare; stores games, favorites, play history and per-game emulator choice, keeps them across rescans and temporarily missing drives; missing games can be removed explicitly. Never executes or opens game files. → [docs/game-library.md](docs/game-library.md)
+- **Emulator manager:** one supervised process at a time via `QProcess` (never a shell), launch profiles with a configurable default, game path substitution with `{file}`, per-emulator working directory and stop timeout, crash/exit/failure handling, SIGTERM then SIGKILL on stop, per-emulator output log files (`~/.local/state/nexora/emulator-logs/<id>.log`, previous run kept, 1 MiB cap).
 - **Settings:** layered (built-in ← system defaults ← user file), validated, saved atomically on every change, corrupted files moved aside. → [docs/settings.md](docs/settings.md)
 - **Controller input:** evdev (or optional SDL3) backend, buttons named by position, remappable actions, auto-repeat, multiple pads, hotplug; navigation suspended while an emulator runs; hold **Select + Start** for 1 s to return to Nexora. → [docs/controller-support.md](docs/controller-support.md)
-- **System integration:** desktop vs. embedded behaviour; on the image, power off/restart through a minimal root helper and volume through `amixer`; single-instance lock; clean shutdown on SIGTERM/SIGINT/SIGHUP.
+- **System integration:** desktop vs. embedded behaviour; on the image, power off/restart through a minimal root helper and volume through `amixer`; display and input status; an update-info interface (installed image version; no update mechanism yet); single-instance lock; clean shutdown on SIGTERM/SIGINT/SIGHUP.
 - **Logging and diagnostics:** categorized logging to stderr, an optional rotating log file (2 MiB × 3) and an in-memory buffer.
 - **Safety defaults:** refuses to run as root unless explicitly allowed; emulators receive SIGTERM if the launcher dies.
 - **Buildroot external tree** for an x86-64 UEFI image that boots into the UI (unverified; see [docs/buildroot.md](docs/buildroot.md)).
-- **Testing:** 19 Qt Test / CTest executables, including a QML test that drives the dashboard with key events and a fake emulator. → [docs/testing.md](docs/testing.md)
+- **Testing:** 19 Qt Test / CTest executables, including a QML test that drives the dashboard with key events and a fake emulator, an opt-in library benchmark and optional dashboard screenshots (uploaded by CI). → [docs/testing.md](docs/testing.md)
 
 ## Known limitations
 
 - No physical controller and no real emulator has been tested; the SDL3 backend has only been compiled.
 - The Buildroot image is unverified: it has not been built completely or booted. SDL3 is not available in the image (evdev only).
 - No on-screen keyboard: search and adding a library folder need a keyboard.
-- The per-game emulator override and purging of missing games exist in the backend but have no UI.
 - Volume and power control work only on the embedded platform; on the desktop the volume is a stored preference and power actions are unavailable.
 - `display.resolution` only sets the initial window size; it does not change the display mode. The controller backend changes apply after a restart.
 - Fixed font sizes (no UI scaling setting); only English.
 - One emulator process at a time; one button mapping for all pads; fixed chord and repeat timings.
 - No metadata scraping, artwork, online services or save-state integration; no ROMs/BIOS provided.
-- Library database merges run on the UI thread (≈0.1 s for 10 000 files in a synthetic test).
+- No in-place system update mechanism; `updateInfo()` only reports the installed version.
+- Rebuilding the visible game lists after a scan still runs on the UI thread (≈8 ms for 10 000 games).
 - Licensing is undecided (see [Licensing](#licensing)).
 - `Ctrl+Q` quits the prototype (development convenience).
 - The game bar cannot pause the game or keep the pad away from it: devices are not grabbed, so the emulator also sees the buttons pressed while the bar is open. It has no capture (screenshot/recording) widget and no GPU or FPS figures.
@@ -205,7 +205,8 @@ The dashboard works entirely with a controller; a keyboard works too.
 | Previous / next tab | L1 / R1 (LB / RB) | Page Up / Page Down, Ctrl+Shift+Tab / Ctrl+Tab |
 | Toggle favorite | North (Y) | F |
 | Search | West (X) | `/`, Ctrl+F |
-| Diagnostics | Start (Select if unbound) | Menu key, F1 |
+| Game options (profile, emulator, favorite) | Select (View / Share / −) | O |
+| Diagnostics | Start | Menu key, F1 |
 | Game bar (open / close) | Guide (Xbox button) | Ctrl+G (Esc closes) |
 | Return to Nexora from a running emulator | Hold Select + Start for 1 s | Enter on the overlay's Stop button |
 
@@ -304,9 +305,9 @@ Planned next (not implemented):
 
 - Build and boot the Buildroot image in QEMU and on real PCs; fix what that reveals.
 - Test real controllers (Xbox, PlayStation, Nintendo, 8BitDo) and at least one real emulator end to end; record results.
-- On-screen keyboard and folder browser so no keyboard is ever needed; UI for per-game emulator choice and purging missing games.
+- On-screen keyboard and folder browser so no keyboard is ever needed.
 - UI scaling for TVs; real display-mode selection.
-- Move library database work off the UI thread for very large collections.
+- An update mechanism behind the update-info interface (design and validation first).
 - Metadata and artwork (local only), save-state integration where emulators support it.
 - A license decision.
 

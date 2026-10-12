@@ -110,6 +110,7 @@ void TestInputController::keyForAction()
     QCOMPARE(InputController::keyForAction(NavAction::Back), int(Qt::Key_Escape));
     QCOMPARE(InputController::keyForAction(NavAction::Menu), int(Qt::Key_Menu));
     QCOMPARE(InputController::keyForAction(NavAction::GameBar), int(Qt::Key_HomePage));
+    QCOMPARE(InputController::keyForAction(NavAction::Options), int(Qt::Key_Context1));
 }
 
 void TestInputController::navigatorFeedsWindow()

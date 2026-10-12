@@ -3,12 +3,14 @@
 #include "nexora/library/GameLibrary.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 using namespace nexora::library;
 
@@ -97,6 +99,78 @@ private slots:
         QVERIFY(alpha->favorite);
         QCOMPARE(alpha->playCount, 2);
         QVERIFY(alpha->lastPlayed.isValid());
+    }
+
+    void writesDuringAScanAreNotLost()
+    {
+        // The worker merges through its own connection and hands back a snapshot; user
+        // writes made on this thread while it runs must survive the swap.
+        for (int i = 0; i < 50; ++i)
+            touch(games() + QStringLiteral("/Game %1.sfc").arg(i));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        const qint64 id = byTitle(library, QStringLiteral("Game 7"))->id;
+
+        touch(games() + QStringLiteral("/New.sfc"));
+        QSignalSpy done(&library, &GameLibrary::scanFinished);
+        QVERIFY(library.refresh());
+        QVERIFY(library.setFavorite(id, true)); // must not fail with "database is locked"
+        QVERIFY(library.recordLaunch(id));
+        QVERIFY(done.wait(10000));
+        QCOMPARE(library.lastStats().added, 1);
+        const auto game = byTitle(library, QStringLiteral("Game 7"));
+        QVERIFY(game);
+        QVERIFY(game->favorite);
+        QCOMPARE(game->playCount, 1);
+        QVERIFY(byTitle(library, QStringLiteral("New")));
+        // And the database agrees with the cache.
+        QVERIFY(library.entry(id)->favorite);
+    }
+
+    void inMemoryDatabaseMergesOnOwnerThread()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(QStringLiteral(":memory:")));
+        library.setScanOptions(options());
+        scan(library);
+        QCOMPARE(library.entries().size(), 1);
+        QVERIFY(!library.needsRescan());
+    }
+
+    // Opt-in measurement (NEXORA_LIBRARY_BENCH=1): longest stall of the owner's event loop
+    // while 10 000 files are scanned and merged, first scan and unchanged rescan.
+    void benchmarkEventLoopStall()
+    {
+        if (qEnvironmentVariableIntValue("NEXORA_LIBRARY_BENCH") != 1)
+            QSKIP("set NEXORA_LIBRARY_BENCH=1 to run");
+        for (int d = 0; d < 100; ++d) {
+            for (int i = 0; i < 100; ++i)
+                touch(games() + QStringLiteral("/dir%1/Game %2.sfc").arg(d).arg(i));
+        }
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        for (const char *label : {"first scan", "unchanged rescan"}) {
+            QElapsedTimer total;
+            QElapsedTimer sinceTick;
+            qint64 maxGap = 0;
+            QTimer ticker;
+            ticker.setInterval(5);
+            connect(&ticker, &QTimer::timeout, this, [&] { maxGap = qMax(maxGap, sinceTick.restart()); });
+            QSignalSpy done(&library, &GameLibrary::scanFinished);
+            total.start();
+            sinceTick.start();
+            ticker.start();
+            QVERIFY(library.refresh());
+            QVERIFY(done.wait(60000));
+            ticker.stop();
+            maxGap = qMax(maxGap, sinceTick.elapsed());
+            QCOMPARE(library.entries().size(), 10000);
+            qInfo("%s: total %lld ms, longest event-loop stall %lld ms", label, total.elapsed(), maxGap);
+        }
     }
 
     void rescanKeepsUserDataAndTracksMissingFiles()

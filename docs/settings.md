@@ -77,21 +77,22 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | `display.resolution` | string | `"auto"` | `"auto"` or `WIDTHxHEIGHT` (each 3–5 digits, no leading zero), e.g. `"1920x1080"`. The settings UI cycles `auto`, `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`. | Initial **window size** only. It does **not** change the display mode/monitor resolution; in full-screen mode the window covers the screen regardless. | At start-up only, and only when neither `--fullscreen` nor `--windowed` is given. |
 | `audio.volume` | int | `80` | integer 0–100 (JSON `40.0` is accepted as 40) | Master volume. | **Embedded platform only**, and only if `/usr/bin/amixer` is executable: runs `amixer -q sset Master <n>%`, falling back to the `PCM` control if `Master` fails; asynchronous; applied at start-up and on every change. On the **desktop** platform the value is stored as a preference only and the desktop mixer is left alone. |
 | `input.backend` | string | `"auto"` | `"auto"`, `"evdev"`, `"sdl3"`, `"none"` | Controller backend ([controller-support.md](controller-support.md#backends)). | At the **next start**. `--input-backend` overrides it. |
-| `input.mapping` | object | see below | action → button; actions `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`, `gameBar`; buttons `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1` | Controller button for each action. | Immediately. A second, stricter check happens when it is applied (see below). |
+| `input.mapping` | object | see below | action → button; actions `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`, `gameBar`, `options`; buttons `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1` | Controller button for each action. | Immediately. A second, stricter check happens when it is applied (see below). |
 | `library.directories` | string array | `[]` | absolute paths, max 64 entries; `"/"` refused; paths are cleaned (`/srv/games/` → `/srv/games`) and de-duplicated | Directories scanned for games. | Immediately; triggers a rescan. |
 | `library.extensions` | string array | `[]` | `".ext"` with 1–16 lower-case letters/digits, max 128 entries; normalised to lower case and a missing leading dot is added (`"ZIP"` → `".zip"`) | Extra extensions treated as games in addition to those declared by emulator definitions. Files found only through this list have no emulator. | Immediately; triggers a rescan. |
 | `library.followSymlinks` | bool | `false` | `true`, `false` | Follow symbolic links that stay inside the same library directory ([game-library.md](game-library.md#symbolic-links)). | Immediately; triggers a rescan. |
 | `library.sortOrder` | string | `"title"` | `"title"`, `"recent"`, `"emulator"`, `"added"` | Default sort order of the library list. | Immediately. The setting and the sort selector on the Games tab are kept in sync: changing the setting (Settings tab, "Default game sort") re-sorts the list, and choosing a sort order on the Games tab saves it as the new default. |
-| `emulators.defaultProfiles` | object | `{}` | emulator id → profile id; both must match `^[a-z0-9][a-z0-9_-]{0,63}$` | Launch profile used when an emulator or a game is started without an explicit profile. | Immediately. A profile that does not exist or is disabled is ignored at launch time (the emulator's own arguments are used). |
+| `emulators.defaultProfiles` | object | `{}` | emulator id → profile id; both must match `^[a-z0-9][a-z0-9_-]{0,63}$` | Launch profile used when an emulator or a game is started without an explicit profile. Set from the Emulators tab's profile picker (Y / F on a profile). | Immediately. A profile that does not exist or is disabled is ignored at launch time (the emulator's own arguments are used). |
 
 Default `input.mapping`:
 
 ```json
 {"accept": "south", "back": "east", "menu": "start", "favorite": "north",
- "search": "west", "prevTab": "l1", "nextTab": "r1", "gameBar": "guide"}
+ "search": "west", "prevTab": "l1", "nextTab": "r1", "gameBar": "guide",
+ "options": "select"}
 ```
 
-The value is replaced as a whole, not merged with the defaults: actions left out are unbound. When the mapping is applied, `ButtonMapping::fromVariantMap()` additionally rejects a button bound to two actions and a mapping without `accept` or `back`. Such a mapping is accepted by the settings store (and reported by [`--check-config`](#checking-a-configuration---check-config)); the controller then uses the **default** mapping and the settings screen reports "Controller mapping ignored (...); using defaults". Remapping from the UI repairs it. Details: [controller-support.md](controller-support.md#configurable-mapping).
+The value is replaced as a whole, not merged with the defaults: actions left out are unbound, with one exception for compatibility: `options` was added after the format was introduced, so a stored mapping that does not mention it gets `select` for it if no other action uses `select` (otherwise it stays unbound and Select keeps working as before). When the mapping is applied, `ButtonMapping::fromVariantMap()` additionally rejects a button bound to two actions and a mapping without `accept` or `back`. Such a mapping is accepted by the settings store (and reported by [`--check-config`](#checking-a-configuration---check-config)); the controller then uses the **default** mapping and the settings screen reports "Controller mapping ignored (...); using defaults". Remapping from the UI repairs it. Details: [controller-support.md](controller-support.md#configurable-mapping).
 
 ## Validation and recovery
 
@@ -156,6 +157,17 @@ CI runs this for `config/emulators` and `config/examples/emulators` with `config
 | Database cannot be opened at all | The library is disabled for the session (logged as critical); emulators can still be started. |
 
 Schema and rescan behaviour: [game-library.md](game-library.md#database).
+
+## Emulator output logs
+
+| | |
+| --- | --- |
+| Location | `$XDG_STATE_HOME/nexora/emulator-logs/` (normally `~/.local/state/nexora/emulator-logs/`; a relative `XDG_STATE_HOME` is ignored as the XDG specification requires). On the image: `/home/nexora/.local/state/nexora/emulator-logs/` (not checked on a booted image). |
+| Files | `<emulator id>.log` for the latest launch of that emulator, `<emulator id>.log.1` for the one before. Each holds a header (time, program, arguments, working directory), the emulator's output with `out| ` / `err| ` prefixes and a footer with the outcome (e.g. "crashed"). |
+| Size | At most 1 MiB per file; further output is dropped with a note. Two files per emulator. |
+| Shown | The Diagnostics tab ("Emulator output log") shows the current file; the last 4000 characters of output are also shown there. |
+
+The logs contain game paths and whatever the emulator prints; Nexora writes nothing else into them. They can be deleted at any time.
 
 ## Backups
 

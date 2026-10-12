@@ -80,6 +80,10 @@ public:
     // Applies a binding directly (also used when no controller is present / in tests).
     Q_INVOKABLE bool remap(const QString &action, const QString &button);
     Q_INVOKABLE bool resetToDefaults();
+    // emulators.defaultProfiles: the profile used when an emulator or game is launched
+    // without choosing one. "" = the emulator's own arguments.
+    Q_INVOKABLE QString defaultProfile(const QString &emulatorId) const;
+    Q_INVOKABLE bool setDefaultProfile(const QString &emulatorId, const QString &profileId);
 
     // Applies stored values to the input layer and the system (used at start-up).
     void applyAll();

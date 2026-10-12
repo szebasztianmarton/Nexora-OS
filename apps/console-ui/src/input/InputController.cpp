@@ -199,6 +199,7 @@ int InputController::keyForAction(NavAction action)
     case NavAction::PrevTab: return Qt::Key_PageUp;
     case NavAction::NextTab: return Qt::Key_PageDown;
     case NavAction::GameBar: return Qt::Key_HomePage;
+    case NavAction::Options: return Qt::Key_Context1;
     }
     return Qt::Key_unknown;
 }

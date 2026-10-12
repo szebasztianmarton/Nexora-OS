@@ -3,6 +3,7 @@
 #include "nexora/emulator/EmulatorProcessState.h"
 #include "nexora/shared/EmulatorConfig.h"
 
+#include <QFile>
 #include <QObject>
 #include <QPointer>
 #include <QProcess>
@@ -10,6 +11,7 @@
 #include <QTimer>
 
 #include <chrono>
+#include <memory>
 #include <optional>
 
 namespace nexora::emulator {
@@ -102,6 +104,18 @@ public:
     qsizetype outputLimit() const { return m_outputLimit; }
     void setOutputLimit(qsizetype characters) { m_outputLimit = qMax<qsizetype>(1, characters); }
 
+    // Optional on-disk output log. When a directory is set, every accepted launch writes
+    // <dir>/<emulator id>.log (header, stdout/stderr lines prefixed "out| " / "err| ",
+    // outcome footer). The previous run's file is kept as <id>.log.1, so relaunching after
+    // a crash does not overwrite the crash output. Each file is capped at outputLogLimit()
+    // bytes. Empty (the default) disables the log. Failure to write only logs a warning.
+    void setOutputLogDirectory(const QString &directory) { m_outputLogDirectory = directory; }
+    QString outputLogDirectory() const { return m_outputLogDirectory; }
+    void setOutputLogLimit(qint64 bytes) { m_outputLogLimit = qMax<qint64>(1024, bytes); }
+    qint64 outputLogLimit() const { return m_outputLogLimit; }
+    // Log file of the current / most recent launch; empty when none was written.
+    QString outputLogPath() const { return m_outputLogPath; }
+
     // Checks that |path| is absolute, exists, is a regular file and is executable.
     static EmulatorError validateExecutable(const QString &path, QString *detail = nullptr);
 
@@ -120,6 +134,10 @@ private:
     void onStopTimeout();
     void finish(ProcessOutcome outcome);
     void releaseProcess();
+    void openOutputLog(const ResolvedLaunch &launch);
+    void writeOutputLog(OutputChannel channel, const QString &text);
+    void closeOutputLog(const QString &footer);
+    void writeLogBytes(const QByteArray &bytes);
 
     ProcessState m_state = ProcessState::Idle;
     QPointer<QProcess> m_process;
@@ -136,6 +154,13 @@ private:
     qsizetype m_outputLimit = 64 * 1024;
     QStringDecoder m_stdoutDecoder{QStringDecoder::Utf8};
     QStringDecoder m_stderrDecoder{QStringDecoder::Utf8};
+    QString m_outputLogDirectory;
+    qint64 m_outputLogLimit = 1024 * 1024;
+    QString m_outputLogPath;
+    std::unique_ptr<QFile> m_outputLog;
+    qint64 m_outputLogWritten = 0;
+    bool m_outputLogTruncated = false;
+    QString m_pendingLine[2]; // incomplete last line per channel (stdout, stderr)
 };
 
 } // namespace nexora::emulator

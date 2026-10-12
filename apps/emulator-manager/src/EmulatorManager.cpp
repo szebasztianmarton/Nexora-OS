@@ -2,6 +2,7 @@
 
 #include "nexora/shared/Logging.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 
@@ -136,6 +137,7 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
     m_stderr.clear();
     m_stdoutDecoder.resetState();
     m_stderrDecoder.resetState();
+    m_outputLogPath.clear();
 
     EmulatorError error = EmulatorError::None;
     QString detail;
@@ -150,6 +152,7 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
         return LaunchResult{false, error, outcome.message};
     }
     m_activeStopTimeout = resolved->stopTimeout.value_or(m_stopTimeout);
+    openOutputLog(*resolved);
 
     auto *process = new QProcess(this);
     process->setProgram(resolved->program);
@@ -205,6 +208,7 @@ void EmulatorManager::shutdown()
     }
     m_process = nullptr;
     delete process;
+    closeOutputLog(QStringLiteral("launcher shut down; process killed"));
 }
 
 void EmulatorManager::setState(ProcessState state)
@@ -240,6 +244,8 @@ void EmulatorManager::appendOutput(OutputChannel channel, const QString &text)
     buffer.append(text);
     if (buffer.size() > m_outputLimit)
         buffer.remove(0, buffer.size() - m_outputLimit);
+
+    writeOutputLog(channel, text);
 
     const char *tag = channel == OutputChannel::Stdout ? "stdout" : "stderr";
     for (const QString &line : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
@@ -342,8 +348,94 @@ void EmulatorManager::releaseProcess()
     process->deleteLater(); // never delete inside its own signal emission
 }
 
+void EmulatorManager::openOutputLog(const ResolvedLaunch &launch)
+{
+    if (m_outputLogDirectory.isEmpty())
+        return;
+    const QDir dir(m_outputLogDirectory);
+    if (!dir.mkpath(QStringLiteral("."))) {
+        qCWarning(lcProcess) << "Cannot create emulator log directory" << m_outputLogDirectory;
+        return;
+    }
+    // m_activeId passed ConfigLoader's id pattern, so it is a safe file name.
+    const QString path = dir.filePath(m_activeId + QStringLiteral(".log"));
+    const QString previous = path + QStringLiteral(".1");
+    QFile::remove(previous);
+    QFile::rename(path, previous);
+
+    auto file = std::make_unique<QFile>(path);
+    if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        qCWarning(lcProcess) << "Cannot write emulator log" << path << "-" << file->errorString();
+        return;
+    }
+    m_outputLog = std::move(file);
+    m_outputLogPath = path;
+    m_outputLogWritten = 0;
+    m_outputLogTruncated = false;
+    m_pendingLine[0].clear();
+    m_pendingLine[1].clear();
+
+    QStringList quoted;
+    for (const QString &arg : launch.arguments)
+        quoted.append(arg.contains(QLatin1Char(' ')) || arg.isEmpty() ? QLatin1Char('"') + arg + QLatin1Char('"')
+                                                                      : arg);
+    const QString header = QStringLiteral("# %1 %2\n# program: %3\n# arguments: %4\n# working directory: %5\n")
+                               .arg(QDateTime::currentDateTime().toString(Qt::ISODate), m_activeName, launch.program,
+                                    quoted.join(QLatin1Char(' ')), launch.workingDirectory);
+    writeLogBytes(header.toUtf8());
+}
+
+void EmulatorManager::writeOutputLog(OutputChannel channel, const QString &text)
+{
+    if (!m_outputLog)
+        return;
+    QString &pending = m_pendingLine[channel == OutputChannel::Stdout ? 0 : 1];
+    pending += text;
+    const qsizetype lastNewline = pending.lastIndexOf(QLatin1Char('\n'));
+    // Keep a partial line for the next chunk, unless it is unreasonably long.
+    if (lastNewline < 0 && pending.size() < 4096)
+        return;
+    const qsizetype end = lastNewline < 0 ? pending.size() : lastNewline;
+    const QString prefix = channel == OutputChannel::Stdout ? QStringLiteral("out| ") : QStringLiteral("err| ");
+    QString block;
+    for (const QString &line : pending.left(end).split(QLatin1Char('\n')))
+        block += prefix + line + QLatin1Char('\n');
+    pending.remove(0, lastNewline < 0 ? end : end + 1);
+    writeLogBytes(block.toUtf8());
+}
+
+void EmulatorManager::writeLogBytes(const QByteArray &bytes)
+{
+    if (!m_outputLog || m_outputLogTruncated)
+        return;
+    if (m_outputLogWritten + bytes.size() > m_outputLogLimit) {
+        m_outputLogTruncated = true;
+        m_outputLog->write("# output log limit reached; further output is not recorded\n");
+        m_outputLog->flush();
+        return;
+    }
+    m_outputLogWritten += m_outputLog->write(bytes);
+    m_outputLog->flush(); // the launcher may be killed; keep what was received
+}
+
+void EmulatorManager::closeOutputLog(const QString &footer)
+{
+    if (!m_outputLog)
+        return;
+    for (OutputChannel channel : {OutputChannel::Stdout, OutputChannel::Stderr}) {
+        if (!m_pendingLine[channel == OutputChannel::Stdout ? 0 : 1].isEmpty())
+            writeOutputLog(channel, QStringLiteral("\n"));
+    }
+    m_outputLogTruncated = false; // the footer is always written
+    m_outputLog->write(
+        QStringLiteral("# %1 finished: %2\n").arg(QDateTime::currentDateTime().toString(Qt::ISODate), footer).toUtf8());
+    m_outputLog->close();
+    m_outputLog.reset();
+}
+
 void EmulatorManager::finish(ProcessOutcome outcome)
 {
+    closeOutputLog(outcome.message);
     m_lastOutcome = outcome;
     // State is updated (and the process released) before notifying, so listeners may
     // immediately launch again from their slots.

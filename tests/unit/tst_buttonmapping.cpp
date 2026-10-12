@@ -21,8 +21,8 @@ private slots:
         QCOMPARE(m.actionFor(GamepadButton::L1), std::optional(NavAction::PrevTab));
         QCOMPARE(m.actionFor(GamepadButton::R1), std::optional(NavAction::NextTab));
         QCOMPARE(m.actionFor(GamepadButton::Guide), std::optional(NavAction::GameBar));
-        // Unassigned Select falls back to Menu; directions are never part of a mapping.
-        QCOMPARE(m.actionFor(GamepadButton::Select), std::optional(NavAction::Menu));
+        QCOMPARE(m.actionFor(GamepadButton::Select), std::optional(NavAction::Options));
+        // Directions are never part of a mapping.
         QCOMPARE(m.actionFor(GamepadButton::DpadUp), std::nullopt);
     }
 
@@ -59,6 +59,27 @@ private slots:
         const auto again = ButtonMapping::fromVariantMap(m.toVariantMap(), nullptr);
         QVERIFY(again);
         QVERIFY(*again == m);
+    }
+
+    void olderMappingsGainLaterActions()
+    {
+        // Stored before "options" existed: Select is free, so options gets it.
+        const QVariantMap legacy{{QStringLiteral("accept"), QStringLiteral("east")},
+                                 {QStringLiteral("back"), QStringLiteral("south")}};
+        auto m = ButtonMapping::fromVariantMap(legacy, nullptr);
+        QVERIFY(m);
+        QCOMPARE(m->buttonFor(NavAction::Options), std::optional(GamepadButton::Select));
+        QCOMPARE(m->buttonFor(NavAction::Accept), std::optional(GamepadButton::East));
+
+        // Select already used by another action: options stays unbound and the stored
+        // binding wins; an unassigned Guide still opens the game bar.
+        QVariantMap selectTaken = legacy;
+        selectTaken.insert(QStringLiteral("search"), QStringLiteral("select"));
+        m = ButtonMapping::fromVariantMap(selectTaken, nullptr);
+        QVERIFY(m);
+        QCOMPARE(m->buttonFor(NavAction::Options), std::nullopt);
+        QCOMPARE(m->actionFor(GamepadButton::Select), std::optional(NavAction::Search));
+        QCOMPARE(m->actionFor(GamepadButton::Guide), std::optional(NavAction::GameBar));
     }
 
     void bindSwapsConflicts()
@@ -110,7 +131,7 @@ private slots:
             QCOMPARE(ButtonMapping::actionName(*ButtonMapping::actionFromName(name)), name);
         for (const QString &name : ButtonMapping::buttonNames())
             QCOMPARE(ButtonMapping::buttonName(*ButtonMapping::buttonFromName(name)), name);
-        QCOMPARE(ButtonMapping::actionNames().size(), 8);
+        QCOMPARE(ButtonMapping::actionNames().size(), 9);
     }
 };
 

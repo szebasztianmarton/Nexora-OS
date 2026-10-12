@@ -162,8 +162,8 @@ int main(int argc, char *argv[])
 
     nexora::input::InputController input;
     nexora::ui::UiContext::Options options;
-    options.app
-        = {configDir.path, nexora::shared::toString(configDir.source), parser.value(logFileOption), runningAsRoot};
+    options.app = {configDir.path, nexora::shared::toString(configDir.source), parser.value(logFileOption),
+                   runningAsRoot, nexora::shared::defaultStateDirectory() + QStringLiteral("/emulator-logs")};
     options.settings = settingsPaths;
     options.databasePath = parser.isSet(databaseOption) ? QDir(parser.value(databaseOption)).absolutePath()
                                                         : nexora::library::GameLibrary::defaultDatabasePath();

@@ -12,8 +12,12 @@ struct ActionName
 constexpr ActionName kActions[] = {
     {NavAction::Accept, "accept"},     {NavAction::Back, "back"},       {NavAction::Menu, "menu"},
     {NavAction::Favorite, "favorite"}, {NavAction::Search, "search"},   {NavAction::PrevTab, "prevTab"},
-    {NavAction::NextTab, "nextTab"},   {NavAction::GameBar, "gameBar"},
+    {NavAction::NextTab, "nextTab"},   {NavAction::GameBar, "gameBar"}, {NavAction::Options, "options"},
 };
+
+// Actions introduced after mappings were first stored. A stored mapping without them gets
+// the default button, if that button is still free, so older settings files gain them.
+constexpr NavAction kLaterActions[] = {NavAction::Options};
 
 struct ButtonName
 {
@@ -32,10 +36,11 @@ ButtonMapping ButtonMapping::defaults()
 {
     ButtonMapping m;
     m.m_actionToButton = {
-        {NavAction::Accept, GamepadButton::South}, {NavAction::Back, GamepadButton::East},
-        {NavAction::Menu, GamepadButton::Start},   {NavAction::Favorite, GamepadButton::North},
-        {NavAction::Search, GamepadButton::West},  {NavAction::PrevTab, GamepadButton::L1},
-        {NavAction::NextTab, GamepadButton::R1},   {NavAction::GameBar, GamepadButton::Guide},
+        {NavAction::Accept, GamepadButton::South},   {NavAction::Back, GamepadButton::East},
+        {NavAction::Menu, GamepadButton::Start},     {NavAction::Favorite, GamepadButton::North},
+        {NavAction::Search, GamepadButton::West},    {NavAction::PrevTab, GamepadButton::L1},
+        {NavAction::NextTab, GamepadButton::R1},     {NavAction::GameBar, GamepadButton::Guide},
+        {NavAction::Options, GamepadButton::Select},
     };
     return m;
 }
@@ -63,6 +68,16 @@ std::optional<ButtonMapping> ButtonMapping::fromVariantMap(const QVariantMap &ac
         }
         used.insert(*button, it.key());
         m.m_actionToButton.insert(*action, *button);
+    }
+    const ButtonMapping fallback = defaults();
+    for (NavAction later : kLaterActions) {
+        if (actionToButton.contains(actionName(later)))
+            continue;
+        const GamepadButton button = *fallback.buttonFor(later);
+        if (!used.contains(button)) {
+            used.insert(button, actionName(later));
+            m.m_actionToButton.insert(later, button);
+        }
     }
     for (NavAction required : {NavAction::Accept, NavAction::Back}) {
         if (!m.m_actionToButton.contains(required))

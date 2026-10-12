@@ -13,6 +13,7 @@ Code: `apps/game-library/` (`LibraryScanner`, `GameDatabase`, `LibraryQuery`, `G
 - [Missing files and unmounted drives](#missing-files-and-unmounted-drives)
 - [Search, filters and sorting](#search-filters-and-sorting)
 - [Emulator assignment](#emulator-assignment)
+- [Game options](#game-options)
 - [Launching a game](#launching-a-game)
 - [Limitations](#limitations)
 
@@ -59,7 +60,7 @@ Extension matching is case-insensitive and uses the text after the **last** dot 
 
 ### Asynchronous scanning
 
-- Scans run on a low-priority worker thread (`nexora-library-scan`); the UI stays responsive. Database writes happen on the UI thread after the scan finished.
+- Scans run on a low-priority worker thread (`nexora-library-scan`). The same thread then merges the result into the database through its own SQLite connection and reads the new entry list; the UI thread only swaps the cached list in. The merge is one `BEGIN IMMEDIATE` transaction, so a favorite or play-count write from the UI during the merge waits (SQLite busy timeout, 5 s) instead of failing; if such a write happened while the worker ran, the UI reloads the entries itself instead of using the worker's snapshot, so the write is never lost. The worker's connection never moves a database aside; corruption recovery only happens when the database is opened at start-up. (An in-memory database, used by some tests, cannot be shared between connections and is merged on the UI thread.)
 - At most one scan runs at a time. A refresh requested meanwhile is queued; exactly one more scan runs afterwards, however many requests arrived.
 - On shutdown or destruction a running scan is cancelled and joined; a cancelled scan changes nothing in the database.
 - After each scan the UI shows "Library updated: N new, M missing, K issue(s)", and `LibraryController.lastScanSummary` / `issues` describe the last scan.
@@ -122,14 +123,14 @@ Entries are never deleted by a scan; they are marked not present (`present = 0`)
 | Scan truncated (file limit) or cancelled | Only entries whose directory is no longer configured are marked missing. |
 | Game deleted after the last scan | Still listed until the next scan; launching is refused with "Game file is missing" and the UI stays usable. |
 
-**Purge:** `LibraryController.purgeMissing()` permanently deletes all entries with `present = 0`, including their favorites and history. It only runs as an explicit user action and is not yet reachable from the dashboard (API only).
+**Purge:** when missing entries exist, the Settings tab shows **Remove missing games** (with the count; press Accept twice to confirm). It calls `LibraryController.purgeMissing()`, which permanently deletes all entries with `present = 0`, including their favorites and history. It never runs automatically.
 
 ## Search, filters and sorting
 
 In the dashboard:
 
 - **Home tab:** quick actions (browse games, rescan, settings), a "Continue playing" row (recently played) and a "Favorites" row; a getting-started panel while the library is empty.
-- **Games tab:** search field (`/`, `Ctrl+F` or the Search button/key), filter chips (All, Favorites, Recent), sort selector and the game grid. Accept launches the selected game, the Favorite button (north / `F`) toggles the favorite. Empty states explain what to do (no folders → open Settings; no games → rescan; no results → clear search).
+- **Games tab:** search field (`/`, `Ctrl+F` or the Search button/key), filter chips (All, Favorites, Recent), sort selector and the game grid. Accept launches the selected game, the Favorite button (north / `F`) toggles the favorite, the Options button (Select / `O`) opens the [game options](#game-options). Empty states explain what to do (no folders → open Settings; no games → rescan; no results → clear search).
 
 Implemented in `LibraryQuery` (pure, unit-tested):
 
@@ -152,14 +153,29 @@ The order comes from `library.sortOrder`. Choosing a sort order on the Games tab
 - **Candidates:** every enabled emulator that declares the file's extension, in the order the definitions were loaded (sorted by definition file name). Stored per game and refreshed on every scan.
 - **Effective emulator:** the per-game override if it is still a candidate, otherwise the first candidate. With no candidate the game is shown as "No emulator handles this file type".
 - **Availability:** a candidate whose executable is missing or not executable is still assigned, but the game is shown as unavailable with the reason.
-- **Override:** stored in `emulator_override` and kept across rescans (`GameLibrary::setEmulatorOverride()`, covered by `tst_gamelibrary`). It is not yet exposed in the UI.
+- **Override:** chosen in the [game options](#game-options), stored in `emulator_override` and kept across rescans. Only candidates are accepted (`LibraryController.setGameEmulator()` refuses other emulators: a file is never assumed to work with an emulator that does not declare its extension); an empty choice returns to automatic. An override whose emulator stops declaring the extension is ignored until it does again.
+
+## Game options
+
+The Options button (default: Select; keyboard `O`; remappable as `options`) on a game in the Games grid or a Home row opens a modal list. Back (or Options again) closes it and focus returns to the same game.
+
+| Row | Shown when | Effect |
+| --- | --- | --- |
+| Play | the file is present | Launches like Accept (default profile of the effective emulator, if set) |
+| Play with “<profile>” | the effective emulator has enabled launch profiles | Launches with that profile |
+| Play with emulator defaults | same | Launches with the emulator's own arguments, ignoring the default profile |
+| Emulator: automatic / Emulator: <name> | more than one emulator declares the file's extension | Sets or clears the per-game override; unavailable emulators show their reason |
+| Add to / Remove from favorites | always | Toggles the favorite |
+| Close | always | Closes the dialog |
+
+The header shows the path, size, which emulators handle the file and the play history. The data comes from `LibraryController.gameDetails()`.
 
 ## Launching a game
 
 `LibraryController.launch(id)`:
 
 1. Refuses entries that are unknown or not present ("This game is no longer in the library").
-2. Starts the effective emulator through `AppController::launchGame()` with the profile from `emulators.defaultProfiles` for that emulator, if that profile exists and is enabled; otherwise the emulator's own arguments. The running overlay shows "<title> (<emulator name>)".
+2. Starts the effective emulator through `AppController::launchGame()` with the profile from `emulators.defaultProfiles` for that emulator, if that profile exists and is enabled; otherwise the emulator's own arguments. (`launchWithProfile(id, profile)` from the game options uses the given profile, or none for "emulator defaults".) The running overlay shows "<title> (<emulator name>)".
 3. `EmulatorManager::resolve()` builds the command line:
    - The game path must be absolute, an existing regular file and readable; otherwise "Game file is missing".
    - Arguments come from the profile if it defines `arguments`, else from the emulator.
@@ -178,6 +194,5 @@ Starting an emulator **without** a game (from the emulator list) drops every arg
 - No ROMs, BIOS files or emulators are provided; you must supply legally obtained files and install emulators yourself.
 - No automatic detection of new files (manual refresh), no archive inspection (a `.zip` is one file), no multi-disc grouping.
 - Renamed/moved files lose their favorite and history.
-- Per-game emulator override and purging missing entries have no UI yet.
 - Adding a folder requires typing its path; there is no on-screen keyboard or folder browser.
-- Not tested with real collections. A synthetic measurement (Release build, 4-core container, 10 000 files): scan ≈0.2 s on the worker thread, first database merge 138 ms, unchanged-rescan merge 77 ms, loading the entries 30 ms, search + sort 8 ms. The 100 000-file and depth limits are enforced.
+- Not tested with real collections. A synthetic measurement (Release build, 4-core container, 10 000 files, `NEXORA_LIBRARY_BENCH=1 tst_gamelibrary benchmarkEventLoopStall`): scan + merge 0.16–0.25 s, all on the worker thread; the longest stall of the UI event loop during a scan is 5–6 ms (the timer resolution of the measurement), down from 118–139 ms (first scan) and 72–95 ms (unchanged rescan) when the merge ran on the UI thread. Rebuilding the visible lists afterwards (search + sort) takes about 8 ms on the UI thread. The 100 000-file and depth limits are enforced.

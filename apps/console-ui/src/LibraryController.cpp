@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QLocale>
 
 #include <utility>
 
@@ -185,13 +186,23 @@ bool LibraryController::refresh()
 
 bool LibraryController::launch(qint64 gameId)
 {
+    return launchEntry(gameId, {}, true);
+}
+
+bool LibraryController::launchWithProfile(qint64 gameId, const QString &profileId)
+{
+    return launchEntry(gameId, profileId, false);
+}
+
+bool LibraryController::launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile)
+{
     const auto entry = m_library->entry(gameId);
     if (!entry || !entry->present) {
         emit notice(QStringLiteral("This game is no longer in the library"), true);
         return false;
     }
     m_pendingLaunch = gameId;
-    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->title)) {
+    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->title, profileId, applyDefaultProfile)) {
         m_pendingLaunch = 0;
         return false;
     }
@@ -241,7 +252,78 @@ bool LibraryController::removeDirectory(const QString &path)
 
 int LibraryController::purgeMissing()
 {
-    return m_library->purgeMissing();
+    if (!m_library->isOpen())
+        return 0;
+    const int removed = m_library->purgeMissing();
+    emit notice(removed > 0 ? QStringLiteral("Removed %1 missing game(s) and their history").arg(removed)
+                            : QStringLiteral("No missing games to remove"),
+                false);
+    return removed;
+}
+
+QVariantMap LibraryController::gameDetails(qint64 gameId) const
+{
+    const auto entry = m_library->entry(gameId);
+    if (!entry)
+        return {};
+    const QString effective = entry->emulatorId();
+    QVariantList emulators;
+    for (const QString &id : entry->emulatorCandidates) {
+        const auto it = m_emulatorInfo.constFind(id);
+        const QString reason = it != m_emulatorInfo.cend() ? it->second : m_app->unavailableReason(id);
+        emulators.append(QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("name"), it != m_emulatorInfo.cend() && !it->first.isEmpty() ? it->first : id},
+            {QStringLiteral("available"), reason.isEmpty()},
+            {QStringLiteral("reason"), reason},
+            {QStringLiteral("selected"), id == effective},
+        });
+    }
+    QVariantList profiles;
+    const QString defaultProfile = m_settings->mapValue(Settings::EmulatorDefaultProfiles).value(effective).toString();
+    for (const auto &config : m_app->enabledEmulators()) {
+        if (config.id != effective)
+            continue;
+        for (const auto &p : config.profiles) {
+            if (p.enabled)
+                profiles.append(QVariantMap{{QStringLiteral("id"), p.id},
+                                            {QStringLiteral("name"), p.name},
+                                            {QStringLiteral("isDefault"), p.id == defaultProfile}});
+        }
+    }
+    const QString overrideId = entry->emulatorOverride;
+    return {
+        {QStringLiteral("gameId"), entry->id},
+        {QStringLiteral("title"), entry->title},
+        {QStringLiteral("path"), entry->path},
+        {QStringLiteral("size"), QLocale::c().formattedDataSize(entry->size)},
+        {QStringLiteral("present"), entry->present},
+        {QStringLiteral("favorite"), entry->favorite},
+        {QStringLiteral("playCount"), entry->playCount},
+        {QStringLiteral("lastPlayed"),
+         entry->lastPlayed.isValid() ? entry->lastPlayed.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))
+                                     : QString()},
+        {QStringLiteral("emulatorId"), effective},
+        {QStringLiteral("automatic"), overrideId.isEmpty() || !entry->emulatorCandidates.contains(overrideId)},
+        {QStringLiteral("emulators"), emulators},
+        {QStringLiteral("profiles"), profiles},
+    };
+}
+
+bool LibraryController::setGameEmulator(qint64 gameId, const QString &emulatorId)
+{
+    const auto entry = m_library->entry(gameId);
+    if (!entry)
+        return false;
+    if (!emulatorId.isEmpty() && !entry->emulatorCandidates.contains(emulatorId)) {
+        emit notice(QStringLiteral("\"%1\" does not handle %2 files").arg(emulatorId, entry->extension), true);
+        return false;
+    }
+    if (!m_library->setEmulatorOverride(gameId, emulatorId)) {
+        emit notice(QStringLiteral("Could not save the emulator choice for %1").arg(entry->title), true);
+        return false;
+    }
+    return true;
 }
 
 void LibraryController::rebuildEmulatorInfo()

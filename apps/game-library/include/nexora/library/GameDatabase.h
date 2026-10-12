@@ -35,8 +35,9 @@ public:
     // Opens (creating if needed) |path|. A file that is not a usable database is moved to
     // <path>.corrupt-<timestamp> (with its -wal file) and a new one is created. A database
     // from a newer schema or a busy/locked one is left untouched and open() fails.
-    // ":memory:" is accepted.
-    bool open(const QString &path);
+    // ":memory:" is accepted. With |allowRecovery| false an unusable file is never moved
+    // aside (used for the scan worker's second connection, while the owner holds the file).
+    bool open(const QString &path, bool allowRecovery = true);
     void close();
     bool isOpen() const;
     QString lastError() const { return m_lastError; }
@@ -44,6 +45,9 @@ public:
 
     // Merges a scan: upserts found files and marks entries under |result.scannedRoots| (and
     // entries whose root is no longer in |configuredRoots|) that were not found as missing.
+    // Runs in one BEGIN IMMEDIATE transaction, so concurrent writers on other connections
+    // wait (busy timeout) instead of failing the merge. Never touches favorites, play
+    // history or emulator overrides.
     std::optional<ApplyStats> applyScan(const ScanResult &result, const QStringList &configuredRoots);
 
     QList<GameEntry> entries(bool includeMissing = false) const;
@@ -53,6 +57,7 @@ public:
     bool setEmulatorOverride(qint64 id, const QString &emulatorId);
     // Removes entries that are not present (explicit user action).
     int purgeMissing();
+    int missingCount() const;
 
     QString meta(const QString &key) const;
     bool setMeta(const QString &key, const QString &value);

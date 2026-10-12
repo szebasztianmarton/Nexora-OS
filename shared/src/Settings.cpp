@@ -142,10 +142,11 @@ Validator stringMap(const QRegularExpression &keyRe, const QRegularExpression &v
 
 QVariantMap defaultMapping()
 {
-    return {{QStringLiteral("accept"), QStringLiteral("south")}, {QStringLiteral("back"), QStringLiteral("east")},
-            {QStringLiteral("menu"), QStringLiteral("start")},   {QStringLiteral("favorite"), QStringLiteral("north")},
-            {QStringLiteral("search"), QStringLiteral("west")},  {QStringLiteral("prevTab"), QStringLiteral("l1")},
-            {QStringLiteral("nextTab"), QStringLiteral("r1")},   {QStringLiteral("gameBar"), QStringLiteral("guide")}};
+    return {{QStringLiteral("accept"), QStringLiteral("south")},  {QStringLiteral("back"), QStringLiteral("east")},
+            {QStringLiteral("menu"), QStringLiteral("start")},    {QStringLiteral("favorite"), QStringLiteral("north")},
+            {QStringLiteral("search"), QStringLiteral("west")},   {QStringLiteral("prevTab"), QStringLiteral("l1")},
+            {QStringLiteral("nextTab"), QStringLiteral("r1")},    {QStringLiteral("gameBar"), QStringLiteral("guide")},
+            {QStringLiteral("options"), QStringLiteral("select")}};
 }
 
 } // namespace
@@ -154,7 +155,7 @@ const QList<Settings::Spec> &Settings::specs()
 {
     static const QRegularExpression id(QStringLiteral("^[a-z0-9][a-z0-9_-]{0,63}$"));
     static const QRegularExpression action(
-        QStringLiteral("^(accept|back|menu|favorite|search|prevTab|nextTab|gameBar)$"));
+        QStringLiteral("^(accept|back|menu|favorite|search|prevTab|nextTab|gameBar|options)$"));
     static const QRegularExpression button(QStringLiteral("^(south|east|west|north|start|select|guide|l1|r1)$"));
     static const QList<Spec> list{
         {UiLanguage, QStringLiteral("en"), QStringLiteral("Interface language"), oneOf({QStringLiteral("en")})},
