@@ -23,3 +23,7 @@ nexora_add_test(tst_launchhistory SOURCES tst_launchhistory.cpp LIBS nexora_emul
 nexora_add_test(tst_hardwareinfo SOURCES tst_hardwareinfo.cpp LIBS nexora_system LABELS unit)
 target_compile_definitions(tst_hardwareinfo PRIVATE NEXORA_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures")
 nexora_add_test(tst_diagnosticreport SOURCES tst_diagnosticreport.cpp LIBS nexora_system LABELS unit)
+nexora_add_test(tst_version SOURCES tst_version.cpp LIBS nexora_update LABELS unit)
+nexora_add_test(tst_updatemanifest SOURCES tst_updatemanifest.cpp LIBS nexora_update LABELS unit)
+nexora_add_test(tst_signatureverifier SOURCES tst_signatureverifier.cpp
+    LIBS nexora_update nexora_update_testsupport OpenSSL::Crypto LABELS unit)

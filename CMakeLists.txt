@@ -65,6 +65,9 @@ if(NOT Qt6_FOUND)
         "For a custom Qt installation pass -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/gcc_64.")
 endif()
 
+# Ed25519 signature verification for signed update bundles (apps/update).
+find_package(OpenSSL 3 REQUIRED COMPONENTS Crypto)
+
 qt_standard_project_setup()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
@@ -79,6 +82,7 @@ add_subdirectory(shared)
 add_subdirectory(apps/emulator-manager)
 add_subdirectory(apps/game-library)
 add_subdirectory(apps/system)
+add_subdirectory(apps/update)
 add_subdirectory(apps/console-ui)
 
 if(NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING)
@@ -92,6 +96,12 @@ install(FILES config/emulators/example.json
 configure_file(config/systems/systems.json ${PROJECT_BINARY_DIR}/share/nexora/systems.json COPYONLY)
 install(FILES config/systems/systems.json
         DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora)
+
+# Trusted update signing keys (*.pem). Empty by default in both the dev build tree and the
+# installed image: no key means updates are impossible (fail closed). See docs/update-system.md.
+set(NEXORA_UPDATE_KEYS_DIR ${PROJECT_BINARY_DIR}/share/nexora/update-keys)
+file(MAKE_DIRECTORY ${NEXORA_UPDATE_KEYS_DIR})
+install(DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/update-keys)
 
 if(BUILD_TESTING)
     enable_testing()
