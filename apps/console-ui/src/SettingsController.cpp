@@ -112,6 +112,10 @@ bool SettingsController::showHints() const
 {
     return m_settings->boolValue(Settings::UiShowHints);
 }
+bool SettingsController::tutorialCompleted() const
+{
+    return m_settings->boolValue(Settings::UiTutorialCompleted);
+}
 QString SettingsController::sortOrder() const
 {
     return m_settings->stringValue(Settings::LibrarySortOrder);

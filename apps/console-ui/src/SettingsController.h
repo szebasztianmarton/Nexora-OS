@@ -35,6 +35,7 @@ class SettingsController : public QObject
     Q_PROPERTY(int volume READ volume WRITE setVolume NOTIFY changed)
     Q_PROPERTY(bool volumeSupported READ volumeSupported CONSTANT)
     Q_PROPERTY(bool showHints READ showHints WRITE setShowHints NOTIFY changed)
+    Q_PROPERTY(bool tutorialCompleted READ tutorialCompleted WRITE setTutorialCompleted NOTIFY changed)
     Q_PROPERTY(QString sortOrder READ sortOrder WRITE setSortOrder NOTIFY changed)
     Q_PROPERTY(QString inputBackend READ inputBackend WRITE setInputBackend NOTIFY changed)
     Q_PROPERTY(int deadzone READ deadzone WRITE setDeadzone NOTIFY changed)
@@ -72,6 +73,8 @@ public:
     bool volumeSupported() const;
     bool showHints() const;
     void setShowHints(bool value) { set(QStringLiteral("ui.showHints"), value); }
+    bool tutorialCompleted() const;
+    void setTutorialCompleted(bool value) { set(QStringLiteral("ui.tutorialCompleted"), value); }
     QString sortOrder() const;
     void setSortOrder(const QString &value) { set(QStringLiteral("library.sortOrder"), value); }
     QString inputBackend() const;
