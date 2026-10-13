@@ -161,6 +161,8 @@ const QList<Settings::Spec> &Settings::specs()
     static const QList<Spec> list{
         {UiLanguage, QStringLiteral("en"), QStringLiteral("Interface language"), oneOf({QStringLiteral("en")})},
         {UiShowHints, true, QStringLiteral("Show the control hint bar"), boolean()},
+        {UiTutorialCompleted, false, QStringLiteral("The first-start tutorial has been finished or skipped"),
+         boolean()},
         {LibrarySortOrder, QStringLiteral("title"), QStringLiteral("Default game library sort order"),
          oneOf(
              {QStringLiteral("title"), QStringLiteral("recent"), QStringLiteral("emulator"), QStringLiteral("added")})},

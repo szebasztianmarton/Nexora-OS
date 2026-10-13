@@ -32,6 +32,7 @@ public:
     // Keys (flat, dotted).
     static inline const QString UiLanguage = QStringLiteral("ui.language");
     static inline const QString UiShowHints = QStringLiteral("ui.showHints");
+    static inline const QString UiTutorialCompleted = QStringLiteral("ui.tutorialCompleted");
     static inline const QString LibrarySortOrder = QStringLiteral("library.sortOrder");
     static inline const QString LibraryDirectories = QStringLiteral("library.directories");
     static inline const QString LibraryExtensions = QStringLiteral("library.extensions");

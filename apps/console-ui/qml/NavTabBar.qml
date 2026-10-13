@@ -76,7 +76,8 @@ FocusScope {
 
                 Accessible.role: Accessible.PageTab
                 Accessible.name: modelData.title
-                Accessible.selected: current
+                Accessible.checkable: true
+                Accessible.checked: current
                 Accessible.description: "Tab"
                 Accessible.onPressAction: bar.tabRequested(index)
 
