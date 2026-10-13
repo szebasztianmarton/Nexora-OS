@@ -81,14 +81,14 @@ QString EvdevGamepadBackend::statusText() const
     return m_status;
 }
 
-QStringList EvdevGamepadBackend::deviceNames() const
+QList<EvdevGamepadBackend::DeviceInfo> EvdevGamepadBackend::devices() const
 {
-    QStringList names;
+    QList<DeviceInfo> list;
     for (const auto &device : m_devices) {
         if (device->fd >= 0)
-            names.append(device->name);
+            list.append({device->path, device->name});
     }
-    return names;
+    return list;
 }
 
 void EvdevGamepadBackend::scheduleRescan()

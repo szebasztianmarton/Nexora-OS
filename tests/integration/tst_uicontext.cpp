@@ -1,9 +1,12 @@
 // The full backend object graph used by the UI (UiContext), with the fake emulator,
 // temporary settings/database files and a temporary game directory.
+#include "SystemListModel.h"
 #include "UiContext.h"
 #include "input/GamepadNavigator.h"
 #include "input/InputBackend.h"
 #include "input/InputController.h"
+
+#include "nexora/shared/DataLayout.h"
 
 #include <QDir>
 #include <QFile>
@@ -36,7 +39,7 @@ public:
     bool start() override { return true; }
     QString name() const override { return QStringLiteral("fake"); }
     QString statusText() const override { return QStringLiteral("fake pad"); }
-    QStringList deviceNames() const override { return {QStringLiteral("Fake Pad")}; }
+    QList<DeviceInfo> devices() const override { return {{QStringLiteral("fake0"), QStringLiteral("Fake Pad")}}; }
 };
 
 class TestUiContext : public QObject
@@ -48,14 +51,18 @@ private:
 
     QString configDir() const { return m_dir.filePath(QStringLiteral("emulators")); }
     QString gamesDir() const { return m_dir.filePath(QStringLiteral("games")); }
+    shared::DataLayout layout() const { return shared::DataLayout::underRoot(m_dir.filePath(QStringLiteral("state"))); }
+    // BackupService always restores to <layout.configDir>/settings.json, so the settings
+    // userFile has to be that exact path for backup/restore to round-trip anything real.
+    QString settingsFile() const { return layout().configDir + QStringLiteral("/settings.json"); }
 
     ui::UiContext::Options options() const
     {
         ui::UiContext::Options o;
-        o.app = {configDir(), QStringLiteral("test"), {}, false};
-        o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))},
-                      m_dir.filePath(QStringLiteral("user/settings.json"))};
-        o.databasePath = m_dir.filePath(QStringLiteral("data/library.sqlite"));
+        o.app = {configDir(), QStringLiteral("test"), {}, false, {}};
+        o.settings = {{m_dir.filePath(QStringLiteral("system-defaults.json"))}, settingsFile()};
+        o.layout = layout();
+        o.databasePath = layout().dataDir + QStringLiteral("/library.sqlite");
         o.platformOverride = QStringLiteral("desktop");
         return o;
     }
@@ -85,6 +92,97 @@ private slots:
         write(gamesDir() + QStringLiteral("/Space Quest.rom"), "rom");
         write(gamesDir() + QStringLiteral("/Alpha.rom"), "rom");
         write(gamesDir() + QStringLiteral("/readme.txt"), "not a game");
+    }
+
+    void gameOptionsDefaultProfilesAndPurge()
+    {
+        // A second emulator for the same extension makes the emulator choice meaningful.
+        write(configDir() + QStringLiteral("/fake2.json"),
+              "{\"id\":\"fake2\",\"name\":\"Fake Two\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".rom\"]}");
+        qint64 alpha = 0;
+        {
+            ui::UiContext ctx(options());
+            ctx.start();
+            QVERIFY(ctx.library()->addDirectory(gamesDir()));
+            waitForScan(ctx);
+            for (const auto &e : ctx.gameLibrary().entries()) {
+                if (e.title == QStringLiteral("Alpha"))
+                    alpha = e.id;
+            }
+            QVERIFY(alpha > 0);
+
+            QVariantMap details = ctx.library()->gameDetails(alpha);
+            QCOMPARE(details.value(QStringLiteral("title")).toString(), QStringLiteral("Alpha"));
+            QCOMPARE(details.value(QStringLiteral("emulators")).toList().size(), 2);
+            QVERIFY(details.value(QStringLiteral("automatic")).toBool());
+            QCOMPARE(details.value(QStringLiteral("emulatorId")).toString(), QStringLiteral("fake"));
+            // Only enabled profiles of the effective emulator are offered.
+            const QVariantList profiles = details.value(QStringLiteral("profiles")).toList();
+            QCOMPARE(profiles.size(), 1);
+            QCOMPARE(profiles.first().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("long"));
+            QVERIFY(!profiles.first().toMap().value(QStringLiteral("isDefault")).toBool());
+
+            // Emulator choice: only candidates for the extension are accepted.
+            QSignalSpy notices(ctx.library(), &ui::LibraryController::notice);
+            QVERIFY(!ctx.library()->setGameEmulator(alpha, QStringLiteral("unknown")));
+            QVERIFY(notices.last().at(1).toBool());
+            QVERIFY(ctx.library()->setGameEmulator(alpha, QStringLiteral("fake2")));
+            details = ctx.library()->gameDetails(alpha);
+            QCOMPARE(details.value(QStringLiteral("emulatorId")).toString(), QStringLiteral("fake2"));
+            QVERIFY(!details.value(QStringLiteral("automatic")).toBool());
+            QCOMPARE(
+                ctx.library()->games()->data(ctx.library()->games()->index(ctx.library()->games()->indexOfGame(alpha)),
+                                             ui::GameListModel::EmulatorIdRole),
+                QVariant(QStringLiteral("fake2")));
+        }
+        ui::UiContext ctx(options());
+        ctx.start();
+        // The choice survived the restart; back to automatic.
+        QCOMPARE(ctx.library()->gameDetails(alpha).value(QStringLiteral("emulatorId")).toString(),
+                 QStringLiteral("fake2"));
+        QVERIFY(ctx.library()->setGameEmulator(alpha, QString()));
+        QVERIFY(ctx.library()->gameDetails(alpha).value(QStringLiteral("automatic")).toBool());
+
+        // Default profile: used by a plain launch, skipped by an explicit "no profile" launch.
+        QVERIFY(ctx.settings()->setDefaultProfile(QStringLiteral("fake"), QStringLiteral("long")));
+        QCOMPARE(ctx.settings()->defaultProfile(QStringLiteral("fake")), QStringLiteral("long"));
+        QVERIFY(ctx.library()
+                    ->gameDetails(alpha)
+                    .value(QStringLiteral("profiles"))
+                    .toList()
+                    .first()
+                    .toMap()
+                    .value(QStringLiteral("isDefault"))
+                    .toBool());
+        auto *manager = ctx.app()->manager();
+        QSignalSpy finished(manager, &emulator::EmulatorManager::processFinished);
+        QVERIFY(ctx.library()->launch(alpha));
+        QTRY_COMPARE_WITH_TIMEOUT(manager->state(), emulator::ProcessState::Running, Timeout);
+        QTest::qWait(200);
+        QCOMPARE(manager->state(), emulator::ProcessState::Running); // "long" sleeps
+        QVERIFY(ctx.app()->stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+
+        QVERIFY(ctx.library()->launchWithProfile(alpha, QString()));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, Timeout);
+        QCOMPARE(manager->lastOutcome().finalState, emulator::ProcessState::Exited);
+        QVERIFY2(
+            manager->capturedStdout().contains(QStringLiteral("arg: ") + gamesDir() + QStringLiteral("/Alpha.rom")),
+            qPrintable(manager->capturedStdout()));
+
+        QVERIFY(ctx.settings()->setDefaultProfile(QStringLiteral("fake"), QString()));
+        QCOMPARE(ctx.settings()->defaultProfile(QStringLiteral("fake")), QString());
+
+        // Missing games are kept until removed explicitly.
+        QCOMPARE(ctx.library()->missingCount(), 0);
+        QVERIFY(QFile::remove(gamesDir() + QStringLiteral("/Space Quest.rom")));
+        QVERIFY(ctx.library()->refresh());
+        waitForScan(ctx);
+        QCOMPARE(ctx.library()->missingCount(), 1);
+        QCOMPARE(ctx.library()->purgeMissing(), 1);
+        QCOMPARE(ctx.library()->missingCount(), 0);
+        QCOMPARE(ctx.library()->totalCount(), 1);
     }
 
     void settingsPersistAcrossRestarts()
@@ -121,9 +219,59 @@ private slots:
         QCOMPARE(again.library()->games()->rowCount(), 2);
     }
 
+    void removedGamePersistsAcrossRestart()
+    {
+        qint64 id = 0;
+        {
+            ui::UiContext ctx(options());
+            ctx.start();
+            QVERIFY(ctx.library()->addDirectory(gamesDir()));
+            waitForScan(ctx);
+            id = ctx.library()->games()->gameIdAt(0);
+            QVERIFY(ctx.library()->removeGame(id));
+            QCOMPARE(ctx.library()->games()->rowCount(), 1);
+        }
+        ui::UiContext again(options());
+        again.start();
+        waitForScan(again);
+        QCOMPARE(again.library()->games()->rowCount(), 1);
+        for (int i = 0; i < again.library()->games()->rowCount(); ++i)
+            QVERIFY(again.library()->games()->gameIdAt(i) != id);
+        // Restoring it brings it back.
+        QCOMPARE(again.library()->restoreRemovedGames(), 1);
+        QCOMPARE(again.library()->games()->rowCount(), 2);
+    }
+
+    void gameDetailsHasExpectedKeysAndRedactsThePath()
+    {
+        const QByteArray previousHome = qgetenv("HOME");
+        qputenv("HOME", m_dir.path().toUtf8()); // so defaultRedactionRules() matches gamesDir()
+
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+
+        const QVariantMap details = ctx.library()->gameDetails(id);
+        for (const char *key : {"id", "title", "originalTitle", "path", "systemId", "systemName", "systemCandidates",
+                                "emulatorId", "emulatorName", "emulatorCandidates", "favorite", "playCount",
+                                "lastPlayed", "addedAt", "present", "notes"}) {
+            QVERIFY2(details.contains(QLatin1String(key)), key);
+        }
+        QCOMPARE(details.value(QStringLiteral("id")).toLongLong(), id);
+        QVERIFY(details.value(QStringLiteral("present")).toBool());
+        QVERIFY2(details.value(QStringLiteral("path")).toString().startsWith(QLatin1Char('~')),
+                 qPrintable(details.value(QStringLiteral("path")).toString()));
+        QVERIFY(!details.value(QStringLiteral("path")).toString().contains(m_dir.path()));
+        QCOMPARE(ctx.library()->gameDetails(-1), QVariantMap());
+
+        qputenv("HOME", previousHome);
+    }
+
     void corruptedSettingsFallBackToDefaults()
     {
-        write(m_dir.filePath(QStringLiteral("user/settings.json")), "{ definitely not json");
+        write(settingsFile(), "{ definitely not json");
         write(m_dir.filePath(QStringLiteral("system-defaults.json")),
               "{\"version\":1,\"settings\":{\"audio.volume\":55,\"library.directories\":[\"" + gamesDir().toUtf8()
                   + "\"]}}");
@@ -137,7 +285,7 @@ private slots:
 
     void invalidMappingIsReportedAndIgnored()
     {
-        write(m_dir.filePath(QStringLiteral("user/settings.json")),
+        write(settingsFile(),
               "{\"version\":1,\"settings\":{\"input.mapping\":{\"accept\":\"south\",\"back\":\"south\"}}}");
         input::InputController input;
         ui::UiContext ctx(options(), &input);
@@ -147,6 +295,31 @@ private slots:
         // Remapping from the UI repairs it.
         QVERIFY(ctx.settings()->remap(QStringLiteral("back"), QStringLiteral("east")));
         QVERIFY(ctx.settings()->issues().isEmpty());
+    }
+
+    void deadzoneIsAppliedLive()
+    {
+        input::InputController input;
+        ui::UiContext ctx(options(), &input);
+        ctx.start();
+        // The stored default (25%) reaches the navigator at start-up.
+        QCOMPARE(ctx.settings()->deadzone(), 25);
+        QCOMPARE(input.navigator()->deadzone(), 0.25);
+
+        ctx.settings()->setDeadzone(40);
+        QCOMPARE(ctx.settings()->deadzone(), 40);
+        QCOMPARE(input.navigator()->deadzone(), 0.4);
+        QCOMPARE(input.navigator()->axisPressThreshold(), 0.64);
+
+        ctx.settings()->setDeadzone(99); // bounded to the 5-60 range the setting allows
+        QCOMPARE(ctx.settings()->deadzone(), 60);
+        QCOMPARE(input.navigator()->deadzone(), 0.6);
+
+        // And it survives a restart.
+        ui::UiContext again(options(), &input);
+        again.start();
+        QCOMPARE(again.settings()->deadzone(), 60);
+        QCOMPARE(input.navigator()->deadzone(), 0.6);
     }
 
     void remapCapturesNextButton()
@@ -204,6 +377,7 @@ private slots:
                  qPrintable(ctx.app()->lastOutput()));
         QCOMPARE(ctx.library()->recentGames()->rowCount(), 1);
         QCOMPARE(ctx.library()->recentGames()->gameIdAt(0), id);
+        QCOMPARE(ctx.app()->launchHistory().size(), 1);
 
         // Search and filters drive the visible list.
         ctx.library()->setSearchText(QStringLiteral("space"));
@@ -302,6 +476,104 @@ private slots:
         QVERIFY(!ctx.system()->lastError().isEmpty());
         QVERIFY(!ctx.system()->statusLines().isEmpty());
         QVERIFY(!ctx.settings()->volumeSupported());
+    }
+
+    void restoreBackupRoundTripsThroughTheController()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        ctx.settings()->setVolume(42);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
+
+        const QString backupPath = ctx.system()->createBackup(false);
+        QVERIFY2(!backupPath.isEmpty(), qPrintable(ctx.system()->lastError()));
+
+        // Change things, then restore: settings and the library content come back.
+        ctx.settings()->setVolume(7);
+        const qint64 removedId = ctx.library()->games()->gameIdAt(0);
+        QVERIFY(ctx.library()->removeGame(removedId));
+        QCOMPARE(ctx.library()->games()->rowCount(), 1);
+
+        QVERIFY2(ctx.system()->restoreBackup(backupPath), qPrintable(ctx.system()->lastError()));
+        QCOMPARE(ctx.settings()->volume(), 42);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
+    }
+
+    // Reloading the Settings store is not enough: a restore must also push the restored
+    // values back out to the live subsystems (volume/mute, controller mapping, deadzone,
+    // log level), or the UI keeps running on stale state until something else re-triggers
+    // it. Deadzone is a good probe: unlike volume it applies unconditionally (no platform
+    // capability check), straight onto the live GamepadNavigator.
+    void restoreBackupReappliesLiveSettingsNotJustTheStore()
+    {
+        input::InputController input;
+        ui::UiContext ctx(options(), &input);
+        ctx.start();
+        ctx.settings()->setDeadzone(40);
+        QCOMPARE(input.navigator()->deadzone(), 0.4);
+
+        const QString backupPath = ctx.system()->createBackup(false);
+        QVERIFY2(!backupPath.isEmpty(), qPrintable(ctx.system()->lastError()));
+
+        // Diverge the live state from the backup without going through another backup.
+        ctx.settings()->setDeadzone(10);
+        QCOMPARE(input.navigator()->deadzone(), 0.1);
+
+        QVERIFY2(ctx.system()->restoreBackup(backupPath), qPrintable(ctx.system()->lastError()));
+        QCOMPARE(ctx.settings()->deadzone(), 40); // the store came back...
+        QCOMPARE(input.navigator()->deadzone(), 0.4); // ...and so did the live navigator state
+    }
+
+    // Exercises LibraryController::rebuildSystems() (the real production path, with a real
+    // GameLibrary, system catalog and emulator set) rather than SystemListModel in
+    // isolation: the "Other" row (unrecognised systemId) must appear exactly when there is
+    // at least one such game, and disappear again once there is none.
+    void systemsModelShowsOtherBucketOnlyWhenUnrecognizedGamesExist()
+    {
+        // .sfc is uniquely "snes" in the built-in catalog; .rom is not in the catalog at
+        // all, so a .rom game ends up with no recognised system ("Other").
+        write(configDir() + QStringLiteral("/fake2.json"),
+              "{\"id\":\"fake2\",\"name\":\"Fake2\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".sfc\"]}");
+        QTemporaryDir mixedGames;
+        write(mixedGames.filePath(QStringLiteral("Mario.sfc")), "rom");
+        write(mixedGames.filePath(QStringLiteral("Alpha.rom")), "rom");
+
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(mixedGames.path()));
+        waitForScan(ctx);
+
+        auto rowOf = [&](const QString &systemId) -> int {
+            auto *model = ctx.library()->systems();
+            for (int i = 0; i < model->rowCount(); ++i) {
+                if (model->index(i).data(ui::SystemListModel::SystemIdRole).toString() == systemId)
+                    return i;
+            }
+            return -1;
+        };
+
+        const int snesRow = rowOf(QStringLiteral("snes"));
+        QVERIFY(snesRow >= 0);
+        QCOMPARE(ctx.library()->systems()->index(snesRow).data(ui::SystemListModel::GameCountRole).toInt(), 1);
+        const int otherRow = rowOf(QString());
+        QVERIFY2(otherRow >= 0, "Other should be present: Alpha.rom has no recognised system");
+        QCOMPARE(ctx.library()->systems()->index(otherRow).data(ui::SystemListModel::GameCountRole).toInt(), 1);
+
+        // Hide the one unrecognised-system game: Other must disappear entirely, not shrink
+        // to a zero-count row.
+        qint64 romId = 0;
+        for (int i = 0; i < ctx.library()->games()->rowCount() && romId == 0; ++i) {
+            const qint64 id = ctx.library()->games()->gameIdAt(i);
+            if (ctx.library()->gameDetails(id).value(QStringLiteral("systemId")).toString().isEmpty())
+                romId = id;
+        }
+        QVERIFY(romId != 0);
+        QVERIFY(ctx.library()->removeGame(romId));
+        QCOMPARE(rowOf(QString()), -1);
+        QVERIFY(rowOf(QStringLiteral("snes")) >= 0); // the recognised bucket is unaffected
     }
 };
 

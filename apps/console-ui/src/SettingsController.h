@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 namespace nexora::shared {
@@ -36,12 +37,23 @@ class SettingsController : public QObject
     Q_PROPERTY(bool showHints READ showHints WRITE setShowHints NOTIFY changed)
     Q_PROPERTY(QString sortOrder READ sortOrder WRITE setSortOrder NOTIFY changed)
     Q_PROPERTY(QString inputBackend READ inputBackend WRITE setInputBackend NOTIFY changed)
+    Q_PROPERTY(int deadzone READ deadzone WRITE setDeadzone NOTIFY changed)
     Q_PROPERTY(QVariantList mappingRows READ mappingRows NOTIFY changed)
     Q_PROPERTY(QString capturingAction READ capturingAction NOTIFY capturingChanged)
     Q_PROPERTY(bool controllerAvailable READ controllerAvailable NOTIFY changed)
     Q_PROPERTY(QStringList issues READ issues NOTIFY changed)
     Q_PROPERTY(QString userFile READ userFile CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY changed)
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY changed)
+    Q_PROPERTY(int uiScale READ uiScale WRITE setUiScale NOTIFY changed)
+    Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY changed)
+    Q_PROPERTY(QString startScreen READ startScreen WRITE setStartScreen NOTIFY changed)
+    Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY changed)
+    Q_PROPERTY(QString logLevel READ logLevel WRITE setLogLevel NOTIFY changed)
+    // Default emulator id per game system id (only systems with an override are present);
+    // a reactive mirror of setDefaultEmulatorForSystem()/defaultEmulatorForSystem() so QML
+    // can bind to it directly instead of re-invoking the getter by hand.
+    Q_PROPERTY(QVariantMap defaultEmulators READ defaultEmulators NOTIFY changed)
 
 public:
     SettingsController(shared::Settings *settings, input::InputController *input, system::SystemIntegration *system,
@@ -64,6 +76,9 @@ public:
     void setSortOrder(const QString &value) { set(QStringLiteral("library.sortOrder"), value); }
     QString inputBackend() const;
     void setInputBackend(const QString &value) { set(QStringLiteral("input.backend"), value); }
+    // Analog stick dead zone in percent (5-60); applied to the running navigator at once.
+    int deadzone() const;
+    void setDeadzone(int percent) { set(QStringLiteral("input.deadzone"), qBound(5, percent, 60)); }
     QVariantList mappingRows() const;
     QString capturingAction() const { return m_capturing; }
     // A gamepad backend is running (remap capture is only offered then).
@@ -71,6 +86,23 @@ public:
     QStringList issues() const;
     QString userFile() const;
     QString lastError() const { return m_lastError; }
+    QString theme() const;
+    void setTheme(const QString &value) { set(QStringLiteral("ui.theme"), value); }
+    int uiScale() const;
+    void setUiScale(int percent) { set(QStringLiteral("ui.scale"), qBound(75, percent, 150)); }
+    bool reducedMotion() const;
+    void setReducedMotion(bool value) { set(QStringLiteral("ui.reducedMotion"), value); }
+    QString startScreen() const;
+    void setStartScreen(const QString &value) { set(QStringLiteral("ui.startScreen"), value); }
+    bool muted() const;
+    void setMuted(bool value) { set(QStringLiteral("audio.muted"), value); }
+    QString logLevel() const;
+    void setLogLevel(const QString &value) { set(QStringLiteral("log.level"), value); }
+    QVariantMap defaultEmulators() const;
+
+    // Default emulator id for a game system id; "" clears the default / means none set.
+    Q_INVOKABLE bool setDefaultEmulatorForSystem(const QString &systemId, const QString &emulatorId);
+    Q_INVOKABLE QString defaultEmulatorForSystem(const QString &systemId) const;
 
     // Cycles a list-valued option (display mode, resolution, sort, backend) by |step|.
     Q_INVOKABLE void cycle(const QString &key, int step);
@@ -80,6 +112,10 @@ public:
     // Applies a binding directly (also used when no controller is present / in tests).
     Q_INVOKABLE bool remap(const QString &action, const QString &button);
     Q_INVOKABLE bool resetToDefaults();
+    // emulators.defaultProfiles: the profile used when an emulator or game is launched
+    // without choosing one. "" = the emulator's own arguments.
+    Q_INVOKABLE QString defaultProfile(const QString &emulatorId) const;
+    Q_INVOKABLE bool setDefaultProfile(const QString &emulatorId, const QString &profileId);
 
     // Applies stored values to the input layer and the system (used at start-up).
     void applyAll();
@@ -92,6 +128,9 @@ signals:
 private:
     bool set(const QString &key, const QVariant &value);
     void applyMapping();
+    void applyDeadzone();
+    void applyVolume();
+    void applyLogLevel();
     void onCaptured(const QString &button);
 
     shared::Settings *m_settings;

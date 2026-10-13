@@ -2,6 +2,7 @@
 
 #include "input/InputController.h"
 
+#include "nexora/emulator/LaunchHistory.h"
 #include "nexora/shared/Logging.h"
 
 namespace nexora::ui {
@@ -14,6 +15,7 @@ AppController::AppController(const Options &options, QObject *parent)
 {
     connect(&m_manager, &emulator::EmulatorManager::stateChanged, this, &AppController::onManagerStateChanged);
     connect(&m_manager, &emulator::EmulatorManager::processFinished, this, &AppController::onProcessFinished);
+    connect(&m_manager, &emulator::EmulatorManager::pausedChanged, this, &AppController::pausedChanged);
     // Coalesce output notifications: a chatty emulator must not re-render the UI per chunk.
     m_outputNotifyTimer.setSingleShot(true);
     m_outputNotifyTimer.setInterval(250);
@@ -22,6 +24,7 @@ AppController::AppController(const Options &options, QObject *parent)
         if (!m_outputNotifyTimer.isActive())
             m_outputNotifyTimer.start();
     });
+    m_manager.setOutputLogDirectory(options.emulatorLogDirectory);
     reloadConfig();
 }
 
@@ -33,6 +36,10 @@ void AppController::setInputController(input::InputController *input)
     if (m_input) {
         connect(m_input, &input::InputController::statusChanged, this, &AppController::inputChanged);
         connect(m_input, &input::InputController::returnToLauncherRequested, this, &AppController::returnToLauncher);
+        connect(m_input, &input::InputController::deviceDisconnected, this, [this](const QString &name) {
+            if (isBusy())
+                setStatusMessage(QStringLiteral("Controller disconnected: %1").arg(name), true);
+        });
     }
     updateInputSuspension();
     emit inputChanged();
@@ -76,7 +83,19 @@ QString AppController::inputStatus() const
 
 QStringList AppController::inputDevices() const
 {
-    return m_input ? m_input->devices() : QStringList{};
+    QStringList names;
+    if (!m_input)
+        return names;
+    const QVariantList devices = m_input->devices();
+    names.reserve(devices.size());
+    for (const QVariant &device : devices)
+        names.append(device.toMap().value(QStringLiteral("name")).toString());
+    return names;
+}
+
+QString AppController::emulatorLogPath() const
+{
+    return m_manager.outputLogPath().isEmpty() ? m_manager.outputLogDirectory() : m_manager.outputLogPath();
 }
 
 QString AppController::version() const
@@ -106,7 +125,7 @@ bool AppController::launchProfile(const QString &emulatorId, const QString &prof
 }
 
 bool AppController::launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                               const QString &profileId)
+                               const QString &profileId, bool applyDefaultProfile)
 {
     const auto config = m_model.find(emulatorId);
     if (!config) {
@@ -117,7 +136,7 @@ bool AppController::launchGame(const QString &emulatorId, const QString &gamePat
         return false;
     }
     QString profile = profileId;
-    if (profile.isEmpty()) {
+    if (profile.isEmpty() && applyDefaultProfile) {
         profile = m_defaultProfiles.value(emulatorId).toString();
         const auto *p = config->profile(profile);
         if (!p || !p->enabled)
@@ -142,6 +161,8 @@ bool AppController::startLaunch(const emulator::LaunchRequest &request)
         m_activeName = !request.displayName.isEmpty() ? request.displayName
             : config.name.isEmpty()                   ? config.id
                                                       : config.name;
+        m_activeProfileId = request.profileId;
+        m_activePausable = config.pausable;
     }
     const auto result = m_manager.launch(request);
     if (!result.accepted) {
@@ -159,6 +180,47 @@ bool AppController::startLaunch(const emulator::LaunchRequest &request)
 bool AppController::stop()
 {
     return m_manager.stop();
+}
+
+bool AppController::canPause() const
+{
+    return m_activePausable && (m_manager.state() == ProcessState::Running || m_manager.isPaused());
+}
+
+bool AppController::pause()
+{
+    return m_manager.pause();
+}
+
+bool AppController::resume()
+{
+    return m_manager.resume();
+}
+
+QVariantList AppController::launchHistory() const
+{
+    QVariantList list;
+    if (!m_history)
+        return list;
+    const QList<emulator::LaunchRecord> records = m_history->records(); // newest first
+    for (const auto &r : records) {
+        if (list.size() >= 10)
+            break;
+        list.append(QVariantMap{
+            {QStringLiteral("emulatorId"), r.emulatorId},
+            {QStringLiteral("profileId"), r.profileId},
+            {QStringLiteral("gameTitle"), r.gameTitle},
+            {QStringLiteral("startedAt"),
+             r.startedAt.isValid() ? r.startedAt.toUTC().toString(Qt::ISODate) : QString()},
+            {QStringLiteral("endedAt"), r.endedAt.isValid() ? r.endedAt.toUTC().toString(Qt::ISODate) : QString()},
+            {QStringLiteral("finalState"), r.finalState},
+            {QStringLiteral("error"), r.error},
+            {QStringLiteral("exitCode"), r.exitCode ? QVariant(*r.exitCode) : QVariant()},
+            {QStringLiteral("startupFailure"), r.startupFailure},
+            {QStringLiteral("stderrTail"), r.stderrTail},
+        });
+    }
+    return list;
 }
 
 bool AppController::returnToLauncher()
@@ -253,6 +315,24 @@ void AppController::onProcessFinished(const QString &emulatorId, const emulator:
     else
         m_model.setStatus(emulatorId, QStringLiteral("exited"), QStringLiteral("Exited"), outcome.message);
     setStatusMessage(outcome.message, failed);
+    if (m_history) {
+        emulator::LaunchRecord record;
+        record.emulatorId = emulatorId;
+        record.profileId = m_activeProfileId;
+        record.gameTitle = m_activeName;
+        record.startedAt = outcome.startedAt;
+        record.endedAt = outcome.endedAt;
+        record.pid = outcome.pid;
+        record.finalState = emulator::nameOf(outcome.finalState);
+        record.error = outcome.error != emulator::EmulatorError::None ? emulator::nameOf(outcome.error) : QString();
+        record.exitCode = outcome.exitCode;
+        record.startupFailure = outcome.startupFailure;
+        record.stderrTail = m_manager.capturedStderr();
+        QString historyError;
+        if (!m_history->append(record, &historyError))
+            qCWarning(lcUi).noquote() << "Could not record launch history:" << historyError;
+        emit launchHistoryChanged();
+    }
     m_outputNotifyTimer.stop();
     updateInputSuspension();
     emit lastOutputChanged();

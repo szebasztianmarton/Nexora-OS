@@ -17,7 +17,7 @@ env:
     qt6-base-dev qt6-declarative-dev
     qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtqml-models
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates
-    qml6-module-qtquick-layouts qml6-module-qtquick-window
+    qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qttest
     libqt6sql6-sqlite libgl-dev
   SDL3_TAG: release-3.2.30
 
@@ -99,6 +99,24 @@ jobs:
 
       - name: Integration tests
         run: ctest --preset ${{ matrix.preset }} -L integration
+
+      - name: Dashboard screenshots
+        if: matrix.preset == 'ci' && matrix.cc == 'gcc'
+        env:
+          QT_QPA_PLATFORM: offscreen
+          NEXORA_SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
+        run: |
+          mkdir -p "$NEXORA_SCREENSHOT_DIR"
+          build/${{ matrix.preset }}/tests/tst_qmlsmoke gameOptionsDialog emulatorsLaunchAndProfiles
+
+      - name: Upload screenshots
+        if: matrix.preset == 'ci' && matrix.cc == 'gcc'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-screenshots
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Validate configuration files
         run: |

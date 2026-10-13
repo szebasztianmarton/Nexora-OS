@@ -46,6 +46,33 @@ private slots:
         QVERIFY(nexora::shared::recentLogLines().last().contains(QStringLiteral("app line")));
         qInstallMessageHandler(nullptr);
     }
+
+    void logLevelFiltersTheRingBuffer()
+    {
+        nexora::shared::installMessageHandler({});
+        nexora::shared::setLogLevel(QtWarningMsg);
+        qCInfo(lcApp) << "hidden info line";
+        qCDebug(lcApp) << "hidden debug line";
+        qCWarning(lcApp) << "visible warning line";
+        QStringList lines = nexora::shared::recentLogLines();
+        QVERIFY(lines.last().contains(QStringLiteral("visible warning line")));
+        for (const QString &l : lines) {
+            QVERIFY2(!l.contains(QStringLiteral("hidden info line")), qPrintable(l));
+            QVERIFY2(!l.contains(QStringLiteral("hidden debug line")), qPrintable(l));
+        }
+
+        nexora::shared::setLogLevel(QtInfoMsg);
+        qCDebug(lcApp) << "still hidden debug";
+        qCInfo(lcApp) << "now visible info";
+        lines = nexora::shared::recentLogLines();
+        QVERIFY(lines.last().contains(QStringLiteral("now visible info")));
+        QVERIFY(!lines.join(QLatin1Char(0x0a)).contains(QStringLiteral("still hidden debug")));
+
+        nexora::shared::setLogLevel(QtDebugMsg);
+        qCDebug(lcApp) << "debug is on";
+        QVERIFY(nexora::shared::recentLogLines().last().contains(QStringLiteral("debug is on")));
+        qInstallMessageHandler(nullptr);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestLogging)

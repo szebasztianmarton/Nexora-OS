@@ -2,13 +2,17 @@
 #include "input/InputBackend.h"
 #include "input/InputController.h"
 
+#include <QDateTime>
 #include <QKeyEvent>
 #include <QSignalSpy>
 #include <QTest>
 #include <QWindow>
 
 #include <algorithm>
+#include <chrono>
 
+using namespace std::chrono_literals;
+using nexora::input::GamepadAxis;
 using nexora::input::GamepadButton;
 using nexora::input::InputController;
 using nexora::input::NavAction;
@@ -37,6 +41,33 @@ protected:
     void keyReleaseEvent(QKeyEvent *event) override { events.append({QEvent::KeyRelease, event->key()}); }
 };
 
+// Stands in for a gamepad backend whose device list the test drives by hand.
+class FakeBackend : public nexora::input::InputBackend
+{
+public:
+    using InputBackend::InputBackend;
+
+    bool start() override { return true; }
+    QString name() const override { return QStringLiteral("fake"); }
+    QString statusText() const override { return QStringLiteral("%1 fake pad(s)").arg(m_pads.size()); }
+    QList<DeviceInfo> devices() const override { return m_pads; }
+
+    void plug(const QString &id, const QString &name)
+    {
+        m_pads.append({id, name});
+        emit statusChanged();
+    }
+
+    void unplug(const QString &id)
+    {
+        m_pads.removeIf([&](const DeviceInfo &pad) { return pad.id == id; });
+        emit statusChanged();
+    }
+
+private:
+    QList<DeviceInfo> m_pads;
+};
+
 } // namespace
 
 class TestInputController : public QObject
@@ -60,6 +91,10 @@ private slots:
     void startUnknownFails();
     void startAutoNeverFails();
     void restartReplacesBackend();
+    void deviceListTracksBackend();
+    void stoppingBackendDisconnectsDevices();
+    void testModeReportsRawInputAndSuppressesNavigation();
+    void testModeIsLeftByHoldingBack();
 };
 
 void TestInputController::acceptSendsReturn()
@@ -110,6 +145,7 @@ void TestInputController::keyForAction()
     QCOMPARE(InputController::keyForAction(NavAction::Back), int(Qt::Key_Escape));
     QCOMPARE(InputController::keyForAction(NavAction::Menu), int(Qt::Key_Menu));
     QCOMPARE(InputController::keyForAction(NavAction::GameBar), int(Qt::Key_HomePage));
+    QCOMPARE(InputController::keyForAction(NavAction::Options), int(Qt::Key_Context1));
 }
 
 void TestInputController::navigatorFeedsWindow()
@@ -279,11 +315,153 @@ void TestInputController::newActionsAndCapture()
     QCOMPARE(window.count(QEvent::KeyPress, Qt::Key_Escape), 0); // East not delivered as Back
 
     controller.setCapturing(false);
+    controller.navigator()->buttonEvent(GamepadButton::East, false); // let go of the captured button
     auto mapping = controller.mapping();
     mapping.bind(NavAction::Accept, GamepadButton::East);
     controller.setMapping(mapping);
     controller.navigator()->buttonEvent(GamepadButton::East, true);
     QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Return), 1);
+}
+
+void TestInputController::deviceListTracksBackend()
+{
+    InputController controller;
+    auto owned = std::make_unique<FakeBackend>(controller.navigator());
+    FakeBackend *pads = owned.get();
+    pads->plug(QStringLiteral("pad0"), QStringLiteral("Fake Pad"));
+
+    QSignalSpy connected(&controller, &InputController::deviceConnected);
+    QSignalSpy disconnected(&controller, &InputController::deviceDisconnected);
+    QSignalSpy devicesChanged(&controller, &InputController::devicesChanged);
+    QVERIFY(controller.start(std::move(owned)));
+
+    // A pad that was already there when the backend started still counts as a connect.
+    QCOMPARE(connected.size(), 1);
+    QCOMPARE(connected.first().first().toString(), QStringLiteral("Fake Pad"));
+    QCOMPARE(devicesChanged.size(), 1);
+    QCOMPARE(controller.devices().size(), 1);
+    const QVariantMap first = controller.devices().first().toMap();
+    QCOMPARE(first.value(QStringLiteral("id")).toString(), QStringLiteral("pad0"));
+    QCOMPARE(first.value(QStringLiteral("name")).toString(), QStringLiteral("Fake Pad"));
+    QCOMPARE(first.value(QStringLiteral("backend")).toString(), QStringLiteral("fake"));
+    const QString connectedAt = first.value(QStringLiteral("connectedAt")).toString();
+    QVERIFY(QDateTime::fromString(connectedAt, Qt::ISODateWithMs).isValid());
+    QCOMPARE(controller.property("devices").toList().size(), 1);
+
+    pads->plug(QStringLiteral("pad1"), QStringLiteral("Second Pad"));
+    QCOMPARE(connected.size(), 2);
+    QCOMPARE(connected.last().first().toString(), QStringLiteral("Second Pad"));
+    QCOMPARE(controller.devices().size(), 2);
+    // The pad that stayed keeps its original connect time.
+    QCOMPARE(controller.devices().first().toMap().value(QStringLiteral("connectedAt")).toString(), connectedAt);
+    QCOMPARE(disconnected.size(), 0);
+
+    pads->unplug(QStringLiteral("pad0"));
+    QCOMPARE(disconnected.size(), 1);
+    QCOMPARE(disconnected.first().first().toString(), QStringLiteral("Fake Pad"));
+    QCOMPARE(controller.devices().size(), 1);
+    QCOMPARE(controller.devices().first().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("pad1"));
+    QCOMPARE(connected.size(), 2); // nothing new connected
+}
+
+void TestInputController::stoppingBackendDisconnectsDevices()
+{
+    InputController controller;
+    auto owned = std::make_unique<FakeBackend>(controller.navigator());
+    owned->plug(QStringLiteral("pad0"), QStringLiteral("Fake Pad"));
+    QVERIFY(controller.start(std::move(owned)));
+
+    QSignalSpy disconnected(&controller, &InputController::deviceDisconnected);
+    QVERIFY(controller.start(QStringLiteral("none")));
+    QCOMPARE(disconnected.size(), 1);
+    QCOMPARE(disconnected.first().first().toString(), QStringLiteral("Fake Pad"));
+    QVERIFY(controller.devices().isEmpty());
+}
+
+void TestInputController::testModeReportsRawInputAndSuppressesNavigation()
+{
+    RecordingWindow window;
+    InputController controller;
+    controller.setTargetWindowProvider([&window] { return &window; });
+    QSignalSpy raw(&controller, &InputController::rawEvent);
+    QSignalSpy delivered(&controller, &InputController::actionDelivered);
+
+    QVERIFY(!controller.isTestMode());
+    controller.setTestMode(true);
+    QVERIFY(controller.isTestMode());
+
+    controller.navigator()->buttonEvent(GamepadButton::South, true);
+    QCOMPARE(raw.size(), 1);
+    QCOMPARE(raw.last().first().toString(), QStringLiteral("south pressed"));
+    QCOMPARE(controller.lastRawEvent(), QStringLiteral("south pressed"));
+    QCOMPARE(controller.property("lastRawEvent").toString(), QStringLiteral("south pressed"));
+
+    controller.navigator()->buttonEvent(GamepadButton::South, false);
+    QCOMPARE(raw.last().first().toString(), QStringLiteral("south released"));
+    controller.navigator()->buttonEvent(GamepadButton::DpadDown, true);
+    QCOMPARE(raw.last().first().toString(), QStringLiteral("dpadDown pressed"));
+    controller.navigator()->axisEvent(GamepadAxis::LeftX, -0.82);
+    QCOMPARE(raw.last().first().toString(), QStringLiteral("LeftX -0.82"));
+    controller.navigator()->axisEvent(GamepadAxis::HatY, 1.0);
+    QCOMPARE(raw.last().first().toString(), QStringLiteral("HatY 1.00"));
+    QCOMPARE(raw.size(), 5);
+
+    // Nothing navigated while test mode was on.
+    QCoreApplication::processEvents();
+    QTest::qWait(50);
+    QVERIFY(window.events.isEmpty());
+    QCOMPARE(delivered.size(), 0);
+
+    controller.setTestMode(false);
+    QCOMPARE(raw.size(), 5); // no reports once test mode is off
+    controller.navigator()->buttonEvent(GamepadButton::South, true);
+    QTRY_COMPARE(window.count(QEvent::KeyPress, Qt::Key_Return), 1);
+    QCOMPARE(raw.size(), 5);
+}
+
+void TestInputController::testModeIsLeftByHoldingBack()
+{
+    InputController controller;
+    controller.setTargetWindowProvider([] { return static_cast<QWindow *>(nullptr); });
+    QCOMPARE(controller.testModeExitHold(), InputController::kTestModeExitHold);
+    QCOMPARE(controller.testModeExitHold(), 2000ms);
+    controller.setTestModeExitHold(60ms);
+    QSignalSpy exited(&controller, &InputController::testModeExited);
+    QSignalSpy modeChanged(&controller, &InputController::testModeChanged);
+
+    // Outside test mode holding Back is just Back.
+    controller.navigator()->buttonEvent(GamepadButton::East, true);
+    QTest::qWait(150);
+    QCOMPARE(exited.size(), 0);
+    controller.navigator()->buttonEvent(GamepadButton::East, false);
+
+    controller.setTestMode(true);
+    QCOMPARE(modeChanged.size(), 1);
+    controller.navigator()->buttonEvent(GamepadButton::East, true);
+    QCOMPARE(exited.size(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(exited.size(), 1, 2000);
+    QVERIFY(!controller.isTestMode());
+    QCOMPARE(modeChanged.size(), 2);
+
+    // Released too early: test mode stays on.
+    controller.setTestMode(true);
+    controller.navigator()->buttonEvent(GamepadButton::East, true);
+    QTest::qWait(20);
+    controller.navigator()->buttonEvent(GamepadButton::East, false);
+    QTest::qWait(150);
+    QCOMPARE(exited.size(), 1);
+    QVERIFY(controller.isTestMode());
+
+    // The hold follows a remapped Back.
+    auto mapping = controller.mapping();
+    mapping.bind(NavAction::Back, GamepadButton::North);
+    controller.setMapping(mapping);
+    controller.navigator()->buttonEvent(GamepadButton::East, true);
+    QTest::qWait(150);
+    QCOMPARE(exited.size(), 1);
+    controller.navigator()->buttonEvent(GamepadButton::North, true);
+    QTRY_COMPARE_WITH_TIMEOUT(exited.size(), 2, 2000);
+    QVERIFY(!controller.isTestMode());
 }
 
 QTEST_MAIN(TestInputController)

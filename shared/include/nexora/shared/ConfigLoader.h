@@ -11,6 +11,8 @@
 
 namespace nexora::shared {
 
+class SystemCatalog;
+
 struct ConfigIssue
 {
     enum class Severity { Warning, Error };
@@ -44,6 +46,10 @@ struct ConfigLoadResult
 //   workingDirectory  string, optional; relative to the config file's directory
 //   extensions  array of ".ext" strings, optional; game files this emulator handles
 //   stopTimeoutMs     integer 500..60000, optional; graceful-stop timeout before SIGKILL
+//   version     string, optional, at most 64 characters; emulator version for display
+//   systems     array of system ids, optional; ids missing from the catalog (when one is
+//               given) or not shaped like a system id are dropped with a warning
+//   pausable    bool, optional (default false); the emulator may be suspended (SIGSTOP/SIGCONT)
 //   profiles    array of {id, name, emulator?, arguments?, workingDirectory?, enabled?},
 //               optional; ids unique per emulator, "emulator" must equal the emulator id
 // Unknown keys produce a warning and are otherwise ignored.
@@ -54,13 +60,16 @@ public:
     static constexpr int MinStopTimeoutMs = 500;
     static constexpr int MaxStopTimeoutMs = 60000;
     static constexpr int MaxProfiles = 32;
+    static constexpr int MaxVersionLength = 64;
 
-    static ConfigLoadResult loadDirectory(const QString &directory);
+    // |catalog| (optional) is used to check "systems" ids; without it they are only
+    // checked for syntax.
+    static ConfigLoadResult loadDirectory(const QString &directory, const SystemCatalog *catalog = nullptr);
 
     // Parses and validates a single definition. Returns std::nullopt on error and
     // appends human-readable messages to |errors|; non-fatal notes go to |warnings|.
     static std::optional<EmulatorConfig> parse(const QByteArray &json, const QString &sourceFile, QStringList *errors,
-                                               QStringList *warnings = nullptr);
+                                               QStringList *warnings = nullptr, const SystemCatalog *catalog = nullptr);
 
     static bool isValidId(const QString &id);
 };

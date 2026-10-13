@@ -11,6 +11,7 @@ FocusScope {
     required property LibraryController library
 
     signal navigate(string tab)
+    signal optionsRequested(real gameId)
 
     readonly property alias grid: grid
     readonly property real currentGameId: grid.currentGameId
@@ -29,7 +30,8 @@ FocusScope {
             ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Apply filter" },
                { button: "↓", action: "Sort & games" }, { button: "L1 / R1", action: "Switch tab" }]
             : [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Play" },
-               { button: "Y / F", action: "Favorite" }, { button: "X / “/”", action: "Search" },
+               { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
+               { button: "X / “/”", action: "Search" },
                { button: "L1 / R1", action: "Switch tab" }]
 
     function focusSearch() {
@@ -114,7 +116,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "⌕"
                     color: searchField.activeFocus ? Theme.accent : Theme.textMuted
-                    font.pixelSize: 22
+                    font.pixelSize: 22 * Theme.scale
                 }
             }
 
@@ -375,6 +377,9 @@ FocusScope {
                        || (event.key === Qt.Key_F && event.modifiers === Qt.NoModifier)) {
                 screen.library.toggleFavorite(id)
                 event.accepted = true
+            } else if (event.key === Qt.Key_Context1 || (event.key === Qt.Key_O && event.modifiers === Qt.NoModifier)) {
+                screen.optionsRequested(id)
+                event.accepted = true
             }
         }
     }
@@ -411,7 +416,9 @@ FocusScope {
                 y: -4
             }
             RotationAnimation on rotation {
-                running: loading.visible
+                // A continuous spin, not a discrete transition: reducedMotion stops it
+                // outright rather than collapsing its duration to 0.
+                running: loading.visible && !Theme.reducedMotion
                 from: 0
                 to: 360
                 duration: 1100

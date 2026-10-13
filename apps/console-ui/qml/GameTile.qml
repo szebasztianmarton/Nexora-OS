@@ -106,7 +106,7 @@ Item {
                 anchors.centerIn: parent
                 text: "★"
                 color: Theme.favorite
-                font.pixelSize: 18
+                font.pixelSize: 18 * Theme.scale
             }
             MouseArea { anchors.fill: parent; onClicked: tile.favoriteClicked() }
         }

@@ -177,6 +177,10 @@ FocusScope {
                     body: screen.app.logFilePath.length > 0 ? screen.app.logFilePath : "stderr only (use --log-file)"
                 }
                 Section {
+                    heading: "Emulator output log"
+                    body: screen.app.emulatorLogPath.length > 0 ? screen.app.emulatorLogPath : "disabled"
+                }
+                Section {
                     heading: "Game library"
                     body: (screen.library.available ? screen.library.totalCount + " game(s)" : "Library database unavailable")
                           + "\n" + screen.library.lastScanSummary

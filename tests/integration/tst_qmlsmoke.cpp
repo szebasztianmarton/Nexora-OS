@@ -11,9 +11,13 @@
 //   searchField, filterChips, filter_all|favorites|recent, sortSelector, gameGrid,
 //   gamesLoading, gamesEmpty, gamesEmptyAction, scanSummary, resultCount         (Games)
 //   emulatorList, emptyState, statusLine, profilePicker, profileList             (Emulators)
-//   settingLanguage, settingHints, settingSort, settingDisplayMode, settingResolution,
-//   settingVolume, settingBackend, mapping_<action>, libraryDir_<n>, addDirField,
-//   addDirButton, rescanRow, resetRow, rebootRow, powerOffRow, settingsIssues     (Settings)
+//   settingLanguage, settingTheme, settingUiScale, settingReducedMotion, settingHints,
+//   settingSort, settingBackend, settingDeadzone, mapping_<action>, testInputRow,
+//   settingDisplayMode, settingResolution, settingVolume, settingMute, libraryDir_<n>,
+//   addDirField, addDirButton, rescanRow, cancelScanRow, restoreRemovedRow,
+//   defaultEmulator_<systemId>, softwareUpdateRow, exportDiagnosticsRow, createBackupRow,
+//   restoreBackupRow, clearArtworkCacheRow, resetRow, rebootRow, powerOffRow,
+//   settingsIssues, sectionTitle_<Name>                                           (Settings)
 //   reloadButton                                                                  (Diagnostics)
 //   runningOverlay, stopButton, runningTitle                                      (overlay)
 //   gameBar, gameBarTabs, barTab_home|settings|audio|performance, gameBarStatus,
@@ -23,6 +27,7 @@
 //   settingsPanel, gameBarSettings, gameBarReboot, gameBarPowerOff, audioPanel,
 //   gameBarVolume, gameBarVolumeValue, performancePanel, cpuValue, cpuGraph,
 //   memoryMeter                                                                   (game bar)
+//   gameOptions, gameOptionsList, gameOptionsTitle, gameOptionsSummary, purgeRow  (game options)
 //   stateChip, scanChip, rootChip, clock, hintBar, toast                          (chrome)
 #include "AppController.h"
 #include "LibraryController.h"
@@ -84,11 +89,14 @@ private:
         QList<QQmlError> warnings;
     };
 
-    static void load(Ui &ui, const QString &configDir)
+    // |windowSize| is the OS window size (not Theme.scale / the UI-scale accessibility
+    // setting): every test runs at both 1280x720 and 1920x1080 to catch anything that only
+    // breaks at a different physical resolution (responsive layout, column counts, ...).
+    static void load(Ui &ui, const QString &configDir, const QSize &windowSize = {1280, 720})
     {
         ui.state = std::make_unique<QTemporaryDir>();
         nexora::ui::UiContext::Options options;
-        options.app = {configDir, QStringLiteral("test"), {}, false};
+        options.app = {configDir, QStringLiteral("test"), {}, false, {}};
         options.settings = {{}, ui.state->filePath(QStringLiteral("settings.json"))};
         options.databasePath = ui.state->filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");
@@ -100,7 +108,16 @@ private:
                          [&ui](const QList<QQmlError> &warnings) { ui.warnings.append(warnings); });
         ui.window = nexora::ui::loadMainWindow(*ui.engine, ui.context.get());
         QVERIFY(ui.window);
+        ui.window->resize(windowSize);
         QVERIFY(QTest::qWaitForWindowExposed(ui.window));
+    }
+
+    // Shared [[1280x720], [1920x1080]] data table for every *_data() slot below.
+    static void addWindowSizeRows()
+    {
+        QTest::addColumn<QSize>("windowSize");
+        QTest::newRow("1280x720") << QSize(1280, 720);
+        QTest::newRow("1920x1080") << QSize(1920, 1080);
     }
 
     // Adds |dir| as a library directory and waits for the resulting scan.
@@ -148,6 +165,16 @@ private:
     }
 
     static int currentTab(Ui &ui) { return ui.window->property("currentTab").toInt(); }
+
+    // NEXORA_SCREENSHOT_DIR=<dir>: saves <dir>/<name>.png (for reviewing layouts and docs).
+    static void shot(Ui &ui, const char *name)
+    {
+        const QString dir = qEnvironmentVariable("NEXORA_SCREENSHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QTest::qWait(250); // let animations settle
+        ui.window->grabWindow().save(dir + u'/' + QString::fromLatin1(name) + QStringLiteral(".png"));
+    }
 
     static void key(Ui &ui, Qt::Key k, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
     {
@@ -425,6 +452,16 @@ private slots:
         key(ui, Qt::Key_Return);
         QTRY_VERIFY(profiles->hasActiveFocus());
         key(ui, Qt::Key_Down);
+        // Y / F makes the selected profile the emulator's default; the picker stays open.
+        key(ui, Qt::Key_F);
+        QCOMPARE(ui.context->settings()->defaultProfile(QStringLiteral("profiled")), QStringLiteral("fast"));
+        QVERIFY(picker->isVisible());
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY(!picker->isVisible());
+        key(ui, Qt::Key_Return); // reopens on the default profile
+        QTRY_VERIFY(profiles->hasActiveFocus());
+        QCOMPARE(profiles->property("currentIndex").toInt(), 1);
+        shot(ui, "profile-picker-default");
         key(ui, Qt::Key_Return); // "Fast"
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
         QVERIFY(!picker->isVisible());
@@ -432,6 +469,92 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
         QTRY_VERIFY2_WITH_TIMEOUT(list->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(list->property("currentIndex").toInt(), 1);
+
+        CHECK_NO_WARNINGS();
+    }
+
+    void gameOptionsDialog()
+    {
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("one"), QStringLiteral("\"--sleep-ms\",\"30000\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        writeConfig(config, QStringLiteral("two"), QStringLiteral("\"--sleep-ms\",\"30000\""),
+                    QStringLiteral("\"extensions\":[\".rom\"],\"profiles\":[{\"id\":\"fast\",\"name\":\"Fast\"}]"));
+        QTemporaryDir games;
+        touch(games, QStringLiteral("Alpha Quest.rom"));
+        touch(games, QStringLiteral("Beta Racer.rom"));
+        Ui ui;
+        load(ui, config.path());
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+        auto *library = ui.context->library();
+        key(ui, Qt::Key_PageDown);
+        auto *grid = find(ui, "gameGrid");
+        QTRY_COMPARE_WITH_TIMEOUT(grid->property("count").toInt(), 2, Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        const qint64 alpha = library->games()->gameIdAt(0);
+
+        // O (keyboard) opens the options of the focused game.
+        key(ui, Qt::Key_O);
+        auto *dialog = find(ui, "gameOptions");
+        QTRY_VERIFY(dialog->isVisible());
+        auto *options = find(ui, "gameOptionsList");
+        QTRY_VERIFY2_WITH_TIMEOUT(options->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QCOMPARE(find(ui, "gameOptionsTitle")->property("text").toString(), QStringLiteral("Alpha Quest"));
+        // Play, Emulator: automatic, Emu one, Emu two, favorite, close.
+        QCOMPARE(options->property("count").toInt(), 6);
+        shot(ui, "game-options");
+        // Tab switching keys do not leak through the modal dialog.
+        key(ui, Qt::Key_PageDown);
+        QCOMPARE(currentTab(ui), int(Games));
+
+        // Choose the second emulator; the dialog stays open and now offers its profile.
+        key(ui, Qt::Key_Down);
+        key(ui, Qt::Key_Down);
+        key(ui, Qt::Key_Down);
+        key(ui, Qt::Key_Return);
+        QCOMPARE(library->gameDetails(alpha).value(QStringLiteral("emulatorId")).toString(), QStringLiteral("two"));
+        QVERIFY(dialog->isVisible());
+        QTRY_COMPARE(options->property("count").toInt(), 8); // + "Play with Fast", "emulator defaults"
+        shot(ui, "game-options-emulator-chosen");
+
+        // Back closes it and focus returns to the game.
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY(!dialog->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QCOMPARE(library->games()->gameIdAt(grid->property("currentIndex").toInt()), alpha);
+        shot(ui, "games-grid");
+
+        // The controller's Options button (Key_Context1) opens it too; "Play" launches with
+        // the chosen emulator, and focus comes back to the game afterwards.
+        // keyClick() aborts on keys without an ASCII mapping; send it like InputController does.
+        QTest::sendKeyEvent(QTest::Click, ui.window, Qt::Key_Context1, char(0), Qt::NoModifier);
+        QTRY_VERIFY2_WITH_TIMEOUT(options->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        QCOMPARE(ui.app->manager()->activeEmulatorId(), QStringLiteral("two"));
+        QVERIFY(!dialog->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        // A missing game shows up as a removable entry in Settings.
+        auto *purge = find(ui, "purgeRow");
+        QVERIFY(purge);
+        QVERIFY(!purge->isVisible());
+        QVERIFY(QFile::remove(games.filePath(QStringLiteral("Beta Racer.rom"))));
+        QVERIFY(library->refresh());
+        ui.context->gameLibrary().waitForScan();
+        QTRY_COMPARE(library->missingCount(), 1);
+        key(ui, Qt::Key_PageDown);
+        key(ui, Qt::Key_PageDown);
+        QCOMPARE(currentTab(ui), int(Settings));
+        QTRY_VERIFY(purge->isVisible());
+        shot(ui, "settings-purge");
 
         CHECK_NO_WARNINGS();
     }
@@ -449,10 +572,30 @@ private slots:
         QCOMPARE(currentTab(ui), int(Settings));
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "settingLanguage")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
 
-        // Walk down to the volume row; Right raises it by 5, Left lowers it again.
+        // Keyboard remap: Right on a mapping row cycles to the next button. Controllers
+        // (with the mapping rows) comes before Display/Audio (with volume), so this is
+        // reached first.
+        const QString before = mappedButton(ui, QStringLiteral("favorite"));
+        QCOMPARE(before, QStringLiteral("north"));
+        auto *row = find(ui, "mapping_favorite");
+        QVERIFY(row);
+        for (int i = 0; i < 40 && !row->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Down);
+        QVERIFY2(row->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Right);
+        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("start"));
+        // The action that had "start" (menu) swapped onto "north".
+        QCOMPARE(mappedButton(ui, QStringLiteral("menu")), QStringLiteral("north"));
+        // The rows are rebuilt; focus stays on the same action.
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "mapping_favorite")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Left);
+        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("north"));
+
+        // Walk on down to the volume row (Display, then Audio); Right raises it by 5, Left
+        // lowers it again.
         auto *volumeRow = find(ui, "settingVolume");
         QVERIFY(volumeRow);
-        for (int i = 0; i < 10 && !volumeRow->hasActiveFocus(); ++i)
+        for (int i = 0; i < 40 && !volumeRow->hasActiveFocus(); ++i)
             key(ui, Qt::Key_Down);
         QVERIFY2(volumeRow->hasActiveFocus(), qPrintable(focusName(ui)));
         const int volume = settings->volume();
@@ -470,25 +613,10 @@ private slots:
         settings->setShowHints(true);
         QTRY_VERIFY(hintBar->isVisible());
 
-        // Keyboard remap: Right on a mapping row cycles to the next button.
-        const QString before = mappedButton(ui, QStringLiteral("favorite"));
-        QCOMPARE(before, QStringLiteral("north"));
-        auto *row = find(ui, "mapping_favorite");
-        QVERIFY(row);
-        for (int i = 0; i < 20 && !row->hasActiveFocus(); ++i)
-            key(ui, Qt::Key_Down);
-        QVERIFY2(row->hasActiveFocus(), qPrintable(focusName(ui)));
-        key(ui, Qt::Key_Right);
-        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("start"));
-        // The action that had "start" (menu) swapped onto "north".
-        QCOMPARE(mappedButton(ui, QStringLiteral("menu")), QStringLiteral("north"));
-        // The rows are rebuilt; focus stays on the same action.
-        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "mapping_favorite")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
-        key(ui, Qt::Key_Left);
-        QCOMPARE(mappedButton(ui, QStringLiteral("favorite")), QStringLiteral("north"));
-
-        // Up/Down never leave the screen downwards; the last row stays focused.
-        for (int i = 0; i < 40; ++i)
+        // Up/Down never leave the screen downwards; the last row stays focused (Restart /
+        // Power off are hidden on this "desktop" platform override, so Reset preferences is
+        // the true last one).
+        for (int i = 0; i < 100; ++i)
             key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "resetRow")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(currentTab(ui), int(Settings));
@@ -496,9 +624,8 @@ private slots:
         // Add a library folder from the text field.
         QTemporaryDir games;
         auto *field = find(ui, "addDirField");
-        key(ui, Qt::Key_Up);
-        key(ui, Qt::Key_Up);
-        key(ui, Qt::Key_Up);
+        for (int i = 0; i < 100 && !field->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Up);
         QTRY_VERIFY2_WITH_TIMEOUT(field->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         typeText(ui, games.path());
         key(ui, Qt::Key_Return);

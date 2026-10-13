@@ -11,6 +11,8 @@ set(NEXORA_QML_FILES
     qml/HintBar.qml
     qml/Toast.qml
     qml/NxButton.qml
+    qml/ConfirmDialog.qml
+    qml/InputTestPanel.qml
     qml/SettingRow.qml
     qml/GameTile.qml
     qml/GameRow.qml
@@ -24,6 +26,7 @@ set(NEXORA_QML_FILES
     qml/RunningOverlay.qml
     qml/GameBar.qml
     qml/BarIcon.qml
+    qml/GameOptionsDialog.qml
 )
 # Serve the files at qrc:/qt/qml/Nexora/Console/<Name>.qml (without the qml/ subdirectory).
 foreach(qml_file IN LISTS NEXORA_QML_FILES)
@@ -47,6 +50,8 @@ qt_add_qml_module(nexora_ui
         src/LibraryController.h src/LibraryController.cpp
         src/SettingsController.h src/SettingsController.cpp
         src/SystemController.h src/SystemController.cpp
+        src/SystemListModel.h src/SystemListModel.cpp
+        src/UpdateController.h src/UpdateController.cpp
         src/UiContext.h src/UiContext.cpp
 )
 
@@ -54,13 +59,14 @@ qt_add_qml_module(nexora_ui
 target_include_directories(nexora_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(nexora_ui PUBLIC NEXORA_VERSION="${PROJECT_VERSION}")
 target_link_libraries(nexora_ui
-    PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick nexora_shared nexora_emulator_manager nexora_input nexora_library nexora_system)
+    PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick
+           nexora_shared nexora_emulator_manager nexora_input nexora_library nexora_system nexora_update)
 target_compile_definitions(nexora_ui PRIVATE
     QT_NO_NARROWING_CONVERSIONS_IN_CONNECT QT_NO_URL_CAST_FROM_STRING)
 # Warnings only for hand-written sources; qmlcachegen output is not -Wshadow clean.
 nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/GameBarController.cpp src/UiBootstrap.cpp
     src/GameListModel.cpp src/LibraryController.cpp src/SettingsController.cpp src/SystemController.cpp
-    src/UiContext.cpp)
+    src/SystemListModel.cpp src/UpdateController.cpp src/UiContext.cpp)
 
 # --- Application ---------------------------------------------------------------------------
 qt_add_executable(nexora-console-ui src/main.cpp)

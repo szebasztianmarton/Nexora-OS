@@ -1,6 +1,7 @@
 #include "nexora/shared/ConfigLoader.h"
 
 #include "nexora/shared/Logging.h"
+#include "nexora/shared/SystemCatalog.h"
 
 #include <QDir>
 #include <QFile>
@@ -23,7 +24,8 @@ const QStringList &knownKeys()
     static const QStringList keys{
         QStringLiteral("id"),         QStringLiteral("name"),          QStringLiteral("executable"),
         QStringLiteral("arguments"),  QStringLiteral("enabled"),       QStringLiteral("workingDirectory"),
-        QStringLiteral("extensions"), QStringLiteral("stopTimeoutMs"), QStringLiteral("profiles")};
+        QStringLiteral("extensions"), QStringLiteral("stopTimeoutMs"), QStringLiteral("profiles"),
+        QStringLiteral("version"),    QStringLiteral("systems"),       QStringLiteral("pausable")};
     return keys;
 }
 
@@ -62,7 +64,8 @@ bool ConfigLoader::isValidId(const QString &id)
 }
 
 std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json, const QString &sourceFile,
-                                                  QStringList *errors, QStringList *warnings)
+                                                  QStringList *errors, QStringList *warnings,
+                                                  const SystemCatalog *catalog)
 {
     QStringList localErrors;
     auto fail = [&](const QString &message) { localErrors.append(message); };
@@ -181,6 +184,40 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json, const 
             config.stopTimeoutMs = int(ms);
     }
 
+    if (obj.contains(QStringLiteral("version"))) {
+        const QJsonValue v = obj.value(QStringLiteral("version"));
+        if (!v.isString() || v.toString().size() > MaxVersionLength)
+            fail(QStringLiteral("\"version\" must be a string of at most %1 characters").arg(MaxVersionLength));
+        else
+            config.version = v.toString().trimmed();
+    }
+
+    if (obj.contains(QStringLiteral("systems"))) {
+        QStringList raw;
+        parseStringArray(obj.value(QStringLiteral("systems")), QStringLiteral("\"systems\""), &raw);
+        for (const QString &systemId : std::as_const(raw)) {
+            if (!SystemCatalog::isValidId(systemId)) {
+                if (warnings)
+                    warnings->append(
+                        QStringLiteral("\"systems\" entry \"%1\" is not a valid system id; ignored").arg(systemId));
+            } else if (catalog && !catalog->find(systemId)) {
+                if (warnings)
+                    warnings->append(
+                        QStringLiteral("\"systems\" entry \"%1\" is not a known system; ignored").arg(systemId));
+            } else if (!config.systems.contains(systemId)) {
+                config.systems.append(systemId);
+            }
+        }
+    }
+
+    if (obj.contains(QStringLiteral("pausable"))) {
+        const QJsonValue v = obj.value(QStringLiteral("pausable"));
+        if (!v.isBool())
+            fail(QStringLiteral("\"pausable\" must be a boolean (got %1)").arg(jsonTypeName(v)));
+        else
+            config.pausable = v.toBool();
+    }
+
     if (obj.contains(QStringLiteral("profiles"))) {
         const QJsonValue profiles = obj.value(QStringLiteral("profiles"));
         if (!profiles.isArray()) {
@@ -250,7 +287,7 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json, const 
     return config;
 }
 
-ConfigLoadResult ConfigLoader::loadDirectory(const QString &directory)
+ConfigLoadResult ConfigLoader::loadDirectory(const QString &directory, const SystemCatalog *catalog)
 {
     ConfigLoadResult result;
     const QDir dir(directory);
@@ -287,7 +324,7 @@ ConfigLoadResult ConfigLoader::loadDirectory(const QString &directory)
 
         QStringList errors;
         QStringList warnings;
-        const auto config = parse(file.readAll(), path, &errors, &warnings);
+        const auto config = parse(file.readAll(), path, &errors, &warnings, catalog);
         for (const QString &warning : std::as_const(warnings))
             addIssue(ConfigIssue::Severity::Warning, warning);
         for (const QString &error : std::as_const(errors))

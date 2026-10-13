@@ -1,6 +1,6 @@
 # Nexora OS — Architecture (MVP 2)
 
-This document describes the application as implemented on `feature/mvp2` (version 0.2.0): a Qt 6 / QML console UI with an emulator manager, a game library, persistent settings, configurable controller input and a system-integration layer for the Buildroot image. The same binary runs on a desktop Linux host and on the image; behaviour that differs between the two is selected at run time ([System integration](#system-integration)).
+This document describes the application as implemented on `main` (version 0.2.0, MVP 2): a Qt 6 / QML console UI with an emulator manager, a game library, persistent settings, configurable controller input and a system-integration layer for the Buildroot image. The same binary runs on a desktop Linux host and on the image; behaviour that differs between the two is selected at run time ([System integration](#system-integration)).
 
 Related documents: [settings.md](settings.md), [game-library.md](game-library.md), [controller-support.md](controller-support.md), [buildroot.md](buildroot.md), [testing.md](testing.md), [development.md](development.md).
 
@@ -27,7 +27,7 @@ Related documents: [settings.md](settings.md), [game-library.md](game-library.md
 | `nexora_shared` | static library | `shared/` | `EmulatorConfig` / `LaunchProfile`, `ConfigLoader` (emulator JSON validation), `Settings` (layered, validated preferences), `Paths` (config-dir resolution, root detection), `Logging` (categories, message handler, rotation, ring buffer) | Qt Core |
 | `nexora_emulator_manager` | static library | `apps/emulator-manager/` | `EmulatorManager` (`LaunchRequest` → `resolve()` → one supervised `QProcess`), `EmulatorProcessState` (states, transition table, errors) | `nexora_shared` |
 | `nexora_library` | static library | `apps/game-library/` | `LibraryScanner` (file system walk), `GameDatabase` (SQLite store), `LibraryQuery` (search/filter/sort), `GameLibrary` (owns DB, runs scans on a worker thread) | Qt Core, Qt Sql, `nexora_shared` |
-| `nexora_system` | static library | `apps/system/` | `SystemIntegration` (desktop/embedded: status, power, volume), `SingleInstanceGuard`, `UnixSignalWatcher` | Qt Core, `nexora_shared` |
+| `nexora_system` | static library | `apps/system/` | `SystemIntegration` (desktop/embedded: status, power, volume, update info), `SingleInstanceGuard`, `UnixSignalWatcher` | Qt Core, `nexora_shared` |
 | `nexora_input` | static library | `apps/console-ui/src/input/` | `ButtonMapping`, `GamepadNavigator`, `InputController`, `InputBackend`, `EvdevGamepadBackend` (Linux), `Sdl3GamepadBackend` (optional) | Qt Core, Gui, `nexora_shared`; SDL3 (private, optional) |
 | `nexora_ui` (+ `nexora_uiplugin`) | static library + QML module `Nexora.Console` 1.0 | `apps/console-ui/src`, `apps/console-ui/qml` | `UiContext`, `AppController`, `LibraryController`, `SettingsController`, `SystemController`, `EmulatorListModel`, `GameListModel`, `UiBootstrap::loadMainWindow()`, and the QML dashboard (served from `qrc:/qt/qml/Nexora/Console/`) | Qt Qml/Quick + all libraries above |
 | `nexora-console-ui` | executable | `apps/console-ui/src/main.cpp` | Command line, `--check-config`, logging, root policy, single instance, wiring, window/display mode | `nexora_ui` |
@@ -98,12 +98,12 @@ graph TD
 | QML context property | C++ object | Used for |
 | --- | --- | --- |
 | `app` | `AppController` | Emulator list, launch/stop, state, status messages, config issues, input status, log |
-| `library` | `LibraryController` | Game lists (`games`, `recentGames`, `favoriteGames`), search/filter/sort, refresh, favorites, folders, scan summary/issues |
-| `settings` | `SettingsController` | All preferences, remapping, reset, settings issues |
+| `library` | `LibraryController` | Game lists (`games`, `recentGames`, `favoriteGames`), search/filter/sort, refresh, favorites, folders, scan summary/issues, game options (`gameDetails`, `setGameEmulator`, `launchWithProfile`), missing games (`missingCount`, `purgeMissing`) |
+| `settings` | `SettingsController` | All preferences, remapping, default launch profiles, reset, settings issues |
 | `system` | `SystemController` | Platform, status lines, power off/restart |
 | `gameBar` | `GameBarController` | Game bar open state, CPU/memory/load samples (only while open), session time |
 
-The QML dashboard (`Main.qml`) has five tabs — Home, Games, Emulators, Settings, Diagnostics — plus a header, a hint bar, transient notices (`Toast`), the running-emulator overlay and the game bar ([game-bar.md](game-bar.md)). QML only handles key events; controller input arrives as synthesized keys ([Input design](#input-design)).
+The QML dashboard (`Main.qml`) has five tabs — Home, Games, Emulators, Settings, Diagnostics — plus a header, a hint bar, transient notices (`Toast`), the game options dialog (`GameOptionsDialog`, window-level so Home and Games share it), the running-emulator overlay and the game bar ([game-bar.md](game-bar.md)). QML only handles key events; controller input arrives as synthesized keys ([Input design](#input-design)).
 
 ## UI to emulator manager
 
@@ -132,7 +132,7 @@ sequenceDiagram
 ```
 
 1. **Config load.** `AppController` loads the emulator directory (`ConfigLoader::loadDirectory()`) on construction and on `reloadConfig()` (refused while an emulator is active). Disabled entries go to `disabledEmulators`; enabled entries are checked with `EmulatorManager::validateExecutable()` and shown as `ready` or `unavailable` with a reason. Issues become `configIssues`. `configChanged` makes `LibraryController` recompute its scan options (the extension → emulator map comes from the definitions).
-2. **Launch entry points.** `app.launch(id)` (Emulators tab; uses the default profile from `emulators.defaultProfiles` if it exists and is enabled), `app.launchProfile(id, profile)` (profile picker), and `LibraryController.launch(gameId)` → `AppController::launchGame()` (game with its effective emulator). All three build a `LaunchRequest` and call `EmulatorManager::launch()`.
+2. **Launch entry points.** `app.launch(id)` (Emulators tab; uses the default profile from `emulators.defaultProfiles` if it exists and is enabled), `app.launchProfile(id, profile)` (profile picker; `""` = no profile), `LibraryController.launch(gameId)` → `AppController::launchGame()` (game with its effective emulator and default profile) and `LibraryController.launchWithProfile(gameId, profile)` (game options). All build a `LaunchRequest` and call `EmulatorManager::launch()`.
 3. **Resolution.** `EmulatorManager::resolve()` validates the request and computes program, arguments, working directory and stop timeout; details in [Launch](#launch).
 4. **Signals back.** `stateChanged`, `outputReceived`, `processFinished`. `AppController` updates the model status and the status message, suspends/resumes controller navigation, and QML reacts through bindings (overlay visible while `busy`). Errors appear as notices.
 5. **Return.** Stop from the overlay (`app.stop()`), the controller chord (`InputController::returnToLauncherRequested` → `AppController::returnToLauncher()` → `stop()`), or the emulator exiting by itself.
@@ -182,7 +182,9 @@ An invalid transition is logged as critical (`nexora.process`) and asserts in de
 | Any finish (or failed start) while `Stopping` | `Exited` | `None` | `stoppedByRequest`; `killed` if SIGKILL was sent |
 | Validation error | `Failed` | the validation error | — |
 
-Other `QProcess` errors are logged only. Remaining buffered output is drained before reporting. State is updated and the `QProcess` released (`deleteLater`) before `processFinished` is emitted, so a slot may launch again immediately.
+Other `QProcess` errors are logged only.
+
+**Output log.** With `setOutputLogDirectory()` (the application passes `$XDG_STATE_HOME/nexora/emulator-logs`), each accepted launch writes `<id>.log`: a header with time, program, arguments and working directory, every output line prefixed `out| ` or `err| `, and a footer with the outcome message. The previous file is renamed to `<id>.log.1` first, so the output of a crash survives a relaunch. Files are capped at 1 MiB (`setOutputLogLimit()`); writes are flushed per chunk so a killed launcher leaves the log readable. Failing to write only logs a warning. Validation failures write nothing (no process was started). Remaining buffered output is drained before reporting. State is updated and the `QProcess` released (`deleteLater`) before `processFinished` is emitted, so a slot may launch again immediately.
 
 ### Stop escalation
 
@@ -224,31 +226,29 @@ sequenceDiagram
 
     LC->>GL: setScanOptions(roots, extension map, followSymlinks)
     LC->>GL: refresh() (signature changed or manual)
-    GL->>W: QThread::create(LibraryScanner::scan) (low priority)
-    W-->>GL: finished(ScanResult)
-    GL->>DB: applyScan() in one transaction
-    GL->>DB: meta scan-signature, last-scan
-    GL->>DB: entries()
+    GL->>W: QThread::create(scan + merge) (low priority)
+    W->>W: LibraryScanner::scan()
+    W->>DB: second connection: applyScan() (BEGIN IMMEDIATE)
+    W->>DB: meta scan-signature, last-scan; entries()
+    W-->>GL: finished(ScanJob: result, stats, entries)
+    GL->>GL: swap cached entries (or reload if a UI write happened meanwhile)
     GL-->>LC: entriesChanged, scanFinished(stats, issues)
     LC->>LC: LibraryQuery::apply() -> GameListModels
 ```
 
 - **Scan on a worker thread.** `LibraryScanner::scan()` is a pure function of the file system and the options (only `stat()`, never opens game files). At most one scan runs; a refresh during a scan is queued once. A cancelled scan (shutdown) changes nothing.
-- **Merge on the UI thread.** `GameDatabase` is not thread-safe and is used only from the thread that opened it. `applyScan()` reads all existing rows once, inserts new files, updates only changed rows, and marks vanished files as not present — all in one transaction. Favorites, play history and emulator overrides are kept.
+- **Merge on the worker thread.** A `GameDatabase` (one Qt SQL connection) is used only from the thread that opened it, so the worker opens its own connection to the same file (WAL mode; Qt's default SQLite busy timeout of 5 s). `applyScan()` reads all existing rows once, inserts new files, updates only changed rows, and marks vanished files as not present — all in one `BEGIN IMMEDIATE` transaction (a deferred one could fail with `SQLITE_BUSY_SNAPSHOT` if the UI wrote between its read and its first write). It never touches favorites, play history or emulator overrides. The worker connection is opened without recovery, so it can never move the database aside while the UI holds it. The worker then reads the entry list; the UI thread swaps it in, unless a UI write (favorite, launch, override, purge) happened since the scan started — tracked by a write generation counter — in which case it reloads from its own connection so the write is not lost. An in-memory database (tests) cannot be shared and is merged on the UI thread.
 - **Queries in memory.** `GameLibrary` keeps the present entries in memory; `LibraryQuery::apply()` filters and sorts them for the three list models (search is debounced by 150 ms).
 - **Rescan policy.** At start-up and on configuration/settings changes, a scan runs only when the scan signature (directories, extension map, symlink option) differs from the one stored after the last completed scan; manual refresh always scans.
 
-Measured on a synthetic library of 10 000 files (Release build, 4-core container; not on target hardware):
+Measured on a synthetic library of 10 000 files (Release build, 4-core container, 3 runs; not on target hardware) with `NEXORA_LIBRARY_BENCH=1 tst_gamelibrary benchmarkEventLoopStall`, which records the longest gap between 5 ms timer ticks on the owner (UI) thread:
 
-| Step | Thread | Time |
-| --- | --- | --- |
-| Scan | worker | ≈ 0.2 s |
-| First merge into SQLite | UI | 138 ms |
-| Merge of an unchanged rescan | UI | 77 ms |
-| Load entries | UI | 30 ms |
-| Search + sort | UI | 8 ms |
+| | Total (scan + merge + load) | Longest UI stall, merge on the worker (current) | Longest UI stall, merge on the UI thread (before) |
+| --- | --- | --- | --- |
+| First scan | 0.19–0.25 s | 5 ms | 118–139 ms |
+| Unchanged rescan | 0.15–0.21 s | 5–6 ms | 72–95 ms |
 
-The merges and the load still run on the UI thread and briefly block it for large libraries. Details, schema and missing-file rules: [game-library.md](game-library.md).
+5 ms is the resolution of the measurement. Rebuilding the visible lists afterwards (search + sort) still runs on the UI thread (≈ 8 ms for 10 000 entries). Details, schema and missing-file rules: [game-library.md](game-library.md).
 
 ## Input design
 
@@ -263,8 +263,8 @@ graph LR
 ```
 
 - **Backends** translate device events into backend-neutral `GamepadButton` / `GamepadAxis` calls tagged with a device id; they run on the GUI thread and never block it. Selection: `auto` (SDL3 if built and it starts, else evdev, else keyboard-only; never fails), `evdev`, `sdl3`, `none`; from `--input-backend` or `input.backend`, at start-up.
-- **GamepadNavigator** maps buttons to actions through the configurable `ButtonMapping` (default South → Accept, East → Back, Start → Menu, North → Favorite, West → Search, L1/R1 → previous/next tab, Guide → GameBar; unbound Guide → GameBar, unbound Select → Menu). D-pad, hat and left stick always give directions with hysteresis (0.5 / 0.3) and auto-repeat (400 ms, then 120 ms). State is kept per device. Holding Select + Start on one device for 1 s emits `returnToLauncherRequested`.
-- **InputController** posts a key press + release for each action (`Up/Down/Left/Right`, `Return`, `Escape`, `Menu`, `Favorites`, `Search`, `PageUp`, `PageDown`) to the focused window. It drops actions while **suspended** (`AppController` suspends it while an emulator is active, because devices are not grabbed), forwards the chord even while suspended, reports the `GameBar` action as `gameBarRequested()` (never as a key, also while suspended), and supports **capture** of the next button for remapping.
+- **GamepadNavigator** maps buttons to actions through the configurable `ButtonMapping` (default South → Accept, East → Back, Start → Menu, North → Favorite, West → Search, L1/R1 → previous/next tab, Guide → GameBar, Select → Options; unbound Guide → GameBar, unbound Select → Menu). D-pad, hat and left stick always give directions with hysteresis (0.5 / 0.3) and auto-repeat (400 ms, then 120 ms). State is kept per device. Holding Select + Start on one device for 1 s emits `returnToLauncherRequested`.
+- **InputController** posts a key press + release for each action (`Up/Down/Left/Right`, `Return`, `Escape`, `Menu`, `Favorites`, `Search`, `PageUp`, `PageDown`, `Context1`) to the focused window. It drops actions while **suspended** (`AppController` suspends it while an emulator is active, because devices are not grabbed), forwards the chord even while suspended, reports the `GameBar` action as `gameBarRequested()` (never as a key, also while suspended), and supports **capture** of the next button for remapping.
 
 Details, layouts, limitations and a hardware test checklist: [controller-support.md](controller-support.md).
 
@@ -278,6 +278,9 @@ Details, layouts, limitations and a hardware test checklist: [controller-support
 | Status (OS name, host, kernel, uptime, load, memory) | from `/etc/os-release`, `/proc` | same |
 | Power off / restart | never (returns an error; protects the developer's machine) | one line `poweroff\n` or `reboot\n` written non-blocking to the FIFO `/run/nexora/power-request`, served by the root helper `nexora-powerd`; supported only while the FIFO exists and is writable |
 | Volume | stored preference only | `amixer -q sset Master <n>%`, asynchronously; on failure retried with `PCM`; newer requests supersede pending ones; supported only if `/usr/bin/amixer` is executable |
+| Updates (`updateInfo()`) | not supported; "managed by the host system" | not supported; reports the installed image version (`NEXORA_VERSION`, optional `NEXORA_UPDATE_CHANNEL` from `/etc/nexora-release`) and "write a newer image to update". This is the seam for a future update mechanism; it never blocks or uses the network. |
+| Display status | screens, resolution and refresh rate from `QGuiApplication::screens()` (in `SystemController`, which has Qt Gui), refreshed on screen hot-plug | same |
+| Input device status | `InputController` (backend, devices), shown next to the system status | same |
 
 The FIFO protocol and its security reasoning are documented in [buildroot.md](buildroot.md#power-requests-poweroffreboot). `SystemController` exposes platform, status lines and power actions to QML; the Settings tab asks for confirmation (second press) before powering off or restarting.
 
@@ -319,7 +322,7 @@ Other system pieces (`nexora_system`):
 
 ## Logging
 
-`installMessageHandler()` writes `<ISO time> [level] <category>: <message>` to stderr, to the optional `--log-file` and to an in-memory ring of 500 lines (the Diagnostics tab shows the last 40; emulator output is kept out of the ring). The log file is rotated when it would exceed **2 MiB**, keeping **3** old files (`file.1` … `file.3`). Filtering uses `QT_LOGGING_RULES`.
+Emulator output additionally goes to the per-emulator [output log](#outcome-rules) files when enabled. `installMessageHandler()` writes `<ISO time> [level] <category>: <message>` to stderr, to the optional `--log-file` and to an in-memory ring of 500 lines (the Diagnostics tab shows the last 40; emulator output is kept out of the ring). The log file is rotated when it would exceed **2 MiB**, keeping **3** old files (`file.1` … `file.3`). Filtering uses `QT_LOGGING_RULES`.
 
 | Category | Content |
 | --- | --- |
@@ -334,7 +337,7 @@ Other system pieces (`nexora_system`):
 
 ## Buildroot integration
 
-The `buildroot-external/` tree (BR2_EXTERNAL, Buildroot 2026.02.3) builds an x86-64 UEFI disk image that boots into the console UI. In short: the `nexora-os` package builds this CMake project (SDL3 off; Buildroot has no SDL3 package, so the image uses evdev); BusyBox init starts the root `nexora-powerd` helper and a supervisor that runs `nexora-console-ui --fullscreen --log-file /var/log/nexora/console-ui.log` as user `nexora` on tty1 with EGLFS/KMS and `NEXORA_PLATFORM=embedded`, restarting it with backoff; recovery logins stay available on the serial console and tty2. The tree was validated locally with `check-package`, the defconfig symbol check and the kernel-fragment check (the `buildroot.yml` CI job runs the first two; it has not yet run on GitHub). A full image build is in progress and unverified: no image has been built or booted yet.
+The `buildroot-external/` tree (BR2_EXTERNAL, Buildroot 2026.02.3) builds an x86-64 UEFI disk image that boots into the console UI. In short: the `nexora-os` package builds this CMake project (SDL3 off; Buildroot has no SDL3 package, so the image uses evdev); BusyBox init starts the root `nexora-powerd` helper and a supervisor that runs `nexora-console-ui --fullscreen --log-file /var/log/nexora/console-ui.log` as user `nexora` on tty1 with EGLFS/KMS and `NEXORA_PLATFORM=embedded`, restarting it with backoff; recovery logins stay available on the serial console and tty2. The tree was validated locally with `check-package`, the defconfig symbol check and the kernel-fragment check (the `buildroot.yml` validate job runs the first two and has passed on GitHub); all sources download and pass their hash checks. A full build compiled the first 75 packages before a session time limit stopped it during target Clang; Qt 6, Mesa, the kernel and the `nexora-os` package have not been built, so no image exists and nothing has been booted.
 
 Everything else — layout, image contents, start-up, recovery, power protocol, users and permissions, QEMU instructions — is in [buildroot.md](buildroot.md).
 
@@ -342,8 +345,8 @@ Everything else — layout, image contents, start-up, recovery, power protocol, 
 
 Not implemented in MVP 2:
 
-- Running the database merge and entry loading off the UI thread for very large libraries.
-- UI for per-game emulator override and for purging missing entries; on-screen keyboard and folder browser.
+- On-screen keyboard and folder browser.
+- An update mechanism behind `SystemIntegration::updateInfo()`.
 - Applying `display.resolution` as a real KMS mode; switching the input backend without restart.
 - Configurable chord and repeat timings; per-controller mappings; an evdev correction database or SDL3 on the image.
 - Caching non-gamepad devices between evdev rescans (each `/dev/input` change re-probes all event nodes).

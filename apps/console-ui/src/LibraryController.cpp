@@ -3,11 +3,14 @@
 #include "AppController.h"
 
 #include "nexora/shared/Logging.h"
+#include "nexora/shared/Redaction.h"
 #include "nexora/shared/Settings.h"
 
 #include <QDir>
 #include <QFileInfo>
+#include <QLocale>
 
+#include <algorithm>
 #include <utility>
 
 namespace nexora::ui {
@@ -15,11 +18,12 @@ namespace nexora::ui {
 using shared::Settings;
 
 LibraryController::LibraryController(library::GameLibrary *library, shared::Settings *settings, AppController *app,
-                                     QObject *parent)
+                                     const shared::SystemCatalog *catalog, QObject *parent)
     : QObject(parent)
     , m_library(library)
     , m_settings(settings)
     , m_app(app)
+    , m_catalog(catalog)
 {
     m_query.sort = library::LibraryQuery::sortOrderFromString(settings->stringValue(Settings::LibrarySortOrder));
     const auto info = [this](const QString &emulatorId) -> std::pair<QString, QString> {
@@ -28,16 +32,36 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
             return *it;
         return {QString(), m_app->unavailableReason(emulatorId)};
     };
+    const auto systemInfo = [this](const QString &systemId) -> QString {
+        if (systemId.isEmpty() || !m_catalog)
+            return {};
+        const auto *system = m_catalog->find(systemId);
+        return system ? system->shortName : QString();
+    };
     rebuildEmulatorInfo();
-    for (GameListModel *model : {&m_games, &m_recent, &m_favorites})
+    for (GameListModel *model : {&m_games, &m_recent, &m_favorites, &m_recentlyAdded}) {
         model->setEmulatorInfo(info);
+        model->setSystemInfo(systemInfo);
+    }
 
     m_searchDebounce.setSingleShot(true);
     m_searchDebounce.setInterval(150);
     connect(&m_searchDebounce, &QTimer::timeout, this, &LibraryController::rebuildViews);
 
     connect(m_library, &library::GameLibrary::entriesChanged, this, &LibraryController::rebuildViews);
-    connect(m_library, &library::GameLibrary::scanningChanged, this, &LibraryController::scanningChanged);
+    connect(m_library, &library::GameLibrary::scanningChanged, this, [this](bool scanning) {
+        if (scanning) {
+            m_scanFilesSeen = 0;
+            m_scanCurrentRoot.clear();
+            emit scanProgressChanged();
+        }
+        emit scanningChanged();
+    });
+    connect(m_library, &library::GameLibrary::scanProgress, this, [this](int filesSeen, const QString &currentRoot) {
+        m_scanFilesSeen = filesSeen;
+        m_scanCurrentRoot = currentRoot;
+        emit scanProgressChanged();
+    });
     connect(m_library, &library::GameLibrary::scanFinished, this,
             [this](const library::ApplyStats &stats, int issueCount) {
                 emit notice(QStringLiteral("Library updated: %1 new, %2 missing, %3 issue(s)")
@@ -72,6 +96,8 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
             updateScanOptions();
         } else if (key == Settings::LibrarySortOrder) {
             setSortOrder(m_settings->stringValue(Settings::LibrarySortOrder));
+        } else if (key == Settings::EmulatorDefaultForSystem) {
+            rebuildViews();
         }
     });
     rebuildViews();
@@ -115,6 +141,15 @@ void LibraryController::setSortOrder(const QString &order)
     // The library screen's choice becomes the remembered default.
     m_settings->setValue(Settings::LibrarySortOrder, library::LibraryQuery::toString(s));
     m_settings->save();
+    emit queryChanged();
+    rebuildViews();
+}
+
+void LibraryController::setSystemFilter(const QString &systemId)
+{
+    if (systemId == m_query.systemId)
+        return;
+    m_query.systemId = systemId;
     emit queryChanged();
     rebuildViews();
 }
@@ -183,7 +218,37 @@ bool LibraryController::refresh()
     return started;
 }
 
+bool LibraryController::cancelScan()
+{
+    const bool was = m_library->isScanning();
+    m_library->cancelScan();
+    return was;
+}
+
+QString LibraryController::effectiveEmulatorId(const library::GameEntry &entry) const
+{
+    if (!entry.emulatorOverride.isEmpty() && entry.emulatorCandidates.contains(entry.emulatorOverride))
+        return entry.emulatorOverride;
+    if (!entry.systemId.isEmpty()) {
+        const QString systemDefault
+            = m_settings->mapValue(Settings::EmulatorDefaultForSystem).value(entry.systemId).toString();
+        if (!systemDefault.isEmpty() && entry.emulatorCandidates.contains(systemDefault))
+            return systemDefault;
+    }
+    return entry.emulatorCandidates.value(0);
+}
+
 bool LibraryController::launch(qint64 gameId)
+{
+    return launchEntry(gameId, {}, true);
+}
+
+bool LibraryController::launchWithProfile(qint64 gameId, const QString &profileId)
+{
+    return launchEntry(gameId, profileId, false);
+}
+
+bool LibraryController::launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile)
 {
     const auto entry = m_library->entry(gameId);
     if (!entry || !entry->present) {
@@ -191,7 +256,8 @@ bool LibraryController::launch(qint64 gameId)
         return false;
     }
     m_pendingLaunch = gameId;
-    if (!m_app->launchGame(entry->emulatorId(), entry->path, entry->title)) {
+    if (!m_app->launchGame(effectiveEmulatorId(*entry), entry->path, entry->displayTitle(), profileId,
+                           applyDefaultProfile)) {
         m_pendingLaunch = 0;
         return false;
     }
@@ -241,7 +307,118 @@ bool LibraryController::removeDirectory(const QString &path)
 
 int LibraryController::purgeMissing()
 {
-    return m_library->purgeMissing();
+    if (!m_library->isOpen())
+        return 0;
+    const int removed = m_library->purgeMissing();
+    emit notice(removed > 0 ? QStringLiteral("Removed %1 missing game(s) and their history").arg(removed)
+                            : QStringLiteral("No missing games to remove"),
+                false);
+    return removed;
+}
+
+bool LibraryController::setGameEmulator(qint64 gameId, const QString &emulatorId)
+{
+    const auto entry = m_library->entry(gameId);
+    if (!entry)
+        return false;
+    if (!emulatorId.isEmpty() && !entry->emulatorCandidates.contains(emulatorId)) {
+        emit notice(QStringLiteral("\"%1\" does not handle %2 files").arg(emulatorId, entry->extension), true);
+        return false;
+    }
+    if (!m_library->setEmulatorOverride(gameId, emulatorId)) {
+        emit notice(QStringLiteral("Could not save the emulator choice for %1").arg(entry->displayTitle()), true);
+        return false;
+    }
+    return true;
+}
+
+QVariantMap LibraryController::gameDetails(qint64 id) const
+{
+    const auto entry = m_library->entry(id);
+    if (!entry)
+        return {};
+    const QString emulatorId = effectiveEmulatorId(*entry);
+    const auto emulatorInfo = m_emulatorInfo.constFind(emulatorId);
+    const QString systemName = (!entry->systemId.isEmpty() && m_catalog && m_catalog->find(entry->systemId))
+        ? m_catalog->find(entry->systemId)->name
+        : QString();
+
+    QVariantList emulators;
+    for (const QString &candidate : entry->emulatorCandidates) {
+        const auto it = m_emulatorInfo.constFind(candidate);
+        const QString reason = it != m_emulatorInfo.cend() ? it->second : m_app->unavailableReason(candidate);
+        emulators.append(QVariantMap{
+            {QStringLiteral("id"), candidate},
+            {QStringLiteral("name"), it != m_emulatorInfo.cend() && !it->first.isEmpty() ? it->first : candidate},
+            {QStringLiteral("available"), reason.isEmpty()},
+            {QStringLiteral("reason"), reason},
+            {QStringLiteral("selected"), candidate == emulatorId},
+        });
+    }
+    QVariantList profiles;
+    const QString defaultProfile = m_settings->mapValue(Settings::EmulatorDefaultProfiles).value(emulatorId).toString();
+    for (const auto &config : m_app->enabledEmulators()) {
+        if (config.id != emulatorId)
+            continue;
+        for (const auto &p : config.profiles) {
+            if (p.enabled)
+                profiles.append(QVariantMap{{QStringLiteral("id"), p.id},
+                                            {QStringLiteral("name"), p.name},
+                                            {QStringLiteral("isDefault"), p.id == defaultProfile}});
+        }
+    }
+    const QString overrideId = entry->emulatorOverride;
+
+    return QVariantMap{
+        {QStringLiteral("id"), entry->id},
+        {QStringLiteral("gameId"), entry->id},
+        {QStringLiteral("title"), entry->displayTitle()},
+        {QStringLiteral("originalTitle"), entry->title},
+        {QStringLiteral("path"), shared::redact(entry->path, shared::defaultRedactionRules())},
+        {QStringLiteral("size"), QLocale::c().formattedDataSize(entry->size)},
+        {QStringLiteral("systemId"), entry->systemId},
+        {QStringLiteral("systemName"), systemName},
+        {QStringLiteral("systemCandidates"), entry->systemCandidates},
+        {QStringLiteral("emulatorId"), emulatorId},
+        {QStringLiteral("emulatorName"),
+         emulatorInfo != m_emulatorInfo.cend() && !emulatorInfo->first.isEmpty() ? emulatorInfo->first : emulatorId},
+        {QStringLiteral("emulatorCandidates"), entry->emulatorCandidates},
+        {QStringLiteral("automatic"), overrideId.isEmpty() || !entry->emulatorCandidates.contains(overrideId)},
+        {QStringLiteral("emulators"), emulators},
+        {QStringLiteral("profiles"), profiles},
+        {QStringLiteral("favorite"), entry->favorite},
+        {QStringLiteral("playCount"), entry->playCount},
+        {QStringLiteral("lastPlayed"),
+         entry->lastPlayed.isValid() ? entry->lastPlayed.toUTC().toString(Qt::ISODate) : QString()},
+        {QStringLiteral("lastPlayedText"),
+         entry->lastPlayed.isValid() ? entry->lastPlayed.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))
+                                     : QString()},
+        {QStringLiteral("addedAt"),
+         entry->addedAt.isValid() ? entry->addedAt.toUTC().toString(Qt::ISODate) : QString()},
+        {QStringLiteral("present"), entry->present},
+        {QStringLiteral("notes"), entry->notes},
+    };
+}
+
+bool LibraryController::setGameMetadata(qint64 id, const QString &title, const QString &notes)
+{
+    return m_library->setMetadata(id, title, notes);
+}
+
+bool LibraryController::setGameSystem(qint64 id, const QString &systemId)
+{
+    return m_library->setSystemOverride(id, systemId);
+}
+
+bool LibraryController::removeGame(qint64 id)
+{
+    return m_library->removeFromLibrary(id);
+}
+
+int LibraryController::restoreRemovedGames()
+{
+    const int count = int(m_library->hiddenEntries().size());
+    return m_library->restoreHidden() ? count : 0;
 }
 
 void LibraryController::rebuildEmulatorInfo()
@@ -251,10 +428,50 @@ void LibraryController::rebuildEmulatorInfo()
         m_emulatorInfo.insert(c.id, {c.name, m_app->unavailableReason(c.id)});
 }
 
+void LibraryController::rebuildSystems()
+{
+    const QList<library::GameEntry> all = m_library->entries();
+    QHash<QString, int> gameCounts;
+    for (const auto &e : all)
+        gameCounts[e.systemId] += 1;
+
+    QHash<QString, int> emulatorCounts;
+    for (const auto &c : m_app->enabledEmulators()) {
+        for (const QString &systemId : c.systems)
+            emulatorCounts[systemId] += 1;
+    }
+
+    QList<SystemListModel::Entry> entries;
+    if (m_catalog) {
+        for (const auto &system : m_catalog->systems()) {
+            SystemListModel::Entry entry;
+            entry.id = system.id;
+            entry.name = system.name;
+            entry.shortName = system.shortName;
+            entry.gameCount = gameCounts.value(system.id);
+            entry.emulatorCount = emulatorCounts.value(system.id);
+            entries.append(entry);
+        }
+    }
+    const int other = gameCounts.value(QString());
+    if (other > 0) {
+        SystemListModel::Entry entry;
+        entry.id.clear();
+        entry.name = QStringLiteral("Other");
+        entry.shortName = QStringLiteral("Other");
+        entry.gameCount = other;
+        entry.emulatorCount = 0;
+        entries.append(entry);
+    }
+    m_systems.setEntries(entries);
+}
+
 void LibraryController::rebuildViews()
 {
     const QList<library::GameEntry> all = m_library->entries();
-    m_games.setEntries(library::LibraryQuery::apply(all, m_query));
+    const QList<library::GameEntry> gamesSource
+        = m_query.filter == library::LibraryFilter::Missing ? m_library->missingEntries() : all;
+    m_games.setEntries(library::LibraryQuery::apply(gamesSource, m_query));
 
     library::QueryOptions recent;
     recent.filter = library::LibraryFilter::Recent;
@@ -264,6 +481,16 @@ void LibraryController::rebuildViews()
     library::QueryOptions favorites;
     favorites.filter = library::LibraryFilter::Favorites;
     m_favorites.setEntries(library::LibraryQuery::apply(all, favorites));
+
+    QList<library::GameEntry> recentlyAdded = all;
+    std::sort(recentlyAdded.begin(), recentlyAdded.end(), [](const auto &a, const auto &b) {
+        return a.addedAt != b.addedAt ? a.addedAt > b.addedAt : a.id > b.id;
+    });
+    if (recentlyAdded.size() > 20)
+        recentlyAdded.resize(20);
+    m_recentlyAdded.setEntries(recentlyAdded);
+
+    rebuildSystems();
     emit contentChanged();
 }
 

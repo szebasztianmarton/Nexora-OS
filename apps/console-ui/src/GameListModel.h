@@ -30,11 +30,16 @@ public:
         LastPlayedRole, // human readable, empty if never
         AvailableRole, // an enabled, working emulator handles the game
         UnavailableReasonRole,
+        SystemIdRole,
+        SystemShortNameRole,
+        DisplayTitleRole,
     };
     Q_ENUM(Role)
 
     // emulator id -> (display name, unavailable reason or empty)
     using EmulatorInfo = std::function<std::pair<QString, QString>(const QString &emulatorId)>;
+    // system id -> short name (empty if unknown or id is empty)
+    using SystemInfo = std::function<QString(const QString &systemId)>;
 
     explicit GameListModel(QObject *parent = nullptr);
 
@@ -43,6 +48,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     void setEmulatorInfo(EmulatorInfo info) { m_info = std::move(info); }
+    void setSystemInfo(SystemInfo info) { m_systemInfo = std::move(info); }
     // Replaces the content; keeps rows whose ids did not change in place (no full reset
     // when only flags changed) so QML views keep their current item and focus.
     void setEntries(const QList<library::GameEntry> &entries);
@@ -57,6 +63,7 @@ signals:
 private:
     QList<library::GameEntry> m_entries;
     EmulatorInfo m_info;
+    SystemInfo m_systemInfo;
 };
 
 } // namespace nexora::ui

@@ -16,6 +16,7 @@ ApplicationWindow {
     required property SettingsController settings
     required property SystemController system
     required property GameBarController gameBar
+    required property UpdateController updates
 
     width: 1280
     height: 720
@@ -97,6 +98,9 @@ ApplicationWindow {
         }
         return false
     }
+    function openGameOptions(gameId) {
+        gameOptions.open(gameId, window.activeFocusItem)
+    }
     function restoreFocus() {
         if (window.gameBar.open) {
             gameBarLayer.focusDefault()
@@ -145,6 +149,7 @@ ApplicationWindow {
         hints: window.app.busy
                ? [{ button: "A / Enter", action: "Stop emulator" },
                   { button: "Select + Start (hold)", action: "Return to Nexora" }]
+               : gameOptions.visible ? gameOptions.hints
                : tabBar.activeFocus
                  ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
                     { button: "L1 / R1", action: "Switch tab" }]
@@ -185,6 +190,7 @@ ApplicationWindow {
                 app: window.app
                 library: window.library
                 onNavigate: (tab) => window.navigate(tab)
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
             }
             GamesScreen {
                 id: gamesScreen
@@ -193,12 +199,14 @@ ApplicationWindow {
                 app: window.app
                 library: window.library
                 onNavigate: (tab) => window.navigate(tab)
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
             }
             EmulatorsScreen {
                 id: emulatorsScreen
                 anchors.fill: parent
                 visible: window.currentTab === 2
                 app: window.app
+                settings: window.settings
             }
             SettingsScreen {
                 id: settingsScreen
@@ -208,6 +216,8 @@ ApplicationWindow {
                 library: window.library
                 settings: window.settings
                 system: window.system
+                updates: window.updates
+                onOpenUpdatePanel: {} // Task 9 opens the actual update panel here.
             }
             DiagnosticsScreen {
                 id: diagnosticsScreen
@@ -296,6 +306,12 @@ ApplicationWindow {
         }
     }
 
+    GameOptionsDialog {
+        id: gameOptions
+        anchors.fill: parent
+        library: window.library
+    }
+
     RunningOverlay {
         id: overlay
         anchors.fill: parent
@@ -368,5 +384,13 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
 
-    Component.onCompleted: focusPage()
+    Component.onCompleted: {
+        // Every screen reads these back off Theme; binding them once here keeps the
+        // accessibility settings (high contrast, UI scale, reduced motion) wired to the
+        // whole interface without each screen having to know about SettingsController.
+        Theme.scale = Qt.binding(() => window.settings.uiScale / 100)
+        Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
+        Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
+        focusPage()
+    }
 }

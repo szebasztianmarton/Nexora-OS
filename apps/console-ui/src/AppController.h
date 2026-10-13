@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EmulatorListModel.h"
+#include "input/InputController.h"
 
 #include "nexora/emulator/EmulatorManager.h"
 #include "nexora/shared/ConfigLoader.h"
@@ -9,10 +10,11 @@
 #include <QPointer>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
-namespace nexora::input {
-class InputController;
+namespace nexora::emulator {
+class LaunchHistory;
 }
 
 namespace nexora::ui {
@@ -41,8 +43,16 @@ class AppController : public QObject
     Q_PROPERTY(QString inputBackend READ inputBackend NOTIFY inputChanged)
     Q_PROPERTY(QString inputStatus READ inputStatus NOTIFY inputChanged)
     Q_PROPERTY(QStringList inputDevices READ inputDevices NOTIFY inputChanged)
+    // The input layer itself (device list with backend/connectedAt, test mode, lastRawEvent);
+    // null until setInputController() is called. Exposed so the Settings screen can offer
+    // "Test input" without AppController having to re-expose every InputController property.
+    Q_PROPERTY(nexora::input::InputController *input READ input NOTIFY inputChanged)
     Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT)
+    Q_PROPERTY(QString emulatorLogPath READ emulatorLogPath NOTIFY lastOutputChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(bool paused READ paused NOTIFY pausedChanged)
+    Q_PROPERTY(bool canPause READ canPause NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList launchHistory READ launchHistory NOTIFY launchHistoryChanged)
 
 public:
     struct Options
@@ -51,6 +61,7 @@ public:
         QString configDirectorySource; // human-readable origin of configDirectory
         QString logFilePath;
         bool runningAsRoot = false;
+        QString emulatorLogDirectory; // per-emulator output logs; empty = disabled
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);
@@ -59,6 +70,8 @@ public:
     void setInputController(input::InputController *input);
     // While the game bar is open the controller drives the launcher even if an emulator runs.
     void setGameBarOpen(bool open);
+    // Optional; when set, every finished launch is recorded (see onProcessFinished()).
+    void setLaunchHistory(emulator::LaunchHistory *history) { m_history = history; }
 
     emulator::EmulatorManager *manager() { return &m_manager; }
     EmulatorListModel *emulators() { return &m_model; }
@@ -78,16 +91,27 @@ public:
     QString inputBackend() const;
     QString inputStatus() const;
     QStringList inputDevices() const;
+    input::InputController *input() const { return m_input.data(); }
     QString logFilePath() const { return m_options.logFilePath; }
+    // Output log of the current / last launch, or the log directory before the first launch.
+    QString emulatorLogPath() const;
     QString version() const;
+    bool paused() const { return m_manager.isPaused(); }
+    // The active process may be suspended (its config has pausable=true) and is Running or
+    // already paused. Does not depend on the paused state itself: it stays true throughout
+    // a pause so the UI can offer "Resume" instead of hiding the control.
+    bool canPause() const;
+    QVariantList launchHistory() const;
 
     // Starts an emulator with its default profile (see setDefaultProfiles()).
     Q_INVOKABLE bool launch(const QString &emulatorId);
     // Starts an emulator with an explicit profile ("" = emulator defaults).
     Q_INVOKABLE bool launchProfile(const QString &emulatorId, const QString &profileId);
-    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs.
+    // Starts |gamePath| with |emulatorId|; |title| is shown while it runs. An empty
+    // |profileId| uses the emulator's default profile, unless |applyDefaultProfile| is false
+    // (then the emulator's own arguments are used).
     bool launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                    const QString &profileId = {});
+                    const QString &profileId = {}, bool applyDefaultProfile = true);
 
     // emulator id -> profile id used by launch(); unknown/disabled profiles are ignored.
     void setDefaultProfiles(const QVariantMap &defaults) { m_defaultProfiles = defaults; }
@@ -95,6 +119,9 @@ public:
     // Empty when |emulatorId| is configured and its executable passed validation.
     QString unavailableReason(const QString &emulatorId) const;
     Q_INVOKABLE bool stop();
+    // Suspends / resumes the active process (SIGSTOP / SIGCONT); see canPause().
+    Q_INVOKABLE bool pause();
+    Q_INVOKABLE bool resume();
     // Controller "return to launcher" chord: stops the running emulator, if any.
     Q_INVOKABLE bool returnToLauncher();
     Q_INVOKABLE bool reloadConfig();
@@ -106,6 +133,8 @@ signals:
     void lastOutputChanged();
     void configChanged();
     void inputChanged();
+    void pausedChanged();
+    void launchHistoryChanged();
     // A launch request was accepted (process is starting).
     void launchStarted(const QString &emulatorId, const QString &gamePath);
 
@@ -119,8 +148,10 @@ private:
     emulator::EmulatorManager m_manager;
     EmulatorListModel m_model;
     QPointer<input::InputController> m_input;
+    emulator::LaunchHistory *m_history = nullptr;
     QTimer m_outputNotifyTimer;
     QString m_activeName;
+    QString m_activeProfileId;
     QString m_statusMessage;
     bool m_statusIsError = false;
     bool m_configDirectoryFound = false;
@@ -130,6 +161,7 @@ private:
     QList<shared::EmulatorConfig> m_enabled;
     QHash<QString, QString> m_unavailable;
     QVariantMap m_defaultProfiles;
+    bool m_activePausable = false;
     bool startLaunch(const emulator::LaunchRequest &request);
 };
 

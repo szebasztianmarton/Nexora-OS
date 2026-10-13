@@ -35,6 +35,9 @@ struct EmulatorConfig
     QStringList extensions; // lower-case game file extensions handled, e.g. ".sfc"
     std::optional<int> stopTimeoutMs; // graceful-stop timeout before SIGKILL
     QList<LaunchProfile> profiles;
+    QString version; // emulator version for display; free text, at most 64 characters
+    QStringList systems; // ids of the game systems this emulator can run
+    bool pausable = false; // may be suspended with SIGSTOP and resumed with SIGCONT
 
     static EmulatorConfig make(const QString &id, const QString &name, const QString &executable,
                                const QStringList &arguments = {}, bool enabled = true)

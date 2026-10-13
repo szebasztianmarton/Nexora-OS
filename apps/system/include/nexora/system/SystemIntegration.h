@@ -12,7 +12,7 @@ namespace nexora::system {
 
 enum class Platform { Desktop, Embedded };
 enum class PowerAction { Poweroff, Reboot };
-enum class Capability { Power, Volume };
+enum class Capability { Power, Volume, Update };
 
 struct SystemStatus
 {
@@ -42,6 +42,17 @@ struct DeviceStatus
     int batteryPercent = -1; // first battery; -1 when there is none
     bool batteryCharging = false;
     QString network = QStringLiteral("none"); // "ethernet", "wifi" or "none" (no interface up)
+};
+
+// What the system can say about updates. MVP 2 has no update mechanism: this is the seam a
+// future one (e.g. A/B image updates via a privileged helper) plugs into, so the UI can
+// already show the installed version and how to update.
+struct UpdateInfo
+{
+    bool supported = false; // an in-place update mechanism exists
+    QString installedVersion; // NEXORA_VERSION from /etc/nexora-release; empty on desktop
+    QString channel; // NEXORA_UPDATE_CHANNEL from /etc/nexora-release, if any
+    QString message; // how updates work on this platform
 };
 
 // Filesystem locations the integration reads or writes (overridable for tests).
@@ -81,6 +92,8 @@ public:
     virtual CpuTimes cpuTimes() const;
     // A handful of small sysfs reads; fine to call about once per second.
     virtual DeviceStatus deviceStatus() const;
+    // Never blocks and never contacts the network.
+    virtual UpdateInfo updateInfo() const;
 
     // Asks the system to power off / reboot. Never blocks.
     virtual bool requestPower(PowerAction action, QString *error) = 0;

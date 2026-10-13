@@ -31,6 +31,12 @@ struct LoggingOptions
 // (logging to stderr continues in that case).
 bool installMessageHandler(const LoggingOptions &options);
 
+// Runtime verbosity: messages below |minimum| (debug < info < warning < critical) are dropped
+// from every sink, including the ring buffer. Fatal messages are never dropped. The default
+// is QtDebugMsg (everything the category rules let through). Also tightens the category
+// filter for the nexora.* categories so suppressed messages are not even formatted.
+void setLogLevel(QtMsgType minimum);
+
 // Most recent formatted log lines (oldest first).
 QStringList recentLogLines();
 

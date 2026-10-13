@@ -5,6 +5,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 
+#include <atomic>
 #include <cstdio>
 #include <deque>
 #include <memory>
@@ -32,6 +33,20 @@ struct LogState
     std::deque<QString> ring;
     int ringCapacity = 500;
 };
+
+std::atomic<int> g_minimumRank{0};
+
+int severityRank(QtMsgType type)
+{
+    switch (type) {
+    case QtDebugMsg: return 0;
+    case QtInfoMsg: return 1;
+    case QtWarningMsg: return 2;
+    case QtCriticalMsg: return 3;
+    case QtFatalMsg: return 4;
+    }
+    return 4;
+}
 
 LogState &state()
 {
@@ -70,6 +85,8 @@ void rotateIfNeeded(LogState &s, qint64 incoming)
 
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
+    if (severityRank(type) < g_minimumRank.load(std::memory_order_relaxed))
+        return;
     const QString line
         = QStringLiteral("%1 [%2] %3: %4")
               .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs), QString::fromLatin1(levelName(type)),
@@ -123,6 +140,15 @@ bool installMessageHandler(const LoggingOptions &options)
     if (!ok)
         qCWarning(lcApp) << "Cannot open log file" << options.logFilePath << "- logging to stderr only";
     return ok;
+}
+
+void setLogLevel(QtMsgType minimum)
+{
+    const int rank = severityRank(minimum);
+    g_minimumRank.store(rank, std::memory_order_relaxed);
+    QLoggingCategory::setFilterRules(QStringLiteral("nexora.*.debug=%1\nnexora.*.info=%2\n")
+                                         .arg(rank <= 0 ? QStringLiteral("true") : QStringLiteral("false"),
+                                              rank <= 1 ? QStringLiteral("true") : QStringLiteral("false")));
 }
 
 QStringList recentLogLines()

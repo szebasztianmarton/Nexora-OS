@@ -1,4 +1,5 @@
 #include "nexora/shared/ConfigLoader.h"
+#include "nexora/shared/SystemCatalog.h"
 
 #include <QFile>
 #include <QTemporaryDir>
@@ -25,6 +26,17 @@ private:
                                                                QStringList *warnings = nullptr)
     {
         return ConfigLoader::parse(json, QStringLiteral("/etc/nexora/test.json"), errors, warnings);
+    }
+
+    // A minimal valid definition plus extra members; single quotes stand for double quotes
+    // (moc in Qt 6.4 trips over raw string literals in test sources).
+    static QByteArray emu(const char *extraMembers = "")
+    {
+        QByteArray json = "{'id':'a','name':'A','executable':'/bin/true'";
+        if (*extraMembers)
+            json += QByteArray(",") + extraMembers;
+        json += "}";
+        return json.replace('\'', '"');
     }
 
 private slots:
@@ -231,6 +243,67 @@ private slots:
         QVERIFY(result.emulators.isEmpty());
         QVERIFY(result.hasErrors());
         QVERIFY(result.issues.first().message.contains(QStringLiteral("larger than")));
+    }
+
+    void parsesVersionSystemsAndPausable()
+    {
+        const auto catalog = nexora::shared::SystemCatalog::builtIn();
+        QStringList errors;
+        QStringList warnings;
+        const auto config = ConfigLoader::parse(emu("'version':'1.2.3','systems':['snes','nes'],'pausable':true"),
+                                                QStringLiteral("/etc/nexora/test.json"), &errors, &warnings, &catalog);
+        QVERIFY2(config.has_value(), qPrintable(errors.join(u'\n')));
+        QCOMPARE(config->version, QStringLiteral("1.2.3"));
+        QCOMPARE(config->systems, QStringList({QStringLiteral("snes"), QStringLiteral("nes")}));
+        QVERIFY(config->pausable);
+        QVERIFY(warnings.isEmpty());
+    }
+
+    void unknownSystemIdIsDroppedWithIssue()
+    {
+        const auto catalog = nexora::shared::SystemCatalog::builtIn();
+        QStringList errors;
+        QStringList warnings;
+        const auto config = ConfigLoader::parse(emu("'systems':['snes','bogus']"),
+                                                QStringLiteral("/etc/nexora/test.json"), &errors, &warnings, &catalog);
+        QVERIFY(config.has_value());
+        QCOMPARE(config->systems, QStringList{QStringLiteral("snes")});
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY(warnings.first().contains(QStringLiteral("bogus")));
+    }
+
+    void systemIdsAreOnlySyntaxCheckedWithoutCatalog()
+    {
+        QStringList errors;
+        QStringList warnings;
+        const auto config = parse(emu("'systems':['anything','Bad Id']"), &errors, &warnings);
+        QVERIFY(config.has_value());
+        QCOMPARE(config->systems, QStringList{QStringLiteral("anything")});
+        QCOMPARE(warnings.size(), 1);
+    }
+
+    void rejectsBadVersionSystemsAndPausableTypes()
+    {
+        const QByteArray longVersion = "'version':'" + QByteArray(65, 'v') + "'";
+        const QList<QByteArray> bad{emu("'version':3"), emu("'systems':'snes'"), emu("'systems':[1]"),
+                                    emu("'pausable':'yes'"), emu(longVersion.constData())};
+        for (const QByteArray &json : bad) {
+            QStringList errors;
+            QVERIFY2(!parse(json, &errors).has_value(), json.constData());
+            QVERIFY2(!errors.isEmpty(), json.constData());
+        }
+    }
+
+    void legacyFileWithoutNewKeysStillLoads()
+    {
+        QStringList errors;
+        QStringList warnings;
+        const auto config = parse(emu(), &errors, &warnings);
+        QVERIFY(config.has_value());
+        QVERIFY(config->version.isEmpty());
+        QVERIFY(config->systems.isEmpty());
+        QVERIFY(!config->pausable);
+        QVERIFY(warnings.isEmpty());
     }
 };
 

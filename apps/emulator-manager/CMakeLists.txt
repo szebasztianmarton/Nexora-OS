@@ -1,8 +1,12 @@
 add_library(nexora_emulator_manager STATIC
     include/nexora/emulator/EmulatorProcessState.h
     include/nexora/emulator/EmulatorManager.h
+    include/nexora/emulator/EmulatorHealth.h
+    include/nexora/emulator/LaunchHistory.h
     src/EmulatorProcessState.cpp
     src/EmulatorManager.cpp
+    src/EmulatorHealth.cpp
+    src/LaunchHistory.cpp
 )
 add_library(Nexora::EmulatorManager ALIAS nexora_emulator_manager)
 

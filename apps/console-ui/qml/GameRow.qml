@@ -15,10 +15,11 @@ FocusScope {
     property real currentGameId: -1
 
     signal activated(real gameId)
+    signal optionsRequested(real gameId)
 
     implicitHeight: heading.height + 10 + (hasGames ? tileHeight + 24 : emptyBox.height)
-    readonly property int tileWidth: 230
-    readonly property int tileHeight: 200
+    readonly property real tileWidth: Theme.cardWidth
+    readonly property real tileHeight: Theme.cardHeight
 
     function selectedGameId() {
         return list.currentIndex >= 0 && list.model ? list.model.gameIdAt(list.currentIndex) : -1
@@ -112,6 +113,9 @@ FocusScope {
             } else if (event.key === Qt.Key_Favorites
                        || (event.key === Qt.Key_F && event.modifiers === Qt.NoModifier)) {
                 row.library.toggleFavorite(id)
+                event.accepted = true
+            } else if (event.key === Qt.Key_Context1 || (event.key === Qt.Key_O && event.modifiers === Qt.NoModifier)) {
+                row.optionsRequested(id)
                 event.accepted = true
             }
         }

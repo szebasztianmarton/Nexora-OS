@@ -42,6 +42,14 @@ public:
     static inline const QString InputBackend = QStringLiteral("input.backend");
     static inline const QString InputMapping = QStringLiteral("input.mapping");
     static inline const QString EmulatorDefaultProfiles = QStringLiteral("emulators.defaultProfiles");
+    static inline const QString UiTheme = QStringLiteral("ui.theme");
+    static inline const QString UiScale = QStringLiteral("ui.scale");
+    static inline const QString UiReducedMotion = QStringLiteral("ui.reducedMotion");
+    static inline const QString UiStartScreen = QStringLiteral("ui.startScreen");
+    static inline const QString InputDeadzone = QStringLiteral("input.deadzone");
+    static inline const QString AudioMuted = QStringLiteral("audio.muted");
+    static inline const QString LogLevel = QStringLiteral("log.level");
+    static inline const QString EmulatorDefaultForSystem = QStringLiteral("emulators.defaultForSystem");
 
     struct Paths
     {
