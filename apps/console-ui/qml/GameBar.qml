@@ -166,7 +166,8 @@ FocusScope {
 
                     Accessible.role: Accessible.PageTab
                     Accessible.name: modelData.title
-                    Accessible.selected: selected
+                    Accessible.checkable: true
+                    Accessible.checked: selected
 
                     onActiveFocusChanged: if (activeFocus) bar.currentTab = index
 
@@ -235,6 +236,8 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: bar.gameBar.batteryPercent >= 0
                 spacing: 6
+                Accessible.role: Accessible.StaticText
+                Accessible.name: "Battery: " + bar.gameBar.batteryPercent + "%" + (bar.gameBar.batteryCharging ? ", charging" : "")
                 BarIcon {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 38
@@ -260,6 +263,8 @@ FocusScope {
                 color: "#ffffff"
                 font.pixelSize: 56
                 font.bold: true
+                Accessible.role: Accessible.Clock
+                Accessible.name: text
                 Timer {
                     interval: 5000
                     running: bar.visible

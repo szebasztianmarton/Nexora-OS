@@ -1,3 +1,6 @@
 ## 2024-10-11 - QML Component Accessibility
 **Learning:** In Qt/QML, web ARIA tags don't work. Instead, screen readers rely on the `Accessible` attached properties. Context properties in repeaters (like `modelData` and `index`) do not need to be prefixed with the delegate ID (like `tab.index`) inside the Accessible block, and `pressed()` can just be called directly without relying on an ID prefix.
 **Action:** Always use `Accessible.role`, `Accessible.name`, `Accessible.description`, and `Accessible.onPressAction` for custom interactive QML components, being careful with implicit context properties.
+## 2024-10-13 - [Missing Accessible role and name for grouped status items in QML GameBar]
+**Learning:** Some custom UI groupings like the battery status in GameBar.qml display visual icons alongside text but lack grouping `Accessible` properties. Without `Accessible.role` and `Accessible.name` applied to the wrapper, screen readers skip or incorrectly read the information.
+**Action:** When creating custom grouped status indicators (like an icon plus a percentage text) in QML, attach `Accessible.role: Accessible.StaticText` and a dynamically bound `Accessible.name` to the wrapper (e.g., Row or Item) so screen readers read the aggregate status as a single, coherent element.

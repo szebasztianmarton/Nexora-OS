@@ -134,7 +134,8 @@ PageContainer {
                 height: Dimensions.navItemHeight
                 Accessible.role: Accessible.ListItem
                 Accessible.name: modelData.label
-                Accessible.selected: selected
+                Accessible.checkable: true
+                Accessible.checked: selected
 
                 Rectangle {
                     anchors.fill: parent
