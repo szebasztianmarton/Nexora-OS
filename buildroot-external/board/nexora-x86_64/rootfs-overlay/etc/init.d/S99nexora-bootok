@@ -1,0 +1,43 @@
+#!/bin/sh
+#
+# Starts /usr/libexec/nexora/nexora-bootok in the background: it confirms a
+# freshly installed root slot in grubenv once the console UI has stayed up
+# (or records a rollback). See that script for the protocol.
+
+DAEMON="nexora-bootok"
+PIDFILE="/var/run/$DAEMON.pid"
+EXEC="/usr/libexec/nexora/$DAEMON"
+
+start() {
+	printf 'Starting %s: ' "$DAEMON"
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile "$PIDFILE" --exec "$EXEC"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAIL"
+	fi
+	return "$status"
+}
+
+stop() {
+	printf 'Stopping %s: ' "$DAEMON"
+	# Only still running while it waits to confirm a trial boot; stopping
+	# it then leaves the slot unconfirmed (GRUB retries or rolls back).
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" > /dev/null 2>&1
+	rm -f "$PIDFILE"
+	echo "OK"
+	return 0
+}
+
+case "$1" in
+	start|stop)
+		"$1";;
+	restart|reload)
+		stop
+		start;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload}"
+		exit 1
+esac

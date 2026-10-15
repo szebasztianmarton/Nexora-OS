@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# Starts the Nexora OS update install daemon (root). It owns the FIFO
+# /run/nexora/update-request; see /usr/libexec/nexora/nexora-updated.
+
+DAEMON="nexora-updated"
+PIDFILE="/var/run/$DAEMON.pid"
+EXEC="/usr/libexec/nexora/$DAEMON"
+
+running() {
+	start-stop-daemon --stop --test --quiet --pidfile "$PIDFILE"
+}
+
+start() {
+	printf 'Starting %s: ' "$DAEMON"
+	if running; then
+		echo "already running"
+		return 0
+	fi
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile "$PIDFILE" --exec "$EXEC"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAIL"
+	fi
+	return "$status"
+}
+
+stop() {
+	printf 'Stopping %s: ' "$DAEMON"
+	if ! running; then
+		echo "not running"
+		rm -f "$PIDFILE"
+		return 0
+	fi
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAIL"
+		return "$status"
+	fi
+	while running; do
+		sleep 0.1
+	done
+	rm -f "$PIDFILE" /run/nexora/update-request
+	return "$status"
+}
+
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start|stop|restart)
+		"$1";;
+	reload)
+		restart;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload}"
+		exit 1
+esac

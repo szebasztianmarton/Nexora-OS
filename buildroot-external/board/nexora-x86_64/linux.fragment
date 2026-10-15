@@ -7,7 +7,8 @@ CONFIG_MODULES=y
 CONFIG_MODULE_UNLOAD=y
 CONFIG_FW_LOADER=y
 
-# Boot: EFI stub, GPT, root on SATA/NVMe/virtio/USB, ext4, vfat (ESP)
+# Boot: GRUB loads /boot/bzImage from the root slot; EFI stub kept.
+# GPT (root=PARTUUID=), root on SATA/NVMe/virtio/USB, ext4, vfat (ESP)
 CONFIG_EFI=y
 CONFIG_EFI_STUB=y
 CONFIG_EFI_PARTITION=y
@@ -21,6 +22,9 @@ CONFIG_VIRTIO_BLK=y
 CONFIG_SCSI_VIRTIO=y
 CONFIG_EXT4_FS=y
 CONFIG_VFAT_FS=y
+# vfat mount of the ESP (/boot/efi, grubenv): default codepage/iocharset
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ISO8859_1=y
 CONFIG_DEVTMPFS=y
 CONFIG_DEVTMPFS_MOUNT=y
 CONFIG_TMPFS=y

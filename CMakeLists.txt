@@ -103,6 +103,14 @@ set(NEXORA_UPDATE_KEYS_DIR ${PROJECT_BINARY_DIR}/share/nexora/update-keys)
 file(MAKE_DIRECTORY ${NEXORA_UPDATE_KEYS_DIR})
 install(DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/update-keys)
 
+# Version / build id / board exactly as compiled into the binaries (BuildInfo.h). The
+# Buildroot post-build script copies these into /etc/nexora-release, which the root update
+# helper and boot confirmation scripts read.
+file(CONFIGURE OUTPUT ${PROJECT_BINARY_DIR}/share/nexora/build-info
+     CONTENT "NEXORA_VERSION=@PROJECT_VERSION@\nNEXORA_BUILD_ID=@NEXORA_BUILD_ID@\nNEXORA_BOARD=@NEXORA_BOARD@\n"
+     @ONLY)
+install(FILES ${PROJECT_BINARY_DIR}/share/nexora/build-info DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora)
+
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)

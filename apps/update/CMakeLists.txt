@@ -21,3 +21,6 @@ target_link_libraries(nexora_update
 # a Nexora-authored binary.
 add_executable(nexora-update-tool tools/nexora-update-tool.cpp)
 target_link_libraries(nexora-update-tool PRIVATE nexora_update Qt6::Core nexora_warnings)
+# Installed: the image's root update helper (buildroot-external .../nexora-updated) runs it
+# to re-verify a bundle before writing it to the inactive root slot.
+install(TARGETS nexora-update-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
