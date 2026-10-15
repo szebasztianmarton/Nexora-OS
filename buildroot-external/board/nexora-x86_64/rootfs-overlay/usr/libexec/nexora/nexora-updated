@@ -1,0 +1,360 @@
+#!/bin/sh
+# shellcheck source-path=SCRIPTDIR
+# Nexora OS update install daemon (runs as root, started by
+# /etc/init.d/S85nexora-updated).
+#
+# Protocol: members of the "nexora" group write one line to the FIFO
+# /run/nexora/update-request (root:nexora 0620):
+#
+#   install <absolute bundle directory>\n
+#
+# The line must match ^install (/[A-Za-z0-9._/ -]{1,255})$ and must not
+# contain "..". Everything else is rejected. The requester is not trusted:
+#
+#  1. manifest.json and manifest.json.sig are copied into a root-only work
+#     directory (size-limited), so the manifest cannot change after it has
+#     been verified;
+#  2. that copy is verified with nexora-update-tool against the public keys
+#     in /usr/share/nexora/update-keys (signature, product, board, version
+#     is newer, minimum version, image size and SHA-256);
+#  3. the image is written to the INACTIVE root slot (the slot the system
+#     did not boot from), after disarming any pending trial boot;
+#  4. the bytes that landed on the partition are hashed again and compared
+#     with the signed SHA-256 (this also closes the window between step 2
+#     and the copy in which the bundle could have been swapped);
+#  5. only then a GRUB trial boot is armed: nexora_try=<slot>
+#     nexora_tries=3 in grubenv. nexora-bootok confirms the slot after a
+#     healthy boot; otherwise GRUB falls back to the previous slot.
+#
+# Nothing from the bundle is ever executed, sourced or evaluated.
+# Status for the requester: /run/nexora/update-status (root:nexora 0640)
+#   "installing <slot>" while working, then "ok <version>" or
+#   "error <reason>".
+#
+# Options:
+#   --once   handle exactly one request, then exit (used by the tests).
+#
+# Test mode: only when NEXORA_UPDATED_TEST=1, the paths and devices below
+# can be overridden with NEXORA_TEST_* environment variables (see
+# buildroot-external/tests/test-update-helper.sh). Without it, overrides
+# are ignored.
+
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export LC_ALL=C
+umask 077
+
+# shellcheck source=nexora-functions
+. "${0%/*}/nexora-functions"
+
+RUN_DIR=/run/nexora
+WORK_DIR=/run/nexora-updated
+OWNER=root
+GROUP=nexora
+KEYS_DIR=/usr/share/nexora/update-keys
+UPDATE_TOOL=/usr/bin/nexora-update-tool
+BOARD=nexora-x86_64
+# Empty: look up the GPT partition nexora-root<slot> on the boot disk.
+SLOT_A_DEV=""
+SLOT_B_DEV=""
+MAX_LINE=300
+MAX_MANIFEST=65536
+TEST_MODE=0
+
+if [ "${NEXORA_UPDATED_TEST:-0}" = "1" ]; then
+	TEST_MODE=1
+	RUN_DIR=${NEXORA_TEST_RUN_DIR:?}
+	WORK_DIR=${NEXORA_TEST_WORK_DIR:?}
+	OWNER=$(id -un)
+	GROUP=$(id -gn)
+	KEYS_DIR=${NEXORA_TEST_KEYS_DIR:?}
+	UPDATE_TOOL=${NEXORA_TEST_UPDATE_TOOL:?}
+	SLOT_A_DEV=${NEXORA_TEST_SLOT_A:?}
+	SLOT_B_DEV=${NEXORA_TEST_SLOT_B:?}
+	NEXORA_GRUBENV=${NEXORA_TEST_GRUBENV:?}
+	NEXORA_PENDING_FILE=${NEXORA_TEST_PENDING_FILE:?}
+	NEXORA_RELEASE_FILE=${NEXORA_TEST_RELEASE_FILE:?}
+	NEXORA_CMDLINE_FILE=${NEXORA_TEST_CMDLINE_FILE:?}
+	NEXORA_GRUB_EDITENV=${NEXORA_TEST_GRUB_EDITENV:-grub-editenv}
+fi
+
+FIFO="${RUN_DIR}/update-request"
+STATUS="${RUN_DIR}/update-status"
+
+ONCE=0
+case "${1:-}" in
+"") ;;
+--once) ONCE=1 ;;
+*)
+	echo "usage: $0 [--once]" >&2
+	exit 2
+	;;
+esac
+
+log() {
+	if [ "${TEST_MODE}" = "1" ]; then
+		echo "nexora-updated: $2" >&2
+	else
+		logger -t nexora-updated -p "daemon.$1" -- "$2"
+	fi
+}
+
+# Printable, bounded excerpt of untrusted text for logs and the status.
+sanitize() {
+	printf '%s' "$1" | tr -c 'A-Za-z0-9 _.:,()/=-' '_' | cut -c1-160
+}
+
+write_status() {
+	printf '%s\n' "$1" > "${STATUS}.tmp" &&
+		chown "${OWNER}:${GROUP}" "${STATUS}.tmp" &&
+		chmod 0640 "${STATUS}.tmp" &&
+		mv -f "${STATUS}.tmp" "${STATUS}"
+}
+
+# fail REASON: report an error for the current request.
+fail() {
+	log err "install failed: $1"
+	write_status "error $1"
+	rm -rf "${WORK_DIR}"
+	return 1
+}
+
+# copy_limited SRC DST MAX: copy a regular file of at most MAX bytes.
+copy_limited() {
+	[ -f "$1" ] || return 1
+	head -c $(($3 + 1)) "$1" > "$2" || return 1
+	[ "$(wc -c < "$2")" -le "$3" ]
+}
+
+# copy_exact SRC DST SIZE: write the first SIZE bytes of SRC over the start
+# of DST (block device, or a regular file in test mode) without truncating.
+copy_exact() {
+	_mib=1048576
+	_full=$(($3 / _mib))
+	_rest=$(($3 % _mib))
+	if [ "${_full}" -gt 0 ]; then
+		dd if="$1" of="$2" bs="${_mib}" count="${_full}" \
+			conv=notrunc,fsync 2> /dev/null || return 1
+	fi
+	if [ "${_rest}" -gt 0 ]; then
+		dd if="$1" of="$2" bs=1 skip=$((_full * _mib)) \
+			seek=$((_full * _mib)) count="${_rest}" \
+			conv=notrunc,fsync 2> /dev/null || return 1
+	fi
+	sync
+}
+
+# manifest_field PATTERN: first value matching a sed BRE capture in the
+# private manifest copy. Only used with fixed patterns that restrict the
+# value to a safe character set.
+manifest_field() {
+	sed -n "s/.*$1.*/\\1/p" "${WORK_DIR}/manifest.json" | head -n 1
+}
+
+slot_device() {
+	case "$1" in
+	A) _dev=${SLOT_A_DEV} ;;
+	B) _dev=${SLOT_B_DEV} ;;
+	*) return 1 ;;
+	esac
+	if [ -z "${_dev}" ]; then
+		_dev=$(nexora_part_device "nexora-root$1") || return 1
+	fi
+	echo "${_dev}"
+}
+
+install_bundle() {
+	bundle=$1
+
+	running=$(nexora_running_slot) ||
+		{ fail "cannot determine the running slot (no nexora.slot=)"; return 1; }
+	target=$(nexora_other_slot "${running}")
+	write_status "installing ${target}"
+
+	[ -f "${NEXORA_GRUBENV}" ] ||
+		{ fail "boot environment (grubenv) not found"; return 1; }
+	[ -d "${bundle}" ] || { fail "bundle directory not found"; return 1; }
+
+	# 1. Private copy of the manifest and its signature.
+	rm -rf "${WORK_DIR}"
+	mkdir -m 0700 "${WORK_DIR}" ||
+		{ fail "cannot create the work directory"; return 1; }
+	copy_limited "${bundle}/manifest.json" "${WORK_DIR}/manifest.json" \
+		"${MAX_MANIFEST}" || { fail "cannot read manifest.json"; return 1; }
+	copy_limited "${bundle}/manifest.json.sig" \
+		"${WORK_DIR}/manifest.json.sig" 64 ||
+		{ fail "cannot read manifest.json.sig"; return 1; }
+
+	# The image stays in the bundle; the tool reads it through a symlink.
+	# Its name is untrusted until the tool has verified the manifest, so
+	# it is restricted to the manifest's own character set here.
+	image_name=$(manifest_field \
+		'"file"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9._-]\{1,128\}\)"')
+	case "${image_name}" in
+	"" | . | .. | manifest.json | manifest.json.sig)
+		fail "manifest names no usable image file"
+		return 1
+		;;
+	esac
+	ln -s "${bundle}/${image_name}" "${WORK_DIR}/${image_name}" ||
+		{ fail "cannot reference the image"; return 1; }
+
+	# 2. Verify (as root, with the image's own keys).
+	current_version=$(nexora_release_value NEXORA_VERSION)
+	case "${current_version}" in
+	"" | *[!0-9.]*)
+		fail "cannot read NEXORA_VERSION from ${NEXORA_RELEASE_FILE}"
+		return 1
+		;;
+	esac
+	result=$("${UPDATE_TOOL}" verify --keys "${KEYS_DIR}" \
+		--bundle "${WORK_DIR}" --current-version "${current_version}" \
+		--board "${BOARD}" 2> /dev/null)
+	status=$?
+	result=$(printf '%s\n' "${result}" | head -n 1)
+	if [ "${status}" -ne 0 ]; then
+		fail "verification failed: $(sanitize "${result#error }")"
+		return 1
+	fi
+	new_version=$(printf '%s\n' "${result}" | sed -n \
+		's/^ok \([0-9]\{1,4\}\.[0-9]\{1,4\}\.[0-9]\{1,4\}\) [0-9a-f]\{64\}$/\1/p')
+	sha256=$(printf '%s\n' "${result}" | sed -n \
+		's/^ok [0-9.]* \([0-9a-f]\{64\}\)$/\1/p')
+	if [ -z "${new_version}" ] || [ -z "${sha256}" ]; then
+		fail "unexpected verifier output"
+		return 1
+	fi
+	size=$(manifest_field '"size"[[:space:]]*:[[:space:]]*\([0-9]\{1,12\}\)')
+	case "${size}" in
+	"" | 0 | *[!0-9]*)
+		fail "manifest has no usable image size"
+		return 1
+		;;
+	esac
+	new_build=$(nexora_safe_word "$(manifest_field \
+		'"buildId"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9._+-]\{1,64\}\)"')")
+
+	# 3. Target slot checks.
+	device=$(slot_device "${target}") ||
+		{ fail "cannot find the partition of slot ${target}"; return 1; }
+	if grep -q "^${device} " /proc/mounts 2> /dev/null; then
+		fail "slot ${target} (${device}) is mounted"
+		return 1
+	fi
+	slot_size=$(nexora_size "${device}") ||
+		{ fail "cannot determine the size of slot ${target}"; return 1; }
+	if [ "${size}" -gt "${slot_size}" ]; then
+		fail "image (${size} bytes) is larger than slot ${target} (${slot_size} bytes)"
+		return 1
+	fi
+
+	# Never leave a trial boot pointing at a slot that is being rewritten,
+	# and make the running slot the fallback if it was booted manually.
+	confirmed=$(nexora_env_get nexora_slot)
+	if [ "${confirmed}" != "${running}" ]; then
+		nexora_env_set "nexora_slot=${running}" ||
+			{ fail "cannot update grubenv"; return 1; }
+	fi
+	nexora_env_set nexora_try= nexora_tries=0 ||
+		{ fail "cannot update grubenv"; return 1; }
+	rm -f "${NEXORA_PENDING_FILE}"
+
+	log notice "writing ${new_version} (${size} bytes) to slot ${target} (${device})"
+	copy_exact "${WORK_DIR}/${image_name}" "${device}" "${size}" ||
+		{ fail "writing slot ${target} failed"; return 1; }
+
+	# 4. Re-hash what is on the partition (from the medium, not the page
+	# cache, when it is a real block device).
+	if [ -b "${device}" ]; then
+		echo 3 > /proc/sys/vm/drop_caches
+	fi
+	written=$(head -c "${size}" "${device}" | sha256sum | cut -d ' ' -f 1)
+	if [ "${written}" != "${sha256}" ]; then
+		fail "slot ${target} does not match the signed image after writing"
+		return 1
+	fi
+
+	# 5. Arm the trial boot, then leave a record for nexora-bootok.
+	nexora_env_set "nexora_try=${target}" nexora_tries=3 ||
+		{ fail "cannot arm the trial boot in grubenv"; return 1; }
+	previous_version=$(nexora_safe_word "${current_version}")
+	previous_build=$(nexora_safe_word "$(nexora_release_value NEXORA_BUILD_ID)")
+	mkdir -p "${NEXORA_PENDING_FILE%/*}"
+	if ! printf 'format=1\ntarget=%s\nprevious_version=%s\nprevious_build=%s\nnew_version=%s\nnew_build=%s\n' \
+		"${target}" "${previous_version}" "${previous_build}" \
+		"${new_version}" "${new_build}" > "${NEXORA_PENDING_FILE}.tmp" ||
+		! mv -f "${NEXORA_PENDING_FILE}.tmp" "${NEXORA_PENDING_FILE}"; then
+		# Not fatal: the trial boot is armed; only the record is missing.
+		log warning "cannot write ${NEXORA_PENDING_FILE}"
+	fi
+	sync
+
+	rm -rf "${WORK_DIR}"
+	log notice "update ${new_version} installed to slot ${target}; trial boot armed"
+	write_status "ok ${new_version}"
+	return 0
+}
+
+# handle_request LINE: validate the request line, then install.
+handle_request() {
+	case "$1" in
+	"install /"*) ;;
+	*)
+		log warning "rejected request ($(sanitize "$1"))"
+		write_status "error invalid request"
+		return 1
+		;;
+	esac
+	path=${1#install }
+	if [ "${#path}" -lt 2 ] || [ "${#path}" -gt 256 ]; then
+		log warning "rejected request (path length ${#path})"
+		write_status "error invalid request"
+		return 1
+	fi
+	case "${path}" in
+	*..* | *[!A-Za-z0-9._/\ -]*)
+		log warning "rejected request ($(sanitize "${path}"))"
+		write_status "error invalid request"
+		return 1
+		;;
+	esac
+	install_bundle "${path}"
+}
+
+mkdir -p "${RUN_DIR}"
+chown "${OWNER}:${GROUP}" "${RUN_DIR}"
+chmod 0750 "${RUN_DIR}"
+
+rm -f "${FIFO}"
+if ! mkfifo -m 0620 "${FIFO}"; then
+	log err "cannot create ${FIFO}"
+	exit 1
+fi
+chown "${OWNER}:${GROUP}" "${FIFO}"
+chmod 0620 "${FIFO}"
+
+# Read-write open: the daemon always holds a writer itself, so reads block
+# instead of returning EOF, and O_NONBLOCK writers succeed while it runs.
+exec 3<> "${FIFO}"
+
+log info "listening on ${FIFO}"
+
+while :; do
+	line=""
+	# shellcheck disable=SC3045 # BusyBox ash supports read -n
+	if ! IFS= read -r -n "${MAX_LINE}" line <&3; then
+		log err "read from ${FIFO} failed"
+		sleep 1
+		continue
+	fi
+	if handle_request "${line}"; then
+		rc=0
+	else
+		rc=1
+		# Throttle so a misbehaving client cannot flood the log.
+		[ "${ONCE}" = "1" ] || sleep 1
+	fi
+	if [ "${ONCE}" = "1" ]; then
+		rm -f "${FIFO}"
+		exit "${rc}"
+	fi
+done

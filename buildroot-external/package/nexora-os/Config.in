@@ -7,14 +7,20 @@ config BR2_PACKAGE_NEXORA_OS
 	select BR2_PACKAGE_QT6BASE_SQLITE
 	select BR2_PACKAGE_QT6DECLARATIVE
 	select BR2_PACKAGE_QT6DECLARATIVE_QUICK
+	select BR2_PACKAGE_OPENSSL # Ed25519/SHA-256 for signed updates
 	help
 	  Nexora OS console user interface (nexora-console-ui), a
 	  controller-first Qt 6 / QML launcher for native Linux
 	  emulators, built from the Nexora OS source tree that
 	  contains this BR2_EXTERNAL tree.
 
-	  Installs /usr/bin/nexora-console-ui and the example
-	  emulator configuration in /usr/share/nexora/emulators.
+	  Installs /usr/bin/nexora-console-ui, the update bundle
+	  verifier /usr/bin/nexora-update-tool, the example emulator
+	  configuration in /usr/share/nexora/emulators and the trusted
+	  update public keys (*.pem) found in
+	  board/nexora-x86_64/update-keys/ into
+	  /usr/share/nexora/update-keys. Without a key, updates are
+	  refused (fail closed).
 
 	  The optional SDL3 gamepad backend is not available: the
 	  pinned Buildroot release (2026.02.x LTS) has no sdl3

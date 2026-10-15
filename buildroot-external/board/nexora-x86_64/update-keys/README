@@ -1,0 +1,29 @@
+Trusted update signing keys for the Nexora OS image
+====================================================
+
+Every *.pem file in this directory is installed by the nexora-os package
+into /usr/share/nexora/update-keys/ in the image. Both nexora-console-ui
+(UpdateService) and the root update helper (/usr/libexec/nexora/
+nexora-updated, through nexora-update-tool) accept an update bundle only if
+manifest.json.sig is a valid Ed25519 signature over manifest.json by one of
+these keys.
+
+Rules:
+
+- PUBLIC keys only (PEM "PUBLIC KEY", Ed25519). A private key must never be
+  placed in this directory or anywhere in the repository; release signing
+  keys are kept offline by the release maintainers.
+- No key is committed to the repository. Copy the release public key(s)
+  here before building a release image, e.g.
+
+      openssl pkey -in /offline/nexora-release.key -pubout \
+          -out board/nexora-x86_64/update-keys/nexora-release.pem
+
+  (run that on the offline machine and copy only the .pem output).
+- With no key installed, the image refuses every update (fail closed).
+- Buildroot's target directory is cumulative: after removing a key from
+  this directory, rebuild with "make nexora-os-dirclean all" (or from a
+  clean output directory) so the old key does not stay in the image.
+- Key rotation: ship the new public key in an update that is signed by a
+  key the installed image still trusts. Revocation: ship an update,
+  signed by a still-trusted key, without the revoked key.

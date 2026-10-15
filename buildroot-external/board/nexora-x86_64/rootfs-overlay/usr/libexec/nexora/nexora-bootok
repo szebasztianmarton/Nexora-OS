@@ -1,0 +1,171 @@
+#!/bin/sh
+# shellcheck source-path=SCRIPTDIR
+# Nexora OS boot confirmation (runs as root, started in the background by
+# /etc/init.d/S99nexora-bootok).
+#
+# Completes the A/B trial-boot protocol started by nexora-updated:
+#
+# - Running slot == nexora_try (a freshly installed slot is on trial):
+#   wait NEXORA_BOOTOK_DELAY seconds, then, if the console UI supervisor
+#   and nexora-console-ui are still running, make the slot permanent
+#   (grubenv: nexora_slot=<slot> nexora_try= nexora_tries=0), write
+#   "ok <version>" to /run/nexora/update-status and record the result in
+#   the user's state directory (last-update.json, read by the UI). If the
+#   UI is not healthy (crash loop, nexora.noui, nexora.recovery, autostart
+#   disabled) nothing is confirmed: the next boot uses one more try, and
+#   GRUB falls back to the confirmed slot when the tries are used up.
+# - A pending update exists but the system runs the other slot (GRUB ran
+#   out of tries, or the previous slot was picked by hand): the trial is
+#   cancelled and "rolled-back" is recorded.
+#
+# The running slot comes from nexora.slot= on the kernel command line.
+
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export LC_ALL=C
+umask 077
+
+# shellcheck source=nexora-functions
+. "${0%/*}/nexora-functions"
+
+APP_USER=nexora
+APP=nexora-console-ui
+SESSION_PIDFILE=/var/run/nexora.pid
+RUN_DIR=/run/nexora
+OWNER=root
+GROUP=nexora
+STATE_DIR=/home/nexora/.local/state/nexora/update
+NEXORA_BOOTOK_DELAY=45
+TEST_MODE=0
+
+if [ "${NEXORA_BOOTOK_TEST:-0}" = "1" ]; then
+	# Test mode (buildroot-external/tests/test-update-helper.sh): scratch
+	# paths, no delay, UI health and the state directory are simulated.
+	TEST_MODE=1
+	RUN_DIR=${NEXORA_TEST_RUN_DIR:?}
+	OWNER=$(id -un)
+	GROUP=$(id -gn)
+	STATE_DIR=${NEXORA_TEST_STATE_DIR:?}
+	NEXORA_GRUBENV=${NEXORA_TEST_GRUBENV:?}
+	NEXORA_PENDING_FILE=${NEXORA_TEST_PENDING_FILE:?}
+	NEXORA_RELEASE_FILE=${NEXORA_TEST_RELEASE_FILE:?}
+	NEXORA_CMDLINE_FILE=${NEXORA_TEST_CMDLINE_FILE:?}
+	NEXORA_GRUB_EDITENV=${NEXORA_TEST_GRUB_EDITENV:-grub-editenv}
+	NEXORA_BOOTOK_DELAY=0
+elif [ -r /etc/default/nexora ]; then
+	# shellcheck source=/dev/null
+	. /etc/default/nexora
+fi
+STATUS="${RUN_DIR}/update-status"
+
+log() {
+	if [ "${TEST_MODE}" = "1" ]; then
+		echo "nexora-bootok: $2" >&2
+	else
+		logger -t nexora-bootok -p "daemon.$1" -- "$2"
+	fi
+}
+
+ui_healthy() {
+	if [ "${TEST_MODE}" = "1" ]; then
+		[ "${NEXORA_TEST_UI_HEALTHY:-0}" = "1" ]
+		return
+	fi
+	[ -r "${SESSION_PIDFILE}" ] || return 1
+	_pid=$(cat "${SESSION_PIDFILE}")
+	case "${_pid}" in
+	"" | *[!0-9]*) return 1 ;;
+	esac
+	kill -0 "${_pid}" 2> /dev/null || return 1
+	pidof "${APP}" > /dev/null 2>&1
+}
+
+# pending_value KEY: value from the record written by nexora-updated.
+pending_value() {
+	nexora_safe_word "$(sed -n "s/^$1=//p" "${NEXORA_PENDING_FILE}" 2> /dev/null | tail -n 1)"
+}
+
+# record RESULT NEW_BUILD NEW_VERSION: write last-update.json as the
+# unprivileged user (never as root into a user-owned directory). Every
+# value has passed nexora_safe_word, so no JSON escaping is needed.
+record() {
+	_prev_build=$(pending_value previous_build)
+	_prev_version=$(pending_value previous_version)
+	_json=$(printf '{"format": 1, "result": "%s", "previousBuildId": "%s", "newBuildId": "%s", "previousVersion": "%s", "newVersion": "%s", "slot": "%s"}' \
+		"$1" "${_prev_build}" "$2" "${_prev_version}" "$3" "${running}")
+	if [ "${TEST_MODE}" = "1" ]; then
+		mkdir -p "${STATE_DIR}" &&
+			printf '%s\n' "${_json}" > "${STATE_DIR}/last-update.json"
+		return
+	fi
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	printf '%s\n' "${_json}" |
+		su -s /bin/sh "${APP_USER}" -c 'umask 077
+d=/home/nexora/.local/state/nexora/update
+mkdir -p "$d" && cat > "$d/last-update.json.tmp" &&
+mv -f "$d/last-update.json.tmp" "$d/last-update.json"' ||
+		log warning "cannot write ${STATE_DIR}/last-update.json"
+}
+
+running=$(nexora_running_slot) || {
+	log info "no nexora.slot= on the kernel command line; nothing to do"
+	exit 0
+}
+if [ ! -f "${NEXORA_GRUBENV}" ]; then
+	log err "${NEXORA_GRUBENV} not found (ESP not mounted?)"
+	exit 1
+fi
+
+try=$(nexora_env_get nexora_try)
+pending=0
+[ -f "${NEXORA_PENDING_FILE}" ] && pending=1
+pending_target=""
+[ "${pending}" = "1" ] && pending_target=$(pending_value target)
+
+if [ -n "${try}" ] && [ "${try}" = "${running}" ]; then
+	log info "slot ${running} is on trial; confirming in ${NEXORA_BOOTOK_DELAY}s if the UI stays up"
+	sleep "${NEXORA_BOOTOK_DELAY}"
+	if ! ui_healthy; then
+		log warning "console UI not running; slot ${running} NOT confirmed (GRUB will retry or roll back)"
+		exit 1
+	fi
+	if ! nexora_env_set "nexora_slot=${running}" nexora_try= nexora_tries=0; then
+		log err "cannot update ${NEXORA_GRUBENV}"
+		exit 1
+	fi
+	version=$(nexora_safe_word "$(nexora_release_value NEXORA_VERSION)")
+	build=$(nexora_safe_word "$(nexora_release_value NEXORA_BUILD_ID)")
+	if [ -d "${RUN_DIR}" ]; then
+		printf 'ok %s\n' "${version}" > "${STATUS}.tmp" &&
+			chown "${OWNER}:${GROUP}" "${STATUS}.tmp" &&
+			chmod 0640 "${STATUS}.tmp" &&
+			mv -f "${STATUS}.tmp" "${STATUS}"
+	fi
+	if [ "${pending}" = "1" ]; then
+		record ok "${build}" "${version}"
+		rm -f "${NEXORA_PENDING_FILE}"
+		sync
+	fi
+	log notice "slot ${running} (${version}) confirmed"
+	exit 0
+fi
+
+if [ "${pending}" = "1" ] && [ "${pending_target}" != "${running}" ]; then
+	log warning "update to slot ${pending_target} did not boot successfully; running slot ${running} (rolled back)"
+	if [ -n "${try}" ]; then
+		nexora_env_set nexora_try= nexora_tries=0 ||
+			log err "cannot clear the trial boot in ${NEXORA_GRUBENV}"
+	fi
+	record rolled-back "$(pending_value new_build)" "$(pending_value new_version)"
+	rm -f "${NEXORA_PENDING_FILE}"
+	sync
+	exit 0
+fi
+
+if [ -n "${try}" ] && [ "${try}" != "${running}" ]; then
+	# A trial without a record (e.g. armed from the recovery menu) while
+	# the other slot was booted by hand: cancel it.
+	log warning "cancelling the trial boot of slot ${try} (running ${running})"
+	nexora_env_set nexora_try= nexora_tries=0 ||
+		log err "cannot clear the trial boot in ${NEXORA_GRUBENV}"
+fi
+exit 0

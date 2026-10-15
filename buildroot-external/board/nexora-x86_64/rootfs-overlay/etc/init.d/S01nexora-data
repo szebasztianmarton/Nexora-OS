@@ -1,0 +1,129 @@
+#!/bin/sh
+# shellcheck source-path=SCRIPTDIR
+#
+# Mounts the Nexora OS persistent partitions early in the boot (before
+# udev, so devices are found through sysfs by GPT partition name on the
+# disk that holds the running root filesystem):
+#
+#   nexora-esp   -> /boot/efi  vfat, root only (GRUB, grubenv)
+#   nexora-data  -> /home      ext4, user data; "e2fsck -p" first
+#
+# Never blocks the boot for more than DATA_TIMEOUT seconds: if the data
+# partition does not appear in time it is skipped and /home stays on the
+# root filesystem (NOT persistent across updates); if e2fsck takes too
+# long or reports uncorrected errors, the partition is mounted read-only
+# so the data is reachable but not changed further (repair it from a
+# root shell with "e2fsck -f /dev/disk/by-partlabel/nexora-data").
+
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+# shellcheck source=../../usr/libexec/nexora/nexora-functions
+. /usr/libexec/nexora/nexora-functions
+
+DAEMON="nexora-data"
+DATA_TIMEOUT=10
+DATA_MOUNT=/home
+APP_USER=nexora
+FSCK_LOG=/run/nexora-data-fsck.log
+
+uptime_seconds() {
+	cut -d. -f1 /proc/uptime
+}
+
+mount_esp() {
+	printf 'Mounting EFI system partition: '
+	if mountpoint -q "${NEXORA_ESP_MOUNT}"; then
+		echo "already mounted"
+		return 0
+	fi
+	if ! dev=$(nexora_part_device nexora-esp); then
+		echo "FAIL (partition nexora-esp not found)"
+		return 1
+	fi
+	mkdir -p "${NEXORA_ESP_MOUNT}"
+	if mount -t vfat -o rw,noatime,umask=0077,flush "${dev}" "${NEXORA_ESP_MOUNT}"; then
+		echo "OK"
+	else
+		echo "FAIL"
+		return 1
+	fi
+}
+
+mount_data() {
+	printf 'Mounting data partition: '
+	if mountpoint -q "${DATA_MOUNT}"; then
+		echo "already mounted"
+		return 0
+	fi
+	deadline=$(($(uptime_seconds) + DATA_TIMEOUT))
+
+	while ! dev=$(nexora_part_device nexora-data); do
+		if [ "$(uptime_seconds)" -ge "${deadline}" ]; then
+			echo "FAIL (partition nexora-data not found; ${DATA_MOUNT} is NOT persistent)"
+			return 1
+		fi
+		sleep 1
+	done
+
+	# e2fsck -p in the background so that it can be bounded in time.
+	e2fsck -p "${dev}" > "${FSCK_LOG}" 2>&1 &
+	fsck_pid=$!
+	timed_out=0
+	while kill -0 "${fsck_pid}" 2> /dev/null; do
+		if [ "$(uptime_seconds)" -ge "${deadline}" ]; then
+			kill -TERM "${fsck_pid}" 2> /dev/null
+			timed_out=1
+			break
+		fi
+		sleep 1
+	done
+	wait "${fsck_pid}"
+	fsck_rc=$?
+
+	options=rw,noatime
+	if [ "${timed_out}" = "1" ]; then
+		options=ro,noatime
+		note="e2fsck did not finish within ${DATA_TIMEOUT}s; read-only"
+	elif [ "${fsck_rc}" = "127" ]; then
+		note="e2fsck not available; not checked"
+	elif [ "${fsck_rc}" -ge 4 ]; then
+		options=ro,noatime
+		note="e2fsck exit status ${fsck_rc}, see ${FSCK_LOG}; read-only"
+	else
+		note=""
+	fi
+
+	if ! mount -t ext4 -o "${options}" "${dev}" "${DATA_MOUNT}"; then
+		echo "FAIL (${DATA_MOUNT} is NOT persistent)"
+		return 1
+	fi
+	echo "OK${note:+ (${note})}"
+	[ -n "${note}" ] && logger -t "$DAEMON" -p daemon.warning -- "${note}"
+
+	# First boot: the data filesystem is created empty by post-image.sh.
+	if [ "${options}" = "rw,noatime" ] && [ ! -d "${DATA_MOUNT}/${APP_USER}" ]; then
+		mkdir -p "${DATA_MOUNT}/${APP_USER}"
+		chown "${APP_USER}:${APP_USER}" "${DATA_MOUNT}/${APP_USER}"
+		chmod 0700 "${DATA_MOUNT}/${APP_USER}"
+	fi
+	return 0
+}
+
+case "$1" in
+	start)
+		mount_esp
+		mount_data
+		# Never fail the boot: recovery logins must stay reachable.
+		exit 0
+		;;
+	stop)
+		# Unmounted by "umount -a -r" in /etc/inittab at shutdown.
+		exit 0
+		;;
+	restart|reload)
+		exit 0
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload}"
+		exit 1
+esac

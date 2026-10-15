@@ -17,7 +17,7 @@ nexora_add_test(tst_backupservice SOURCES tst_backupservice.cpp
 # writesToolFixture() test writes a good and a tampered signed bundle (plus the trusted
 # key) to NEXORA_UPDATE_TOOL_FIXTURE_DIR, reusing the same bundle-building helper as the
 # other update tests so nexora-update-tool can be exercised against real bundles.
-set(NEXORA_UPDATE_TOOL_FIXTURE_DIR ${PROJECT_BINARY_DIR}/tests/update-tool-fixture)
+# NEXORA_UPDATE_TOOL_FIXTURE_DIR is set in tests/CMakeLists.txt (tests/system uses it too).
 nexora_add_test(tst_updateservice SOURCES tst_updateservice.cpp
     LIBS nexora_update nexora_update_testsupport OpenSSL::Crypto LABELS integration)
 target_compile_definitions(tst_updateservice PRIVATE

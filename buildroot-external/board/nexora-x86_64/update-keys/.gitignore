@@ -1,0 +1,4 @@
+# Keys are added locally for release builds and never committed.
+*
+!.gitignore
+!README
