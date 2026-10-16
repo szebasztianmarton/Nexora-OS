@@ -1,6 +1,9 @@
 # nexora_add_test(<name> SOURCES <files...> LIBS <targets...> LABELS <labels...> [GUI] [FAKE_EMULATOR])
 #   GUI            the test needs a QGuiApplication (runs on the offscreen platform)
 #   FAKE_EMULATOR  defines NEXORA_FAKE_EMULATOR="<path to nexora-fake-emulator>"
+# Labels: `unit` or `integration`, plus `security` for tests that cover path traversal and
+# escapes, redaction, and signature/manifest/checksum rejection (CI runs `ctest -L security`
+# as its own step). Tests of the image's shell helpers use the label `system`.
 function(nexora_add_test name)
     cmake_parse_arguments(ARG "GUI;FAKE_EMULATOR" "" "SOURCES;LIBS;LABELS" ${ARGN})
     qt_add_executable(${name} ${ARG_SOURCES})

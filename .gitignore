@@ -10,3 +10,6 @@ compile_commands.json
 .vscode/
 .idea/
 *.swp
+
+# Release artifacts (scripts/release/make-release.sh)
+/dist/

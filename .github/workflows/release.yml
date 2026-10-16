@@ -1,0 +1,126 @@
+name: Release
+
+# Builds, tests and packages a tagged version, signs SHA256SUMS with the release key and
+# attaches everything to a DRAFT GitHub release for a maintainer to review and publish.
+# There is no unsigned release: without the NEXORA_RELEASE_SIGNING_KEY secret (an Ed25519
+# private key in PEM format) the job fails before building anything.
+# See docs/release-process.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APT_PACKAGES: >-
+    cmake ninja-build g++
+    qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools
+    qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtqml-models
+    qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates
+    qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qttest
+    qml6-module-qtquick-shapes
+    libqt6sql6-sqlite libgl-dev libssl-dev openssl grub-common
+
+jobs:
+  release:
+    name: build, sign and draft release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - name: Require the release signing key
+        env:
+          NEXORA_RELEASE_SIGNING_KEY: ${{ secrets.NEXORA_RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -z "$NEXORA_RELEASE_SIGNING_KEY" ]; then
+            echo "::error::secret NEXORA_RELEASE_SIGNING_KEY is not set; refusing to build an unsigned release"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          # Full history and tags: make-release.sh checks the tag and runs git describe.
+          fetch-depth: 0
+
+      - name: Version from tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! printf '%s\n' "$version" | grep -Eq '^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$'; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not of the form vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          notes="docs/release-notes/$version.md"
+          if [ ! -s "$notes" ]; then
+            echo "::error file=$notes::release notes for $version are missing or empty"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "notes=$notes" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $APT_PACKAGES
+
+      - name: Build (CI preset, -Werror)
+        run: |
+          cmake --preset ci
+          cmake --build --preset ci
+
+      - name: Test
+        run: |
+          ctest --preset ci
+          ctest --preset ci -L security
+          scripts/qmllint.sh build/ci
+
+      - name: Documentation check
+        run: scripts/release/check-docs.sh
+
+      - name: Make release
+        run: scripts/release/make-release.sh "${{ steps.version.outputs.version }}"
+
+      - name: Sign SHA256SUMS
+        env:
+          NEXORA_RELEASE_SIGNING_KEY: ${{ secrets.NEXORA_RELEASE_SIGNING_KEY }}
+        run: |
+          # The key only ever exists outside the work tree, mode 0600, for this step.
+          keydir="$(mktemp -d "$RUNNER_TEMP/release-key.XXXXXX")"
+          trap 'rm -rf "$keydir"' EXIT
+          (umask 077 && printf '%s\n' "$NEXORA_RELEASE_SIGNING_KEY" > "$keydir/key.pem")
+          openssl pkey -in "$keydir/key.pem" -pubout -out "$RUNNER_TEMP/release-public.pem"
+          scripts/release/sign-update.sh --key "$keydir/key.pem" --file dist/SHA256SUMS
+
+      - name: Verify release
+        run: scripts/release/verify-release.sh dist --pubkey "$RUNNER_TEMP/release-public.pem"
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release assets must be plain files: upload every regular file directly in dist/
+          # (an update bundle directory, when present, is published separately after it
+          # has been signed offline with the update key).
+          mapfile -t assets < <(find dist -maxdepth 1 -type f | sort)
+          gh release create "$GITHUB_REF_NAME" \
+            --draft --verify-tag \
+            --title "Nexora OS ${{ steps.version.outputs.version }}" \
+            --notes-file "${{ steps.version.outputs.notes }}" \
+            "${assets[@]}"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-os-release
+          path: dist/
+          if-no-files-found: ignore
+          retention-days: 14
