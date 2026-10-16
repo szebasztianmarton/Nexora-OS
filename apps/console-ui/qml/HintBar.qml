@@ -7,7 +7,7 @@ Rectangle {
     objectName: "hintBar"
     property var hints: []   // [{ button: "A / Enter", action: "Launch" }, ...]
 
-    implicitHeight: 48
+    implicitHeight: Theme.barHeight
     color: Theme.surface
 
     Rectangle {
@@ -28,8 +28,8 @@ Rectangle {
                 required property var modelData
                 spacing: 8
                 Rectangle {
-                    height: 26
-                    width: Math.max(26, keyLabel.implicitWidth + 16)
+                    height: Math.round(26 * Theme.scale)
+                    width: Math.max(height, keyLabel.implicitWidth + Theme.space4)
                     radius: 6
                     color: Theme.surfaceRaised
                     border.color: Theme.border

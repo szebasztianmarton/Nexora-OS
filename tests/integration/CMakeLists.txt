@@ -10,6 +10,8 @@ nexora_add_test(tst_updatecontroller SOURCES tst_updatecontroller.cpp
     LIBS nexora_ui nexora_update_testsupport OpenSSL::Crypto LABELS integration)
 nexora_add_test(tst_qmlsmoke SOURCES tst_qmlsmoke.cpp
     LIBS nexora_uiplugin nexora_ui Qt6::Quick Qt6::QuickControls2 LABELS integration GUI FAKE_EMULATOR)
+# Every case runs at 1280x720 and 1920x1080 (plus high-contrast/reduced-motion runs).
+set_tests_properties(tst_qmlsmoke PROPERTIES TIMEOUT 300)
 nexora_add_test(tst_backupservice SOURCES tst_backupservice.cpp
     LIBS nexora_system LABELS integration)
 

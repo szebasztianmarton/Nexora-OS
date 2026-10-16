@@ -38,7 +38,7 @@ Rectangle {
 
     activeFocusOnTab: true
     width: parent ? parent.width : 600
-    implicitHeight: Math.max(60, texts.implicitHeight + 24)
+    implicitHeight: Math.max(Theme.rowHeight, texts.implicitHeight + Theme.space5)
     radius: Theme.radiusSmall
     color: activeFocus ? Theme.surfaceHover : (mouse.containsMouse ? Theme.surfaceRaised : Theme.surface)
     border.width: activeFocus ? Theme.focusWidth : 1

@@ -71,7 +71,7 @@ FocusScope {
         topMargin: 12
         clip: false
         keyNavigationEnabled: true
-        highlightMoveDuration: 120
+        highlightMoveDuration: Theme.animMove
         preferredHighlightBegin: 8
         preferredHighlightEnd: width - row.tileWidth - 8
         highlightRangeMode: ListView.ApplyRange

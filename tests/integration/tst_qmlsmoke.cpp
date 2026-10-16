@@ -102,6 +102,8 @@ private:
         nexora::ui::UiContext::Options options;
         options.app = {configDir, QStringLiteral("test"), {}, false, {}};
         options.settings = {{}, ui.state->filePath(QStringLiteral("settings.json"))};
+        // Everything (launch history, backups, logs) stays inside the temporary directory.
+        options.layout = nexora::shared::DataLayout::underRoot(ui.state->filePath(QStringLiteral("data")));
         options.databasePath = ui.state->filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");
         ui.context = std::make_unique<nexora::ui::UiContext>(options);
@@ -209,12 +211,14 @@ private:
 private slots:
     void initTestCase() { QQuickStyle::setStyle(QStringLiteral("Basic")); }
 
+    void tutorialOnFirstStart_data() { addWindowSizeRows(); }
     void tutorialOnFirstStart()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("alpha"));
         Ui ui;
-        load(ui, dir.path(), {1280, 720}, true);
+        load(ui, dir.path(), windowSize, true);
         if (QTest::currentTestFailed())
             return;
         auto *settings = ui.context->settings();
@@ -288,13 +292,15 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void startsOnHomeAndSwitchesTabs_data() { addWindowSizeRows(); }
     void startsOnHomeAndSwitchesTabs()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("alpha"));
         writeConfig(dir, QStringLiteral("beta"));
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
 
@@ -367,8 +373,10 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void gamesSearchLaunchAndFavorite_data() { addWindowSizeRows(); }
     void gamesSearchLaunchAndFavorite()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir config;
         writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
@@ -378,7 +386,7 @@ private slots:
         touch(games, QStringLiteral("Gamma Saga.rom"));
         touch(games, QStringLiteral("readme.txt")); // not a game
         Ui ui;
-        load(ui, config.path());
+        load(ui, config.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         addGames(ui, games);
@@ -475,11 +483,13 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void emulatorsEmptyConfiguration_data() { addWindowSizeRows(); }
     void emulatorsEmptyConfiguration()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         key(ui, Qt::Key_PageDown);
@@ -494,15 +504,17 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void emulatorsLaunchAndProfiles_data() { addWindowSizeRows(); }
     void emulatorsLaunchAndProfiles()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral("\"--sleep-ms\",\"30000\""));
         writeConfig(dir, QStringLiteral("profiled"), QStringLiteral("\"--sleep-ms\",\"30000\""),
                     QStringLiteral("\"profiles\":[{\"id\":\"fast\",\"name\":\"Fast\"},"
                                    "{\"id\":\"off\",\"name\":\"Off\",\"enabled\":false}]"));
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         key(ui, Qt::Key_PageDown);
@@ -558,8 +570,10 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void gameOptionsDialog_data() { addWindowSizeRows(); }
     void gameOptionsDialog()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir config;
         writeConfig(config, QStringLiteral("one"), QStringLiteral("\"--sleep-ms\",\"30000\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
@@ -569,7 +583,7 @@ private slots:
         touch(games, QStringLiteral("Alpha Quest.rom"));
         touch(games, QStringLiteral("Beta Racer.rom"));
         Ui ui;
-        load(ui, config.path());
+        load(ui, config.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         addGames(ui, games);
@@ -644,11 +658,13 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void settingsVolumeAndRemap_data() { addWindowSizeRows(); }
     void settingsVolumeAndRemap()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         auto *settings = ui.context->settings();
@@ -722,15 +738,17 @@ private slots:
 
         CHECK_NO_WARNINGS();
     }
+    void gameBarOverlay_data() { addWindowSizeRows(); }
     void gameBarOverlay()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
         QTemporaryDir games;
         touch(games, QStringLiteral("Alpha Quest.rom"));
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         auto *bar = ui.context->gameBar();

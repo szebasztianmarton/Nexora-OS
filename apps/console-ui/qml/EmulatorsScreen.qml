@@ -88,7 +88,7 @@ FocusScope {
         visible: count > 0
         keyNavigationEnabled: true
         highlightFollowsCurrentItem: true
-        highlightMoveDuration: 120
+        highlightMoveDuration: Theme.animMove
         preferredHighlightBegin: Theme.spacing * 2
         preferredHighlightEnd: width - 300 - Theme.spacing * 2
         highlightRangeMode: ListView.ApplyRange

@@ -31,14 +31,15 @@ FocusScope {
                                   { button: "A", action: "Select" },
                                   { button: "← → ↑ ↓", action: "Move" }]
 
-    // Game Bar palette: translucent graphite surfaces, light selected buttons.
-    readonly property color barSurface: "#2a2c30"
-    readonly property color barTile: "#3c3e42"
-    readonly property color barTileHover: "#4a4d53"
-    readonly property color barSelected: "#e6e6e6"
-    readonly property color barInk: "#1b1b1b"
-    readonly property color barLine: "#45484e"
-    readonly property color xboxGreen: "#107c10"
+    // Game Bar palette (Theme.overlay*): graphite surfaces and light selected buttons, or the
+    // high-contrast scheme when that theme is active.
+    readonly property color barSurface: Theme.overlaySurface
+    readonly property color barTile: Theme.overlayTile
+    readonly property color barTileHover: Theme.overlayTileHover
+    readonly property color barSelected: Theme.overlaySelected
+    readonly property color barInk: Theme.overlayInk
+    readonly property color barLine: Theme.overlayLine
+    readonly property color xboxGreen: Theme.overlayAccent
 
     function tabButton(index) {
         return tabRepeater.itemAt(index)
@@ -107,7 +108,7 @@ FocusScope {
     // behind the bar; a click on it closes the bar.
     Rectangle {
         anchors.fill: parent
-        color: "#000000"
+        color: Theme.overlayScrim
         opacity: 0.65
     }
     MouseArea {
@@ -123,7 +124,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: bar.settings.showHints
-        color: "#101114" // covers the dashboard's own hint bar underneath
+        color: Theme.overlayFooter // covers the dashboard's own hint bar underneath
         hints: bar.hints
     }
 
@@ -159,7 +160,7 @@ FocusScope {
                     activeFocusOnTab: true
                     color: selected ? bar.barSelected : (hovered ? bar.barTileHover : bar.barTile)
                     border.width: activeFocus ? 3 : 1
-                    border.color: activeFocus ? "#ffffff" : (selected ? bar.barSelected : bar.barLine)
+                    border.color: activeFocus ? Theme.overlayFocus : (selected ? bar.barSelected : bar.barLine)
                     scale: activeFocus ? 1.06 : 1.0
                     Behavior on scale { NumberAnimation { duration: Theme.animFast } }
                     Behavior on color { ColorAnimation { duration: Theme.animFast } }
@@ -175,7 +176,7 @@ FocusScope {
                         width: 38
                         height: 38
                         name: tabButton.modelData.icon
-                        color: tabButton.selected ? bar.barInk : "#f2f2f2"
+                        color: tabButton.selected ? bar.barInk : Theme.overlayTextSoft
                     }
                     MouseArea {
                         id: tabMouse
@@ -195,8 +196,8 @@ FocusScope {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "›"
-                color: "#d0d0d0"
-                font.pixelSize: 34
+                color: Theme.overlayTextSoft
+                font.pixelSize: Math.round(34 * Theme.scale)
             }
         }
 
@@ -215,7 +216,7 @@ FocusScope {
                 width: 34
                 height: 34
                 name: "gamepad"
-                color: bar.app.inputDevices.length > 0 ? "#ffffff" : "#8a8d93"
+                color: bar.app.inputDevices.length > 0 ? Theme.overlayText : Theme.overlayDisabled
                 Accessible.role: Accessible.StaticText
                 Accessible.name: bar.app.inputDevices.length > 0 ? "Controller connected" : "No controller"
             }
@@ -226,7 +227,7 @@ FocusScope {
                 width: 34
                 height: 34
                 name: bar.gameBar.network === "wifi" ? "wifi" : "ethernet"
-                color: "#ffffff"
+                color: Theme.overlayText
                 Accessible.role: Accessible.StaticText
                 Accessible.name: bar.gameBar.network === "wifi" ? "Wi-Fi connected" : "Wired network connected"
             }
@@ -243,12 +244,12 @@ FocusScope {
                     level: bar.gameBar.batteryPercent
                     charging: bar.gameBar.batteryCharging
                     color: bar.gameBar.batteryPercent >= 0 && bar.gameBar.batteryPercent <= 15
-                           && !bar.gameBar.batteryCharging ? Theme.danger : "#ffffff"
+                           && !bar.gameBar.batteryCharging ? Theme.danger : Theme.overlayText
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: bar.gameBar.batteryPercent + "%"
-                    color: "#ffffff"
+                    color: Theme.overlayText
                     font.pixelSize: Theme.fontTitle
                 }
             }
@@ -257,8 +258,8 @@ FocusScope {
                 objectName: "gameBarClock"
                 anchors.verticalCenter: parent.verticalCenter
                 text: Qt.formatTime(new Date(), "hh:mm")
-                color: "#ffffff"
-                font.pixelSize: 56
+                color: Theme.overlayText
+                font.pixelSize: Math.round(56 * Theme.scale)
                 font.bold: true
                 Timer {
                     interval: 5000
@@ -312,13 +313,13 @@ FocusScope {
                             height: 100
                             radius: 8
                             clip: true
-                            color: bar.app.busy ? Theme.artColor(bar.app.activeEmulatorName, 0.32) : "#0d0f14"
+                            color: bar.app.busy ? Theme.artColor(bar.app.activeEmulatorName, 0.32) : Theme.overlayArtEmpty
                             Text {
                                 visible: bar.app.busy
                                 anchors.centerIn: parent
                                 text: Theme.initials(bar.app.activeEmulatorName)
-                                color: "#ffffff"
-                                font.pixelSize: 38
+                                color: Theme.overlayText
+                                font.pixelSize: Math.round(38 * Theme.scale)
                                 font.bold: true
                                 font.italic: true
                             }
@@ -350,8 +351,8 @@ FocusScope {
                                 width: Math.min(implicitWidth, home.width - artwork.width - 22)
                                 elide: Text.ElideRight
                                 text: bar.app.busy ? bar.app.activeEmulatorName : "No game running"
-                                color: "#ffffff"
-                                font.pixelSize: 26
+                                color: Theme.overlayText
+                                font.pixelSize: Math.round(26 * Theme.scale)
                                 font.bold: true
                             }
                             Row {
@@ -366,14 +367,14 @@ FocusScope {
                                 Text {
                                     objectName: "sessionTime"
                                     text: "Playing for " + bar.formatDuration(bar.gameBar.sessionSeconds)
-                                    color: "#b9bcc2"
+                                    color: Theme.overlayTextMuted
                                     font.pixelSize: Theme.fontBody
                                 }
                             }
                             Text {
                                 visible: !bar.app.busy
                                 text: "Nexora OS " + bar.app.version
-                                color: "#b9bcc2"
+                                color: Theme.overlayTextMuted
                                 font.pixelSize: Theme.fontBody
                             }
                         }
@@ -401,7 +402,7 @@ FocusScope {
                             opacity: bar.app.state === "stopping" ? 0.4 : 1.0
                             icon: "stop"
                             label: "Stop emulator"
-                            tone: "#a4262c"
+                            tone: Theme.overlayDanger
                             requireConfirm: true
                             confirmLabel: "Press again to stop"
                             onActivated: if (bar.app.state !== "stopping") bar.app.stop()
@@ -478,7 +479,7 @@ FocusScope {
                             enabled: bar.system.powerSupported
                             icon: "power"
                             label: "Power off"
-                            tone: "#a4262c"
+                            tone: Theme.overlayDanger
                             requireConfirm: true
                             confirmLabel: "Press again to power off"
                             onActivated: bar.system.powerOff()
@@ -490,7 +491,7 @@ FocusScope {
                         text: (bar.app.inputDevices.length > 0 ? "Controller: " + bar.app.inputDevices.join(", ")
                                                                : "No controller connected (" + bar.app.inputBackend + ")")
                               + (bar.system.powerSupported ? "" : "\nPower control is not available on this platform.")
-                        color: "#9a9da3"
+                        color: Theme.overlayTextFaint
                         font.pixelSize: Theme.fontSmall
                     }
                 }
@@ -513,7 +514,7 @@ FocusScope {
                         activeFocusOnTab: true
                         color: activeFocus ? bar.barTileHover : bar.barTile
                         border.width: activeFocus ? 3 : 1
-                        border.color: activeFocus ? "#ffffff" : bar.barLine
+                        border.color: activeFocus ? Theme.overlayFocus : bar.barLine
                         Accessible.role: Accessible.Slider
                         Accessible.name: "Volume"
                         Accessible.description: bar.settings.volume + "%"
@@ -532,7 +533,7 @@ FocusScope {
                                 width: 30
                                 height: 30
                                 name: "speaker"
-                                color: bar.settings.volume === 0 ? "#8a8d93" : "#ffffff"
+                                color: bar.settings.volume === 0 ? Theme.overlayDisabled : Theme.overlayText
                             }
                             Rectangle {
                                 id: track
@@ -540,12 +541,12 @@ FocusScope {
                                 width: parent.width - 30 - volumeValue.width - 36
                                 height: 6
                                 radius: 3
-                                color: "#5a5d63"
+                                color: Theme.overlayTrack
                                 Rectangle {
                                     width: parent.width * bar.settings.volume / 100
                                     height: parent.height
                                     radius: 3
-                                    color: "#ffffff"
+                                    color: Theme.overlayText
                                 }
                                 Rectangle {
                                     x: parent.width * bar.settings.volume / 100 - width / 2
@@ -553,7 +554,7 @@ FocusScope {
                                     width: 18
                                     height: 18
                                     radius: 9
-                                    color: "#ffffff"
+                                    color: Theme.overlayText
                                 }
                             }
                             Text {
@@ -563,7 +564,7 @@ FocusScope {
                                 width: 56
                                 horizontalAlignment: Text.AlignRight
                                 text: bar.settings.volume + "%"
-                                color: "#ffffff"
+                                color: Theme.overlayText
                                 font.pixelSize: Theme.fontLarge
                                 font.bold: true
                             }
@@ -585,7 +586,7 @@ FocusScope {
                         width: parent.width
                         wrapMode: Text.WordWrap
                         text: "Saved as a preference; applied on Nexora OS hardware."
-                        color: "#9a9da3"
+                        color: Theme.overlayTextFaint
                         font.pixelSize: Theme.fontSmall
                     }
                 }
@@ -605,14 +606,14 @@ FocusScope {
                             id: cpuText
                             objectName: "cpuValue"
                             text: bar.gameBar.cpuPercent >= 0 ? bar.gameBar.cpuPercent + "%" : "—"
-                            color: "#ffffff"
-                            font.pixelSize: 44
+                            color: Theme.overlayText
+                            font.pixelSize: Math.round(44 * Theme.scale)
                             font.bold: true
                         }
                         Text {
                             anchors.baseline: cpuText.baseline
                             text: "CPU"
-                            color: "#b9bcc2"
+                            color: Theme.overlayTextMuted
                             font.pixelSize: Theme.fontBody
                             font.bold: true
                             font.letterSpacing: 1
@@ -643,7 +644,7 @@ FocusScope {
                                 ctx.lineTo(x0 + i * step, yOf(v[i]))
                             ctx.lineTo(width, height)
                             ctx.closePath()
-                            ctx.fillStyle = "rgba(16, 124, 16, 0.45)"
+                            ctx.fillStyle = Qt.rgba(Theme.overlayAccent.r, Theme.overlayAccent.g, Theme.overlayAccent.b, 0.45)
                             ctx.fill()
                             ctx.beginPath()
                             for (let j = 0; j < v.length; ++j) {
@@ -652,7 +653,7 @@ FocusScope {
                                 else
                                     ctx.lineTo(x0 + j * step, yOf(v[j]))
                             }
-                            ctx.strokeStyle = "#5dc21e"
+                            ctx.strokeStyle = Theme.overlayGraph
                             ctx.lineWidth = 2
                             ctx.stroke()
                         }
@@ -668,7 +669,7 @@ FocusScope {
                     }
                     Text {
                         text: "Load (1 min): " + (bar.gameBar.load1 >= 0 ? bar.gameBar.load1.toFixed(2) : "—")
-                        color: "#b9bcc2"
+                        color: Theme.overlayTextMuted
                         font.pixelSize: Theme.fontSmall
                     }
                 }
@@ -678,7 +679,7 @@ FocusScope {
 
     // Small upper-case heading inside a panel.
     component PanelTitle: Text {
-        color: "#b9bcc2"
+        color: Theme.overlayTextMuted
         font.pixelSize: Theme.fontSmall
         font.bold: true
         font.letterSpacing: 2
@@ -726,7 +727,7 @@ FocusScope {
             elide: Text.ElideRight
             readonly property Item tile: tileRow.current
             text: tile ? (tile.armed ? tile.confirmLabel : tile.label) : " "
-            color: tile && tile.armed ? "#ff99a4" : "#e6e6e6"
+            color: tile && tile.armed ? Theme.overlayDangerSoft : Theme.overlayTextSoft
             font.pixelSize: Theme.fontBody
         }
     }
@@ -761,9 +762,9 @@ FocusScope {
         clip: true
         activeFocusOnTab: true
         opacity: enabled ? 1.0 : 0.4
-        color: armed ? "#6b1015" : (artTitle.length > 0 ? Theme.artColor(artTitle, 0.3) : tone)
+        color: armed ? Theme.overlayArmed : (artTitle.length > 0 ? Theme.artColor(artTitle, 0.3) : tone)
         border.width: activeFocus ? 3 : 0
-        border.color: "#ffffff"
+        border.color: Theme.overlayFocus
         scale: activeFocus ? 1.06 : 1.0
         Behavior on scale { NumberAnimation { duration: Theme.animFast } }
 
@@ -793,14 +794,14 @@ FocusScope {
             width: 40
             height: 40
             name: tile.icon
-            color: "#ffffff"
+            color: Theme.overlayText
         }
         Text {
             visible: tile.artTitle.length > 0
             anchors.centerIn: parent
             text: Theme.initials(tile.artTitle)
-            color: "#ffffff"
-            font.pixelSize: 30
+            color: Theme.overlayText
+            font.pixelSize: Math.round(30 * Theme.scale)
             font.bold: true
             font.italic: true
         }
@@ -830,14 +831,14 @@ FocusScope {
             Text {
                 width: parent.width - meterDetail.width
                 text: meter.label
-                color: "#ffffff"
+                color: Theme.overlayText
                 font.pixelSize: Theme.fontBody
                 font.bold: true
             }
             Text {
                 id: meterDetail
                 text: meter.detail
-                color: "#b9bcc2"
+                color: Theme.overlayTextMuted
                 font.pixelSize: Theme.fontBody
             }
         }
@@ -845,12 +846,12 @@ FocusScope {
             width: parent.width
             height: 6
             radius: 3
-            color: "#5a5d63"
+            color: Theme.overlayTrack
             Rectangle {
                 width: parent.width * Math.max(0, meter.percent) / 100
                 height: parent.height
                 radius: 3
-                color: meter.percent >= 90 ? Theme.danger : meter.percent >= 75 ? Theme.warning : "#5dc21e"
+                color: meter.percent >= 90 ? Theme.danger : meter.percent >= 75 ? Theme.warning : Theme.overlayGraph
             }
         }
     }
