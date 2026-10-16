@@ -94,6 +94,12 @@ InputController::InputController(QObject *parent)
         qCInfo(lcInput) << "Return-to-launcher chord (Select + Start) detected";
         emit returnToLauncherRequested();
     });
+    connect(m_navigator, &GamepadNavigator::quickMenuRequested, this, [this] {
+        if (m_testMode)
+            return;
+        qCInfo(lcInput) << "Quick menu requested (Start held)";
+        emit quickMenuRequested();
+    });
     connect(m_navigator, &GamepadNavigator::rawButtonEvent, this, [this](GamepadButton button, bool pressed, quint32) {
         if (!m_testMode)
             return;

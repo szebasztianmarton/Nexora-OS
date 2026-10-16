@@ -2,12 +2,14 @@ import QtQuick
 import QtQuick.Controls
 import Nexora.Console
 
-// Full-screen dashboard: header, top-level tabs (Home, Games, Emulators, Settings,
-// Diagnostics), the running-emulator overlay, the game bar and transient notices.
+// Full-screen dashboard: header, top-level tabs (Home, Games, Systems, Favorites, Recent,
+// Emulators, Settings, System), the game details screen, the running-emulator overlay, the
+// in-game quick menu, the game bar, the update panel and transient notices.
 //
 // Controllers arrive as key events (see InputController::keyForAction): arrows, Return
 // (Accept), Escape/Back (Back), Menu/F1, Favorites, Search, PageUp/PageDown (L1/R1). The
-// game bar button (Guide) arrives through GameBarController instead; Ctrl+G on a keyboard.
+// Guide button arrives through GameBarController instead (quick menu while a game runs, the
+// game bar otherwise); Ctrl+G toggles the game bar from a keyboard.
 ApplicationWindow {
     id: window
     objectName: "mainWindow"
@@ -26,21 +28,28 @@ ApplicationWindow {
     title: "Nexora OS"
     color: Theme.background
 
+    // Only implemented capabilities get a tab (no Downloads / Imports).
     readonly property var tabs: [{ key: "home", title: "Home" },
                                  { key: "games", title: "Games" },
+                                 { key: "systems", title: "Systems" },
+                                 { key: "favorites", title: "Favorites" },
+                                 { key: "recent", title: "Recent" },
                                  { key: "emulators", title: "Emulators" },
                                  { key: "settings", title: "Settings" },
-                                 { key: "diagnostics", title: "Diagnostics" }]
+                                 { key: "system", title: "System" }]
     property int currentTab: 0
     readonly property string currentTabKey: tabs[currentTab].key
-    readonly property var pages: [homeScreen, gamesScreen, emulatorsScreen, settingsScreen, diagnosticsScreen]
+    readonly property var pages: [homeScreen, gamesScreen, systemsScreen, favoritesScreen, recentScreen,
+                                  emulatorsScreen, settingsScreen, systemScreen]
 
     // Last focused item per tab (restored when switching back) and before the overlay.
-    property var tabFocus: [null, null, null, null, null]
+    property var tabFocus: [null, null, null, null, null, null, null, null]
     property Item focusBeforeOverlay: null
     property Item focusBeforeGameBar: null
-    // The bar raised this window above a running emulator; lower it again on close.
+    property Item focusBeforeQuickMenu: null
+    // The bar / quick menu raised this window above a running emulator; lower it on close.
     property bool raisedForGameBar: false
+    property bool raisedForQuickMenu: false
 
     function tabIndex(key) {
         for (let i = 0; i < tabs.length; ++i) {
@@ -83,9 +92,29 @@ ApplicationWindow {
     }
     // Home / Games buttons; with no library folder the Settings field to add one gets focus.
     function navigate(key) {
+        if (details.visible)
+            details.close()
         openTab(key)
         if (key === "settings" && window.library.directories.length === 0)
             settingsScreen.focusAddFolder()
+    }
+    function openSettingsSection(name) {
+        openTab("settings")
+        settingsScreen.focusSection(name)
+    }
+    // Systems tab / Home systems row: the Games tab filtered to one system ("" = all; the
+    // "Other" bucket has no system id, so it shows every game).
+    function showSystem(systemId) {
+        window.library.searchText = ""
+        window.library.filter = "all"
+        window.library.systemFilter = systemId
+        openTab("games")
+    }
+    function openGameDetails(gameId) {
+        details.open(gameId, window.activeFocusItem)
+    }
+    function openUpdatePanel() {
+        updatePanel.open()
     }
     function focusSearch() {
         openTab("games")
@@ -98,16 +127,31 @@ ApplicationWindow {
         }
         return false
     }
+    function inLayer(item, layer) {
+        for (let p = item; p; p = p.parent) {
+            if (p === layer)
+                return true
+        }
+        return false
+    }
     function openGameOptions(gameId) {
         gameOptions.open(gameId, window.activeFocusItem)
     }
     function restoreFocus() {
+        if (window.gameBar.quickMenuOpen) {
+            quickMenu.focusDefault()
+            return
+        }
         if (window.gameBar.open) {
             gameBarLayer.focusDefault()
             return
         }
         if (window.app.busy) {
             overlay.forceActiveFocus()
+            return
+        }
+        if (updatePanel.visible) {
+            updatePanel.forceActiveFocus()
             return
         }
         if (tutorial.visible) {
@@ -118,6 +162,8 @@ ApplicationWindow {
         focusBeforeOverlay = null
         if (saved && saved.visible)
             saved.forceActiveFocus()
+        else if (details.visible)
+            details.focusDefault()
         else
             focusPage()
     }
@@ -150,11 +196,15 @@ ApplicationWindow {
     }
     footer: HintBar {
         visible: window.settings.showHints
-        hints: window.app.busy
+        hints: window.gameBar.quickMenuOpen ? quickMenu.hints
+               : window.app.busy
                ? [{ button: "A / Enter", action: "Stop emulator" },
+                  { button: "Guide / hold Start", action: "Quick menu" },
                   { button: "Select + Start (hold)", action: "Return to Nexora" }]
                : tutorial.visible ? tutorial.hints
+               : updatePanel.visible ? updatePanel.hints
                : gameOptions.visible ? gameOptions.hints
+               : details.visible ? details.hints
                : tabBar.activeFocus
                  ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
                     { button: "L1 / R1", action: "Switch tab" }]
@@ -194,8 +244,13 @@ ApplicationWindow {
                 visible: window.currentTab === 0
                 app: window.app
                 library: window.library
+                updates: window.updates
                 onNavigate: (tab) => window.navigate(tab)
                 onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+                onSystemChosen: (systemId) => window.showSystem(systemId)
+                onSettingsSectionRequested: (section) => window.openSettingsSection(section)
+                onUpdatesRequested: window.openUpdatePanel()
             }
             GamesScreen {
                 id: gamesScreen
@@ -205,33 +260,84 @@ ApplicationWindow {
                 library: window.library
                 onNavigate: (tab) => window.navigate(tab)
                 onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+            }
+            SystemsScreen {
+                id: systemsScreen
+                anchors.fill: parent
+                visible: window.currentTab === 2
+                app: window.app
+                library: window.library
+                onNavigate: (tab) => window.navigate(tab)
+                onSystemChosen: (systemId) => window.showSystem(systemId)
+            }
+            GameCollectionScreen {
+                id: favoritesScreen
+                objectName: "favoritesScreen"
+                anchors.fill: parent
+                visible: window.currentTab === 3
+                library: window.library
+                games: window.library.favoriteGames
+                title: "Favorites"
+                subtitle: "Press Y / F on any game to add or remove it"
+                emptyTitle: "No favorites yet"
+                emptyText: "Press Y / F on a game in Games or Home to mark it as a favorite."
+                onNavigate: (tab) => window.navigate(tab)
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+            }
+            GameCollectionScreen {
+                id: recentScreen
+                objectName: "recentScreen"
+                anchors.fill: parent
+                visible: window.currentTab === 4
+                library: window.library
+                games: window.library.recentGames
+                title: "Recently played"
+                subtitle: "Most recent first"
+                emptyTitle: "Nothing played yet"
+                emptyText: "Games you launch show up here, most recent first."
+                onNavigate: (tab) => window.navigate(tab)
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
             }
             EmulatorsScreen {
                 id: emulatorsScreen
                 anchors.fill: parent
-                visible: window.currentTab === 2
+                visible: window.currentTab === 5
                 app: window.app
                 settings: window.settings
             }
             SettingsScreen {
                 id: settingsScreen
                 anchors.fill: parent
-                visible: window.currentTab === 3
+                visible: window.currentTab === 6
                 app: window.app
                 library: window.library
                 settings: window.settings
                 system: window.system
                 updates: window.updates
-                onOpenUpdatePanel: {} // Task 9 opens the actual update panel here.
+                onOpenUpdatePanel: window.openUpdatePanel()
             }
             DiagnosticsScreen {
-                id: diagnosticsScreen
+                id: systemScreen
                 anchors.fill: parent
-                visible: window.currentTab === 4
+                visible: window.currentTab === 7
                 app: window.app
                 library: window.library
                 settings: window.settings
                 system: window.system
+                updates: window.updates
+                onUpdatesRequested: window.openUpdatePanel()
+            }
+
+            // Above the pages (modal), below the dialogs and overlays.
+            GameDetailsScreen {
+                id: details
+                anchors.fill: parent
+                app: window.app
+                library: window.library
+                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
             }
         }
 
@@ -254,7 +360,7 @@ ApplicationWindow {
                 break
             case Qt.Key_Menu:
             case Qt.Key_F1:
-                window.openTab("diagnostics")
+                window.openTab("system")
                 break
             case Qt.Key_Search:
                 window.focusSearch()
@@ -317,6 +423,12 @@ ApplicationWindow {
         library: window.library
     }
 
+    UpdatePanel {
+        id: updatePanel
+        updates: window.updates
+        system: window.system
+    }
+
     // First-start tour; above the pages, below the running-emulator overlay.
     TutorialOverlay {
         id: tutorial
@@ -344,10 +456,11 @@ ApplicationWindow {
         z: 10
         app: window.app
         visible: window.app.busy
+        onQuickMenuRequested: window.gameBar.openQuickMenu()
         onVisibleChanged: {
             if (visible) {
                 const item = window.activeFocusItem
-                if (item && window.pageIndexOf(item) >= 0)
+                if (item && (window.pageIndexOf(item) >= 0 || window.inLayer(item, details)))
                     window.focusBeforeOverlay = item
                 overlay.forceActiveFocus()
             } else {
@@ -404,6 +517,46 @@ ApplicationWindow {
         onActivated: window.gameBar.toggle()
     }
 
+    QuickMenu {
+        id: quickMenu
+        parent: Overlay.overlay
+        anchors.fill: parent
+        gameBar: window.gameBar
+        app: window.app
+        settings: window.settings
+        system: window.system
+    }
+    Connections {
+        target: window.gameBar
+        function onQuickMenuOpenChanged() {
+            if (window.gameBar.quickMenuOpen) {
+                const item = window.activeFocusItem
+                window.focusBeforeQuickMenu = item && item !== window.contentItem && !window.inLayer(item, quickMenu)
+                                              ? item : null
+                // Over a running emulator: bring Nexora to the front so it gets input.
+                if (window.app.busy && !window.active) {
+                    window.raisedForQuickMenu = true
+                    window.raise()
+                    window.requestActivate()
+                }
+            } else {
+                const saved = window.focusBeforeQuickMenu
+                window.focusBeforeQuickMenu = null
+                if (window.gameBar.open)
+                    gameBarLayer.focusDefault()
+                else if (saved && saved.visible)
+                    saved.forceActiveFocus()
+                else
+                    window.restoreFocus()
+                if (window.raisedForQuickMenu) {
+                    window.raisedForQuickMenu = false
+                    if (window.app.busy && !window.gameBar.open)
+                        window.lower() // back to the game
+                }
+            }
+        }
+    }
+
     // Development convenience; the console build will not expose quitting.
     Shortcut {
         sequence: "Ctrl+Q"
@@ -417,6 +570,9 @@ ApplicationWindow {
         Theme.scale = Qt.binding(() => window.settings.uiScale / 100)
         Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
         Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
+        // Settings › General › Start screen.
+        if (window.settings.startScreen === "games")
+            currentTab = tabIndex("games")
         focusPage()
         if (tutorial.visible)
             tutorial.restart()

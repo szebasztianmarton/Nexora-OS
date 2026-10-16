@@ -3,13 +3,24 @@
 // Any QQmlEngine warning fails the test.
 //
 // objectName hooks used here (keep them stable):
-//   mainWindow          ApplicationWindow; property currentTab (0 Home, 1 Games, 2 Emulators,
-//                       3 Settings, 4 Diagnostics)
+//   mainWindow          ApplicationWindow; property currentTab (0 Home, 1 Games, 2 Systems,
+//                       3 Favorites, 4 Recent, 5 Emulators, 6 Settings, 7 System)
 //   tabBar              NavTabBar (property currentIndex); tabs tab_home, tab_games, …
-//   homeScreen, gamesScreen, emulatorsScreen, settingsScreen, diagnosticsScreen  (tab pages)
-//   homeActions, recentRow, favoritesRow, homeEmptyState                         (Home)
-//   searchField, filterChips, filter_all|favorites|recent, sortSelector, gameGrid,
+//   homeScreen, gamesScreen, systemsScreen, favoritesScreen, recentScreen, emulatorsScreen,
+//   settingsScreen, systemScreen                                                  (tab pages)
+//   homeActions, statusCards, statusCard_<key>, recentRow, favoritesRow, recentlyAddedRow,
+//   homeSystemsRow, homeEmptyState                                                (Home)
+//   searchField, filterChips, filter_all|favorites|recent|missing, viewToggle, systemChips,
+//   systemChip_<id>, scanProgress, cancelScanButton, sortSelector, gameGrid,
 //   gamesLoading, gamesEmpty, gamesEmptyAction, scanSummary, resultCount         (Games)
+//   systemGrid, systemCard_<id>, systemsEmpty, systemsEmptyAction                (Systems)
+//   favoritesScreenGrid, favoritesScreenEmpty, recentScreenGrid, recentScreenEmpty
+//   gameDetails, gameDetailsTitle, detailsLaunch, detailsFavorite, detailsEmulator,
+//   detailsOptions, detailsEdit, detailsSystem, detailsRemove, confirmRemoveGame (details)
+//   quickMenu, quickReturn, quickPause, quickVolume, quickMute, quickDisplay,
+//   quickSystemInfo, quickExit, confirmExitGame                                  (quick menu)
+//   updatePanel, updateState, updateUnsupported, updateClose                     (updates)
+//   systemActions, systemUpdateButton, exportDiagnosticsButton, systemDetails     (System)
 //   emulatorList, emptyState, statusLine, profilePicker, profileList             (Emulators)
 //   settingLanguage, settingTheme, settingUiScale, settingReducedMotion, settingHints,
 //   settingSort, settingBackend, settingDeadzone, mapping_<action>, testInputRow,
@@ -18,7 +29,7 @@
 //   defaultEmulator_<systemId>, softwareUpdateRow, exportDiagnosticsRow, createBackupRow,
 //   restoreBackupRow, clearArtworkCacheRow, resetRow, rebootRow, powerOffRow,
 //   settingsIssues, sectionTitle_<Name>, tutorialRow                              (Settings)
-//   reloadButton                                                                  (Diagnostics)
+//   reloadButton, systemVersion, systemHardware, systemLaunchHistory               (System)
 //   runningOverlay, stopButton, runningTitle                                      (overlay)
 //   gameBar, gameBarTabs, barTab_home|settings|audio|performance, gameBarStatus,
 //   controllerStatus, networkStatus, batteryStatus, gameBarClock, gameBarPanel,
@@ -55,7 +66,8 @@ namespace {
 
 constexpr int Timeout = 10000;
 
-enum Tab { Home = 0, Games = 1, Emulators = 2, Settings = 3, Diagnostics = 4 };
+enum Tab { Home = 0, Games = 1, Systems = 2, Favorites = 3, Recent = 4, Emulators = 5, Settings = 6, System = 7 };
+constexpr int TabCount = 8;
 
 void writeConfig(const QTemporaryDir &dir, const QString &id, const QString &arguments = {}, const QString &extra = {})
 {
@@ -102,6 +114,8 @@ private:
         nexora::ui::UiContext::Options options;
         options.app = {configDir, QStringLiteral("test"), {}, false, {}};
         options.settings = {{}, ui.state->filePath(QStringLiteral("settings.json"))};
+        // Everything (launch history, backups, logs) stays inside the temporary directory.
+        options.layout = nexora::shared::DataLayout::underRoot(ui.state->filePath(QStringLiteral("data")));
         options.databasePath = ui.state->filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");
         ui.context = std::make_unique<nexora::ui::UiContext>(options);
@@ -187,6 +201,14 @@ private:
         QTest::keyClick(ui.window, k, modifiers);
     }
 
+    // L1 / R1 (PageUp / PageDown) until |tab| is current.
+    static void goTo(Ui &ui, Tab tab)
+    {
+        for (int i = 0; i < TabCount && currentTab(ui) != int(tab); ++i)
+            key(ui, currentTab(ui) < int(tab) ? Qt::Key_PageDown : Qt::Key_PageUp);
+        QCOMPARE(currentTab(ui), int(tab));
+    }
+
     // QTest::keyClicks() only exists for widgets.
     static void typeText(Ui &ui, const QString &text)
     {
@@ -209,12 +231,14 @@ private:
 private slots:
     void initTestCase() { QQuickStyle::setStyle(QStringLiteral("Basic")); }
 
+    void tutorialOnFirstStart_data() { addWindowSizeRows(); }
     void tutorialOnFirstStart()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("alpha"));
         Ui ui;
-        load(ui, dir.path(), {1280, 720}, true);
+        load(ui, dir.path(), windowSize, true);
         if (QTest::currentTestFailed())
             return;
         auto *settings = ui.context->settings();
@@ -288,13 +312,15 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void startsOnHomeAndSwitchesTabs_data() { addWindowSizeRows(); }
     void startsOnHomeAndSwitchesTabs()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("alpha"));
         writeConfig(dir, QStringLiteral("beta"));
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
 
@@ -313,11 +339,11 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "gamesScreen")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QVERIFY(!home->isVisible());
         key(ui, Qt::Key_PageDown);
-        QCOMPARE(currentTab(ui), int(Emulators));
+        QCOMPARE(currentTab(ui), int(Systems));
         key(ui, Qt::Key_PageUp);
         QCOMPARE(currentTab(ui), int(Games));
         key(ui, Qt::Key_Tab, Qt::ControlModifier);
-        QCOMPARE(currentTab(ui), int(Emulators));
+        QCOMPARE(currentTab(ui), int(Systems));
         key(ui, Qt::Key_Tab, Qt::ControlModifier | Qt::ShiftModifier);
         QCOMPARE(currentTab(ui), int(Games));
         key(ui, Qt::Key_PageUp);
@@ -325,8 +351,7 @@ private slots:
         QCOMPARE(currentTab(ui), int(Home));
 
         // Each tab remembers its focused child.
-        key(ui, Qt::Key_PageDown);
-        key(ui, Qt::Key_PageDown);
+        goTo(ui, Emulators);
         auto *list = find(ui, "emulatorList");
         QTRY_VERIFY2_WITH_TIMEOUT(list->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         key(ui, Qt::Key_Right);
@@ -337,21 +362,21 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(list->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(list->property("currentIndex").toInt(), 1);
 
-        // Menu / F1 opens Diagnostics.
+        // Menu / F1 opens System (formerly Diagnostics).
         key(ui, Qt::Key_F1);
-        QCOMPARE(currentTab(ui), int(Diagnostics));
-        auto *diagnostics = find(ui, "diagnosticsScreen");
+        QCOMPARE(currentTab(ui), int(System));
+        auto *diagnostics = find(ui, "systemScreen");
         QVERIFY(diagnostics && diagnostics->isVisible());
         QTRY_VERIFY2_WITH_TIMEOUT(diagnostics->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         key(ui, Qt::Key_Home);
         key(ui, Qt::Key_PageUp);
         key(ui, Qt::Key_Menu);
-        QCOMPARE(currentTab(ui), int(Diagnostics));
+        QCOMPARE(currentTab(ui), int(System));
 
         // Back on a root tab is a no-op (a console UI never quits on Back).
         key(ui, Qt::Key_Escape);
         key(ui, Qt::Key_Back);
-        QCOMPARE(currentTab(ui), int(Diagnostics));
+        QCOMPARE(currentTab(ui), int(System));
         QVERIFY(ui.window->isVisible());
         QVERIFY(diagnostics->hasActiveFocus());
 
@@ -367,8 +392,10 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void gamesSearchLaunchAndFavorite_data() { addWindowSizeRows(); }
     void gamesSearchLaunchAndFavorite()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir config;
         writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
@@ -378,7 +405,7 @@ private slots:
         touch(games, QStringLiteral("Gamma Saga.rom"));
         touch(games, QStringLiteral("readme.txt")); // not a game
         Ui ui;
-        load(ui, config.path());
+        load(ui, config.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         addGames(ui, games);
@@ -414,7 +441,7 @@ private slots:
         QTRY_VERIFY(find(ui, "gamesEmpty")->isVisible());
         // PageUp/PageDown still switch tabs from inside the text field.
         key(ui, Qt::Key_PageDown);
-        QCOMPARE(currentTab(ui), int(Emulators));
+        QCOMPARE(currentTab(ui), int(Systems));
         key(ui, Qt::Key_PageUp);
         QTRY_VERIFY2_WITH_TIMEOUT(search->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         // Ctrl+F also focuses search; clear it and leave with Back.
@@ -425,12 +452,22 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(currentTab(ui), int(Games));
 
-        // Launch the second game; the overlay takes focus and focus comes back afterwards.
-        // The game selected while searching ("Beta Racer") stays selected.
+        // Accept opens the details of the third game; Play (the default action) launches it,
+        // the overlay takes focus and focus comes back to Play afterwards; Back then returns
+        // to the same tile. The game selected while searching ("Beta Racer") stays selected.
         QTRY_COMPARE_WITH_TIMEOUT(grid->property("currentIndex").toInt(), 1, Timeout);
         key(ui, Qt::Key_Right);
         QCOMPARE(grid->property("currentIndex").toInt(), 2);
         const qint64 gameId = library->games()->gameIdAt(2);
+        key(ui, Qt::Key_Return);
+        auto *details = find(ui, "gameDetails");
+        QTRY_VERIFY_WITH_TIMEOUT(details->isVisible(), Timeout);
+        QCOMPARE(find(ui, "gameDetailsTitle")->property("text").toString(), QStringLiteral("Gamma Saga"));
+        auto *play = find(ui, "detailsLaunch");
+        QTRY_VERIFY2_WITH_TIMEOUT(play->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_PageDown); // modal: no tab switch underneath
+        QCOMPARE(currentTab(ui), int(Games));
+        shot(ui, "game-details");
         key(ui, Qt::Key_Return);
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
         auto *overlay = find(ui, "runningOverlay");
@@ -443,6 +480,9 @@ private slots:
         key(ui, Qt::Key_Return); // "Stop emulator"
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
         QTRY_VERIFY_WITH_TIMEOUT(!overlay->isVisible(), Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(play->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Escape); // Back: details close, the same tile has focus again
+        QTRY_VERIFY_WITH_TIMEOUT(!details->isVisible(), Timeout);
         QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(library->games()->gameIdAt(grid->property("currentIndex").toInt()), gameId);
         QTRY_COMPARE_WITH_TIMEOUT(library->recentGames()->rowCount(), 1, Timeout);
@@ -461,30 +501,36 @@ private slots:
         auto *recent = find(ui, "recentRow");
         QVERIFY(recent->isVisible());
         QCOMPARE(recent->property("count").toInt(), 1);
-        // Home remembered its quick-action focus; Down moves into the row.
+        // Home remembered its quick-action focus; Down passes the status cards into the row.
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "homeActions")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         key(ui, Qt::Key_Down);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "statusCards")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(recent->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
-        key(ui, Qt::Key_Return); // launches from Home too
+        key(ui, Qt::Key_Return); // details from Home too; Play launches
+        QTRY_VERIFY2_WITH_TIMEOUT(play->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
         key(ui, Qt::Key_Return);
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(play->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Escape);
         QTRY_VERIFY2_WITH_TIMEOUT(recent->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QVERIFY(!find(ui, "homeEmptyState")->isVisible());
 
         CHECK_NO_WARNINGS();
     }
 
+    void emulatorsEmptyConfiguration_data() { addWindowSizeRows(); }
     void emulatorsEmptyConfiguration()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
-        key(ui, Qt::Key_PageDown);
-        key(ui, Qt::Key_PageDown);
-        QCOMPARE(currentTab(ui), int(Emulators));
+        goTo(ui, Emulators);
         auto *empty = find(ui, "emptyState");
         QVERIFY(empty);
         QTRY_VERIFY(empty->isVisible());
@@ -494,19 +540,20 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void emulatorsLaunchAndProfiles_data() { addWindowSizeRows(); }
     void emulatorsLaunchAndProfiles()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral("\"--sleep-ms\",\"30000\""));
         writeConfig(dir, QStringLiteral("profiled"), QStringLiteral("\"--sleep-ms\",\"30000\""),
                     QStringLiteral("\"profiles\":[{\"id\":\"fast\",\"name\":\"Fast\"},"
                                    "{\"id\":\"off\",\"name\":\"Off\",\"enabled\":false}]"));
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
-        key(ui, Qt::Key_PageDown);
-        key(ui, Qt::Key_PageDown);
+        goTo(ui, Emulators);
         auto *list = find(ui, "emulatorList");
         QTRY_VERIFY2_WITH_TIMEOUT(list->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QVERIFY(!find(ui, "emptyState")->isVisible());
@@ -558,8 +605,10 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    void gameOptionsDialog_data() { addWindowSizeRows(); }
     void gameOptionsDialog()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir config;
         writeConfig(config, QStringLiteral("one"), QStringLiteral("\"--sleep-ms\",\"30000\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
@@ -569,7 +618,7 @@ private slots:
         touch(games, QStringLiteral("Alpha Quest.rom"));
         touch(games, QStringLiteral("Beta Racer.rom"));
         Ui ui;
-        load(ui, config.path());
+        load(ui, config.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         addGames(ui, games);
@@ -635,26 +684,24 @@ private slots:
         QVERIFY(library->refresh());
         ui.context->gameLibrary().waitForScan();
         QTRY_COMPARE(library->missingCount(), 1);
-        key(ui, Qt::Key_PageDown);
-        key(ui, Qt::Key_PageDown);
-        QCOMPARE(currentTab(ui), int(Settings));
+        goTo(ui, Settings);
         QTRY_VERIFY(purge->isVisible());
         shot(ui, "settings-purge");
 
         CHECK_NO_WARNINGS();
     }
 
+    void settingsVolumeAndRemap_data() { addWindowSizeRows(); }
     void settingsVolumeAndRemap()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         auto *settings = ui.context->settings();
-        for (int i = 0; i < 3; ++i)
-            key(ui, Qt::Key_PageDown);
-        QCOMPARE(currentTab(ui), int(Settings));
+        goTo(ui, Settings);
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "settingLanguage")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
 
         // Keyboard remap: Right on a mapping row cycles to the next button. Controllers
@@ -722,15 +769,17 @@ private slots:
 
         CHECK_NO_WARNINGS();
     }
+    void gameBarOverlay_data() { addWindowSizeRows(); }
     void gameBarOverlay()
     {
+        QFETCH(QSize, windowSize);
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
         QTemporaryDir games;
         touch(games, QStringLiteral("Alpha Quest.rom"));
         Ui ui;
-        load(ui, dir.path());
+        load(ui, dir.path(), windowSize);
         if (QTest::currentTestFailed())
             return;
         auto *bar = ui.context->gameBar();
@@ -860,6 +909,201 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(ui.window->activeFocusItem() && !find(ui, "runningOverlay")->isVisible(),
                                   qPrintable(focusName(ui)), Timeout);
 #undef CHECK_FOCUS
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // Every one of the eight sections is reachable with L1/R1 alone and with the tab bar's
+    // Left/Right, shows its page and gives it focus; Systems -> Games filtered by system.
+    void allSectionsWithKeysOnly_data() { addWindowSizeRows(); }
+    void allSectionsWithKeysOnly()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        touch(games, QStringLiteral("Alpha Quest.rom"));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+
+        const char *pages[TabCount] = {"homeScreen",   "gamesScreen",     "systemsScreen",  "favoritesScreen",
+                                       "recentScreen", "emulatorsScreen", "settingsScreen", "systemScreen"};
+        const char *tabNames[TabCount] = {"tab_home",   "tab_games",     "tab_systems",  "tab_favorites",
+                                          "tab_recent", "tab_emulators", "tab_settings", "tab_system"};
+        for (int i = 0; i < TabCount; ++i) {
+            QVERIFY2(find(ui, tabNames[i]), tabNames[i]);
+            if (i > 0)
+                key(ui, Qt::Key_PageDown);
+            QCOMPARE(currentTab(ui), i);
+            auto *page = find(ui, pages[i]);
+            QVERIFY2(page && page->isVisible(), pages[i]);
+            QTRY_VERIFY2_WITH_TIMEOUT(page->hasActiveFocus(),
+                                      qPrintable(QString::fromLatin1(pages[i]) + u' ' + focusName(ui)), Timeout);
+        }
+        QVERIFY(!find(ui, "tab_downloads")); // not implemented, so not offered
+
+        // Back along the tab bar.
+        auto *tabBar = find(ui, "tabBar");
+        for (int i = 0; i < 10 && !tabBar->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Up);
+        QTRY_VERIFY2_WITH_TIMEOUT(tabBar->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        for (int i = TabCount - 2; i >= 0; --i) {
+            key(ui, Qt::Key_Left);
+            QCOMPARE(currentTab(ui), i);
+            QVERIFY(find(ui, pages[i])->isVisible());
+        }
+
+        // Systems: the game's system card opens Games filtered to it.
+        goTo(ui, Systems);
+        key(ui, Qt::Key_Down); // from the tab bar into the page
+        auto *systemGrid = find(ui, "systemGrid");
+        QTRY_VERIFY(systemGrid->property("count").toInt() > 0);
+        QTRY_VERIFY2_WITH_TIMEOUT(systemGrid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QCOMPARE(currentTab(ui), int(Games));
+        QTRY_COMPARE_WITH_TIMEOUT(find(ui, "gameGrid")->property("count").toInt(), 1, Timeout);
+
+        // Favorites / Recent start empty and explain themselves.
+        goTo(ui, Favorites);
+        QVERIFY(find(ui, "favoritesScreenEmpty")->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "favoritesScreenBrowse")->hasActiveFocus(), qPrintable(focusName(ui)),
+                                  Timeout);
+        key(ui, Qt::Key_Return); // "Browse games"
+        QCOMPARE(currentTab(ui), int(Games));
+        key(ui, Qt::Key_Favorites);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.context->library()->favoriteGames()->rowCount(), 1, Timeout);
+        goTo(ui, Favorites);
+        QTRY_VERIFY(find(ui, "favoritesScreenGrid")->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "favoritesScreenGrid")->hasActiveFocus(), qPrintable(focusName(ui)),
+                                  Timeout);
+        key(ui, Qt::Key_Return); // details
+        QTRY_VERIFY(find(ui, "gameDetails")->isVisible());
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "favoritesScreenGrid")->hasActiveFocus(), qPrintable(focusName(ui)),
+                                  Timeout);
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // High contrast + reduced motion at both TV resolutions: every section, the game details,
+    // the update panel (honest "not on this build" on desktop) and the in-game quick menu with
+    // its Exit confirmation render without a single QML warning.
+    void accessibilityModes_data() { addWindowSizeRows(); }
+    void accessibilityModes()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"],\"pausable\":true"));
+        QTemporaryDir games;
+        touch(games, QStringLiteral("Alpha Quest.rom"));
+        touch(games, QStringLiteral("Beta Racer.rom"));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+        auto *settings = ui.context->settings();
+        settings->setTheme(QStringLiteral("highContrast"));
+        settings->setReducedMotion(true);
+        settings->setUiScale(125);
+        QTRY_COMPARE(ui.window->color(), QColor(QStringLiteral("#000000")));
+
+        for (int i = 1; i < TabCount; ++i) {
+            key(ui, Qt::Key_PageDown);
+            QCOMPARE(currentTab(ui), i);
+            QTest::qWait(20);
+        }
+        shot(ui, "high-contrast-system");
+
+        // Details of the first game.
+        goTo(ui, Games);
+        auto *grid = find(ui, "gameGrid");
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY(find(ui, "gameDetails")->isVisible());
+        shot(ui, "high-contrast-details");
+
+        // Remove from library: the confirmation defaults to Cancel.
+        auto *remove = find(ui, "detailsRemove");
+        for (int i = 0; i < 12 && !remove->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Down);
+        QVERIFY2(remove->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Return);
+        auto *confirm = find(ui, "confirmRemoveGame");
+        QTRY_VERIFY(confirm->isVisible());
+        // Several ConfirmDialogs exist; the focused button must be this one's Cancel.
+        QTRY_VERIFY2_WITH_TIMEOUT(ui.window->activeFocusItem()
+                                      && ui.window->activeFocusItem()->objectName()
+                                          == QStringLiteral("confirmDialogCancel")
+                                      && confirm->isAncestorOf(ui.window->activeFocusItem()),
+                                  qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY(!confirm->isVisible());
+        QCOMPARE(ui.context->library()->games()->rowCount(), 2);
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        // Update panel from the System tab: unsupported on the desktop platform, and says so.
+        goTo(ui, System);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "systemUpdateButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        auto *panel = find(ui, "updatePanel");
+        QTRY_VERIFY(panel->isVisible());
+        QVERIFY(find(ui, "updateUnsupported")->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "updateClose")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_PageDown); // modal
+        QCOMPARE(currentTab(ui), int(System));
+        shot(ui, "high-contrast-updates");
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY(!panel->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "systemUpdateButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        // Quick menu: hidden without a game; Menu / F1 on the running overlay opens it.
+        auto *menu = find(ui, "quickMenu");
+        QVERIFY(!menu->isVisible());
+        QVERIFY(ui.context->library()->launch(ui.context->library()->games()->gameIdAt(0)));
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_F1);
+        QTRY_VERIFY(menu->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "quickReturn")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QVERIFY(find(ui, "quickPause")->isVisible());
+        shot(ui, "high-contrast-quick-menu");
+        key(ui, Qt::Key_Escape); // back to the game
+        QTRY_VERIFY(!menu->isVisible());
+        QCOMPARE(ui.app->state(), QStringLiteral("running"));
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        // Exit game asks first; Cancel keeps it running, Confirm stops it.
+        key(ui, Qt::Key_F1);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "quickReturn")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        auto *exitRow = find(ui, "quickExit");
+        for (int i = 0; i < 12 && !exitRow->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Down);
+        QVERIFY2(exitRow->hasActiveFocus(), qPrintable(focusName(ui)));
+        key(ui, Qt::Key_Return);
+        auto *confirmExit = find(ui, "confirmExitGame");
+        QTRY_VERIFY(confirmExit->isVisible());
+        key(ui, Qt::Key_Return); // default focus is Cancel
+        QTRY_VERIFY(!confirmExit->isVisible());
+        QCOMPARE(ui.app->state(), QStringLiteral("running"));
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY(confirmExit->isVisible());
+        key(ui, Qt::Key_Right);
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QTRY_VERIFY(!menu->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(ui.window->activeFocusItem() && !find(ui, "runningOverlay")->isVisible(),
+                                  qPrintable(focusName(ui)), Timeout);
 
         CHECK_NO_WARNINGS();
     }

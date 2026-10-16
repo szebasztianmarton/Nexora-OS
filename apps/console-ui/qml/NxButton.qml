@@ -34,9 +34,9 @@ Rectangle {
     }
 
     activeFocusOnTab: true
-    implicitHeight: compact ? 40 : 48
-    implicitWidth: Math.max(compact ? 96 : 140, content.implicitWidth + (compact ? 28 : 40))
-    radius: 10
+    implicitHeight: compact ? Theme.controlHeightCompact : Theme.controlHeight
+    implicitWidth: Math.max((compact ? 96 : 140) * Theme.scale, content.implicitWidth + (compact ? Theme.space5 + Theme.space1 : Theme.space6 + Theme.space2))
+    radius: Theme.radiusSmall
     opacity: enabled ? 1.0 : 0.45
     color: armed ? Qt.darker(Theme.danger, 2.4)
          : kind === "primary" ? (activeFocus ? Theme.accent : Theme.accentSoft)

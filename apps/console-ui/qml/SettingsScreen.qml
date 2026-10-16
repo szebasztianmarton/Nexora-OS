@@ -16,7 +16,7 @@ FocusScope {
     required property SystemController system
     required property UpdateController updates
 
-    // Task 9 wires this to the real update panel; Settings only offers the entry point.
+    // Main.qml opens the update panel; Settings only offers the entry point.
     signal openUpdatePanel()
 
     readonly property var focusedItem: Window.activeFocusItem
@@ -45,7 +45,7 @@ FocusScope {
             selectedBackupIndex = Math.max(0, backupList.length - 1)
     }
     function storageSummary() {
-        const storage = (screen.system.hardware.storage || [])
+        const storage = (screen.system.hardware.storage || []).filter(e => e.path && Number(e.totalBytes) > 0)
         const lines = []
         for (const s of storage)
             lines.push(s.path + ": " + Theme.formatBytes(s.availableBytes) + " free of " + Theme.formatBytes(s.totalBytes))
@@ -68,6 +68,36 @@ FocusScope {
     }
 
     function focusDefault() { languageRow.focus = true }
+    // Deep link from Home / the quick menu: focuses the first control of a section
+    // ("General", "Controllers", "Display", "Audio", "Library", "Emulators", "System").
+    function focusSection(name) {
+        const heading = findSectionTitle(name)
+        if (!heading)
+            return false
+        for (let item = heading.nextItemInFocusChain(true), guard = 0; item && guard < 200;
+             item = item.nextItemInFocusChain(true), ++guard) {
+            if (!isInside(item))
+                break
+            if (item.visible && item.enabled && item.activeFocusOnTab
+                    && item.mapToItem(column, 0, 0).y > heading.mapToItem(column, 0, 0).y) {
+                item.forceActiveFocus()
+                return true
+            }
+        }
+        return false
+    }
+    function findSectionTitle(name) {
+        const kids = column.children
+        for (let i = 0; i < kids.length; ++i) {
+            if (kids[i].objectName === "sectionTitle_" + name)
+                return kids[i]
+        }
+        return null
+    }
+    function cycleValue(values, current, step) {
+        const i = Math.max(0, values.indexOf(current))
+        return values[((i + step) % values.length + values.length) % values.length]
+    }
     function focusAddFolder() { addDirField.forceActiveFocus() }
 
     function isInside(item) {
@@ -174,7 +204,7 @@ FocusScope {
             width: Math.min(flick.width - Theme.spacing * 4, 980)
             x: (flick.width - width) / 2
             y: Theme.spacing * 1.5
-            spacing: 8
+            spacing: Theme.space2
 
             Text {
                 text: "Settings"
@@ -194,14 +224,14 @@ FocusScope {
                 objectName: "settingsIssues"
                 visible: screen.settings.lastError.length > 0 || screen.settings.issues.length > 0
                 width: parent.width
-                height: issuesText.implicitHeight + 24
+                height: issuesText.implicitHeight + Theme.space5
                 radius: Theme.radiusSmall
-                color: Qt.rgba(1, 0.39, 0.45, 0.10)
+                color: Theme.dangerTint
                 border.color: Theme.danger
                 Text {
                     id: issuesText
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: Theme.space3
                     wrapMode: Text.Wrap
                     color: Theme.text
                     font.pixelSize: Theme.fontSmall
@@ -269,6 +299,15 @@ FocusScope {
                 description: "The short introduction shown on the first start"
                 actionText: "Start"
                 onAccepted: screen.settings.tutorialCompleted = false
+            }
+            SettingRow {
+                objectName: "settingStartScreen"
+                label: "Start screen"
+                description: "What Nexora shows when it starts"
+                value: screen.settings.startScreen === "games" ? "Games" : "Home"
+                adjustable: true
+                onDecrement: screen.settings.startScreen = screen.cycleValue(["home", "games"], screen.settings.startScreen, -1)
+                onIncrement: screen.settings.startScreen = screen.cycleValue(["home", "games"], screen.settings.startScreen, 1)
             }
             SettingRow {
                 objectName: "settingSort"
@@ -456,13 +495,13 @@ FocusScope {
             }
             Item {
                 width: parent.width
-                height: 52
+                height: Theme.controlHeight + Theme.space1
                 TextField {
                     id: addDirField
                     objectName: "addDirField"
                     anchors.left: parent.left
                     anchors.right: addDirButton.left
-                    anchors.rightMargin: 12
+                    anchors.rightMargin: Theme.space3
                     height: parent.height
                     placeholderText: "/path/to/your/games"
                     placeholderTextColor: Theme.textFaint
@@ -470,7 +509,7 @@ FocusScope {
                     selectionColor: Theme.accent
                     selectedTextColor: Theme.text
                     font.pixelSize: Theme.fontBody
-                    leftPadding: 16
+                    leftPadding: Theme.space4
                     verticalAlignment: TextInput.AlignVCenter
                     background: Rectangle {
                         radius: Theme.radiusSmall
@@ -537,6 +576,12 @@ FocusScope {
                 actionText: "Cancel"
                 onAccepted: screen.library.cancelScan()
             }
+            InfoText {
+                objectName: "libraryArtworkInfo"
+                text: "Artwork: Nexora draws a placeholder cover from each title; downloading cover art is not "
+                      + "implemented (no network access). Titles and notes can be changed per game: open a game "
+                      + "and choose Edit details."
+            }
             SettingRow {
                 objectName: "restoreRemovedRow"
                 label: "Restore removed games"
@@ -563,6 +608,10 @@ FocusScope {
                     color: health === "available" ? Theme.textMuted : Theme.warning
                     text: name + " — " + Theme.capitalize(health) + (healthDetail.length > 0 ? " (" + healthDetail + ")" : "")
                 }
+            }
+            InfoText {
+                text: "Per-emulator launch profiles and status are on the Emulators tab; emulator definitions live in "
+                      + screen.app.configDirectory + "."
             }
             InfoText {
                 visible: screen.library.systems.count === 0
@@ -599,6 +648,15 @@ FocusScope {
                 description: screen.updates.supported ? "Current version " + screen.updates.currentVersion : ""
                 actionText: "Details"
                 onAccepted: screen.openUpdatePanel()
+            }
+            SettingRow {
+                objectName: "settingLogLevel"
+                label: "Log detail"
+                description: "How much Nexora writes to its log file (for troubleshooting)"
+                value: Theme.capitalize(screen.settings.logLevel)
+                adjustable: true
+                onDecrement: screen.settings.logLevel = screen.cycleValue(["error", "warning", "info", "debug"], screen.settings.logLevel, -1)
+                onIncrement: screen.settings.logLevel = screen.cycleValue(["error", "warning", "info", "debug"], screen.settings.logLevel, 1)
             }
             SettingRow {
                 objectName: "exportDiagnosticsRow"

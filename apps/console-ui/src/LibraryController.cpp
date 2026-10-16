@@ -238,6 +238,14 @@ QString LibraryController::effectiveEmulatorId(const library::GameEntry &entry) 
     return entry.emulatorCandidates.value(0);
 }
 
+QString LibraryController::systemName(const QString &systemId) const
+{
+    if (systemId.isEmpty() || !m_catalog)
+        return {};
+    const auto *system = m_catalog->find(systemId);
+    return system ? system->name : QString();
+}
+
 bool LibraryController::launch(qint64 gameId)
 {
     return launchEntry(gameId, {}, true);

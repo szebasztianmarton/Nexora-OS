@@ -313,8 +313,19 @@ private slots:
         QVERIFY(input.isSuspended());
         QVERIFY(bar.sessionSeconds() >= 0);
 
-        // Guide opens the bar on top of the game and hands the pad back to the launcher.
+        // Over a running game Guide opens the quick menu (not the bar) and hands the pad back
+        // to the launcher; Guide again returns it to the game.
         input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, true);
+        QVERIFY(bar.isQuickMenuOpen());
+        QVERIFY(!bar.isOpen());
+        QVERIFY(!input.isSuspended());
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, false);
+        input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, true);
+        QVERIFY(!bar.isQuickMenuOpen());
+        QVERIFY(input.isSuspended());
+
+        // The bar itself (Ctrl+G -> toggle()) still opens on top of the game, with the pad.
+        bar.toggle();
         QVERIFY(bar.isOpen());
         QCOMPARE(openSpy.size(), 1);
         QVERIFY(!input.isSuspended());
@@ -338,7 +349,7 @@ private slots:
         }
         QCOMPARE(bar.cpuHistory().size(), nexora::ui::GameBarController::kHistoryLength);
 
-        // Guide again closes it: the game gets the pad back.
+        // Guide while the bar is open closes it: the game gets the pad back.
         input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, false);
         input.navigator()->buttonEvent(nexora::input::GamepadButton::Guide, true);
         QVERIFY(!bar.isOpen());

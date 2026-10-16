@@ -1,9 +1,15 @@
 // Discovers and runs every *.qml file in this directory with QtQuickTest. tst_theme.qml
-// needs nothing but the Nexora.Console module (Theme is a plain singleton); tst_settings_ui
-// .qml loads the real SettingsScreen against a real (sandboxed) backend, the same way
-// tests/integration/tst_qmlsmoke.cpp drives the whole Main.qml, just for one screen.
+// needs nothing but the Nexora.Console module (Theme is a plain singleton); the other files
+// load real screens/components against a real (sandboxed) backend, the same way
+// tests/integration/tst_qmlsmoke.cpp drives the whole Main.qml, just one piece at a time.
+//
+// The sandbox has one pausable fake emulator ("fake", sleeps 30 s, handles *.rom) and a
+// library folder with two games, "Alpha Quest" and "Beta Racer", scanned before QML starts.
 #include "UiContext.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickStyle>
@@ -15,6 +21,18 @@
 
 Q_IMPORT_QML_PLUGIN(Nexora_ConsolePlugin)
 
+namespace {
+
+void writeFile(const QString &path, const QByteArray &content)
+{
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly))
+        file.write(content);
+}
+
+} // namespace
+
 class Setup : public QObject
 {
     Q_OBJECT
@@ -23,13 +41,26 @@ public slots:
     void applicationAvailable()
     {
         QQuickStyle::setStyle(QStringLiteral("Basic"));
+        const QString emulators = m_dir.filePath(QStringLiteral("emulators"));
+        const QString games = m_dir.filePath(QStringLiteral("games"));
+        writeFile(emulators + QStringLiteral("/fake.json"),
+                  "{\"id\":\"fake\",\"name\":\"Fake\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+                  "\"arguments\":[\"--sleep-ms\",\"30000\",\"{file}\"],\"extensions\":[\".rom\"],"
+                  "\"pausable\":true}");
+        writeFile(games + QStringLiteral("/Alpha Quest.rom"), "rom");
+        writeFile(games + QStringLiteral("/Beta Racer.rom"), "rom");
+
         nexora::ui::UiContext::Options options;
-        options.app = {m_dir.path(), QStringLiteral("test"), {}, false, {}};
+        options.app = {emulators, QStringLiteral("test"), {}, false, {}};
         options.settings = {{}, m_dir.filePath(QStringLiteral("settings.json"))};
+        options.layout = nexora::shared::DataLayout::underRoot(m_dir.filePath(QStringLiteral("state")));
         options.databasePath = m_dir.filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");
         m_context = std::make_unique<nexora::ui::UiContext>(options);
         m_context->start();
+        m_context->library()->addDirectory(games);
+        m_context->gameLibrary().waitForScan();
+        QCoreApplication::processEvents();
     }
 
     void qmlEngineAvailable(QQmlEngine *engine)
@@ -41,6 +72,13 @@ public slots:
         engine->rootContext()->setContextProperty(QStringLiteral("testSettings"), m_context->settings());
         engine->rootContext()->setContextProperty(QStringLiteral("testSystem"), m_context->system());
         engine->rootContext()->setContextProperty(QStringLiteral("testUpdates"), m_context->updates());
+        engine->rootContext()->setContextProperty(QStringLiteral("testGameBar"), m_context->gameBar());
+    }
+
+    void cleanupTestCase()
+    {
+        if (m_context)
+            m_context->shutdown();
     }
 
 private:

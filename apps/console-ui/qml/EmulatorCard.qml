@@ -54,8 +54,8 @@ Rectangle {
             Text {
                 anchors.centerIn: parent
                 text: card.name.length > 0 ? card.name.charAt(0).toUpperCase() : "?"
-                color: Qt.rgba(1, 1, 1, 0.85)
-                font.pixelSize: 64 * Theme.scale
+                color: Theme.artInk
+                font.pixelSize: Math.round(64 * Theme.scale)
                 font.bold: true
             }
         }

@@ -47,6 +47,31 @@ Item {
             compare(Theme.animSlow, 0)
         }
 
+        function test_controlSizesScale() {
+            compare(Theme.controlHeight, 48)
+            compare(Theme.rowHeight, 60)
+            Theme.scale = 1.5
+            compare(Theme.controlHeight, 72)
+            compare(Theme.chipHeight, Math.round(44 * 1.5))
+            compare(Theme.iconLarge, 60)
+        }
+
+        // The game bar / quick menu palette follows high contrast too (it used to be hard-coded).
+        function test_overlayPaletteFollowsHighContrast() {
+            verify(Theme.overlaySurface !== "#000000")
+            Theme.highContrast = true
+            compare(Theme.overlaySurface, "#000000")
+            compare(Theme.overlayText, "#ffffff")
+            compare(Theme.overlayFocus, "#ffd400")
+            compare(Theme.overlaySelected, "#ffd400")
+        }
+
+        function test_listMoveDurationFollowsReducedMotion() {
+            verify(Theme.animMove > 0)
+            Theme.reducedMotion = true
+            compare(Theme.animMove, 0)
+        }
+
         function test_existingPropertyNamesStillWork() {
             // Pre-existing screens bind Theme.spacing/Theme.radius/Theme.fontTiny.. etc;
             // the token rework must keep every one of them available.

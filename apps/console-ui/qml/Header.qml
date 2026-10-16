@@ -7,7 +7,7 @@ Rectangle {
     required property AppController app
     required property LibraryController library
 
-    implicitHeight: 64
+    implicitHeight: Theme.headerHeight
     color: Theme.surface
 
     Row {

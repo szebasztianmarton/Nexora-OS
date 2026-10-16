@@ -12,7 +12,9 @@ set_target_properties(tst_console_qml PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJ
 target_link_libraries(tst_console_qml PRIVATE
     nexora_uiplugin nexora_ui Qt6::QuickTest Qt6::Quick Qt6::QuickControls2 nexora_warnings)
 target_compile_definitions(tst_console_qml PRIVATE
-    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    NEXORA_FAKE_EMULATOR="$<TARGET_FILE:nexora-fake-emulator>")
+add_dependencies(tst_console_qml nexora-fake-emulator)
 
 add_test(NAME tst_console_qml COMMAND tst_console_qml -input ${CMAKE_CURRENT_SOURCE_DIR})
 set_tests_properties(tst_console_qml PROPERTIES

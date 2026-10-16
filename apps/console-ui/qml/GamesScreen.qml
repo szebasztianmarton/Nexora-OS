@@ -2,8 +2,10 @@ import QtQuick
 import QtQuick.Controls
 import Nexora.Console
 
-// Games: search, filter chips, sort selector and the grid of game cards.
-// Focus rows (top to bottom): [search, filter chips] → sort → grid.
+// Games: search, filter chips (+ grid/list toggle), system filter chips, scan progress with
+// Cancel, the sort selector and the game grid. Accept on a game opens its details.
+// Focus rows (top to bottom): [search, filter chips] → system chips → scan Cancel (while
+// scanning) → sort → grid. Up from the top row reaches the tab bar.
 FocusScope {
     id: screen
     objectName: "gamesScreen"
@@ -12,27 +14,49 @@ FocusScope {
 
     signal navigate(string tab)
     signal optionsRequested(real gameId)
+    signal detailsRequested(real gameId)
 
     readonly property alias grid: grid
     readonly property real currentGameId: grid.currentGameId
     readonly property bool searchActive: searchField.activeFocus
+    property bool listMode: false
     readonly property var sortOrders: ["title", "recent", "emulator", "added"]
     readonly property var hints: searchField.activeFocus
         ? [{ button: "Type", action: "Search" }, { button: "Enter / ↓", action: "Results" },
            { button: "B / Esc", action: "Leave search" }]
         : sortSelector.activeFocus
           ? [{ button: "← →", action: "Change sort" }, { button: "↓", action: "Games" },
-             { button: "↑", action: "Search & filters" }, { button: "L1 / R1", action: "Switch tab" }]
+             { button: "↑", action: "Filters" }, { button: "L1 / R1", action: "Switch tab" }]
           : emptyAction.activeFocus
             ? [{ button: "A / Enter", action: emptyAction.text }, { button: "↑", action: "Search & sort" },
                { button: "L1 / R1", action: "Switch tab" }]
-          : chips.activeFocus
-            ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Apply filter" },
-               { button: "↓", action: "Sort & games" }, { button: "L1 / R1", action: "Switch tab" }]
-            : [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Play" },
+          : chips.activeFocus || systemChips.activeFocus
+            ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Apply" },
+               { button: "↑ ↓", action: "Rows" }, { button: "L1 / R1", action: "Switch tab" }]
+          : cancelScanButton.activeFocus
+            ? [{ button: "A / Enter", action: "Cancel scan" }, { button: "↑ ↓", action: "Rows" }]
+            : [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Details" },
                { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
                { button: "X / “/”", action: "Search" },
                { button: "L1 / R1", action: "Switch tab" }]
+
+    // Systems that actually have games (the catalog lists every supported one).
+    property int systemsRevision: 0
+    readonly property var systemsWithGames: {
+        void systemsRevision
+        const list = []
+        const model = library.systems
+        for (let i = 0; i < model.count; ++i) {
+            const s = model.get(i)
+            if (s.gameCount > 0 && s.systemId.length > 0)
+                list.push(s)
+        }
+        return list
+    }
+    Connections {
+        target: screen.library
+        function onContentChanged() { screen.systemsRevision += 1 }
+    }
 
     function focusSearch() {
         searchField.forceActiveFocus()
@@ -59,33 +83,59 @@ FocusScope {
         library.sortOrder = sortOrders[(i + step + sortOrders.length) % sortOrders.length]
     }
 
+    // Focus rows in visual order; hidden rows are skipped.
+    function focusRows() {
+        const rows = [toolbar]
+        if (systemChips.visible)
+            rows.push(systemChips)
+        if (cancelScanButton.visible)
+            rows.push(cancelScanButton)
+        rows.push(sortSelector)
+        rows.push(resultsRow)
+        return rows
+    }
+    function currentRow() {
+        const rows = focusRows()
+        for (let i = 0; i < rows.length; ++i) {
+            if (rows[i].activeFocus)
+                return i
+        }
+        return grid.activeFocus || emptyAction.activeFocus ? rows.length - 1 : -1
+    }
+    function focusRow(item) {
+        if (item === toolbar)
+            (chips.lastFocused >= 0 ? chips : searchField).forceActiveFocus()
+        else if (item === systemChips)
+            systemChips.focusChip(systemChips.lastFocused >= 0 ? systemChips.lastFocused : systemChips.selectedIndex())
+        else if (item === resultsRow)
+            focusResults()
+        else
+            item.forceActiveFocus()
+    }
+    function moveRow(delta) {
+        const rows = focusRows()
+        const next = currentRow() + delta
+        if (currentRow() < 0 || next < 0 || next >= rows.length)
+            return false
+        focusRow(rows[next])
+        return true
+    }
+
     Component.onCompleted: focusDefault()
 
-    Keys.onUpPressed: (event) => {
-        if (grid.activeFocus || emptyAction.activeFocus)
-            sortSelector.forceActiveFocus()
-        else if (sortSelector.activeFocus)
-            (chips.lastFocused >= 0 ? chips : searchField).forceActiveFocus()
-        else
-            event.accepted = false // top row: let the tab bar take it
-    }
-    Keys.onDownPressed: (event) => {
-        if (searchField.activeFocus || chips.activeFocus)
-            sortSelector.forceActiveFocus()
-        else if (sortSelector.activeFocus)
-            focusResults()
-    }
+    Keys.onUpPressed: (event) => { event.accepted = moveRow(-1) }
+    Keys.onDownPressed: (event) => { event.accepted = moveRow(1) }
 
     // --- Row 1: search + filters --------------------------------------------------------
-    Item {
+    FocusScope {
         id: toolbar
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: Theme.spacing * 1.25
-        anchors.leftMargin: Theme.spacing * 2
-        anchors.rightMargin: Theme.spacing * 2
-        height: 48
+        anchors.topMargin: Theme.space4
+        anchors.leftMargin: Theme.space6
+        anchors.rightMargin: Theme.space6
+        height: Theme.controlHeight
 
         TextField {
             id: searchField
@@ -102,21 +152,21 @@ FocusScope {
             selectionColor: Theme.accent
             selectedTextColor: Theme.text
             font.pixelSize: Theme.fontBody
-            leftPadding: 44
-            rightPadding: 16
+            leftPadding: Theme.space6 + Theme.space3
+            rightPadding: Theme.space4
             verticalAlignment: TextInput.AlignVCenter
             background: Rectangle {
-                radius: 24
+                radius: height / 2
                 color: searchField.activeFocus ? Theme.surfaceHover : Theme.surfaceRaised
                 border.width: searchField.activeFocus ? Theme.focusWidth : 1
-                border.color: searchField.activeFocus ? Theme.accent : Theme.border
+                border.color: searchField.activeFocus ? Theme.focusRing : Theme.border
                 Text {
                     anchors.left: parent.left
-                    anchors.leftMargin: 16
+                    anchors.leftMargin: Theme.space4
                     anchors.verticalCenter: parent.verticalCenter
                     text: "⌕"
                     color: searchField.activeFocus ? Theme.accent : Theme.textMuted
-                    font.pixelSize: 22 * Theme.scale
+                    font.pixelSize: Math.round(22 * Theme.scale)
                 }
             }
 
@@ -140,14 +190,23 @@ FocusScope {
             width: chipRow.width
             height: chipRow.height
             property int lastFocused: -1
-            readonly property var filters: [{ key: "all", title: "All" },
-                                            { key: "favorites", title: "★ Favorites" },
-                                            { key: "recent", title: "Recent" }]
-            function focusChip(i) { chipRepeater.itemAt(i).forceActiveFocus() }
+            readonly property var filters: {
+                const list = [{ key: "all", title: "All" }, { key: "favorites", title: "★ Favorites" },
+                              { key: "recent", title: "Recent" }]
+                if (screen.library.missingCount > 0 || screen.library.filter === "missing")
+                    list.push({ key: "missing", title: "⚠ Missing (" + screen.library.missingCount + ")" })
+                list.push({ key: "view", title: screen.listMode ? "☰ List" : "▦ Grid" })
+                return list
+            }
+            function focusChip(i) {
+                const item = chipRepeater.itemAt(Math.max(0, Math.min(i, chipRepeater.count - 1)))
+                if (item)
+                    item.forceActiveFocus()
+            }
 
             Row {
                 id: chipRow
-                spacing: 8
+                spacing: Theme.space2
                 Repeater {
                     id: chipRepeater
                     model: chips.filters
@@ -155,21 +214,22 @@ FocusScope {
                         id: chip
                         required property var modelData
                         required property int index
-                        readonly property bool selected: screen.library.filter === modelData.key
-                        objectName: "filter_" + modelData.key
+                        readonly property bool isView: modelData.key === "view"
+                        readonly property bool selected: !isView && screen.library.filter === modelData.key
+                        objectName: isView ? "viewToggle" : "filter_" + modelData.key
                         activeFocusOnTab: true
-                        height: 44
-                        width: chipLabel.implicitWidth + 36
-                        radius: 22
+                        height: Theme.chipHeight
+                        width: chipLabel.implicitWidth + Theme.space6
+                        radius: height / 2
                         color: selected ? Theme.accentSoft : (chipMouse.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised)
                         border.width: activeFocus ? Theme.focusWidth : 1
-                        border.color: activeFocus ? Theme.accent : (selected ? Theme.accent : Theme.border)
+                        border.color: activeFocus ? Theme.focusRing : (selected ? Theme.accent : Theme.border)
                         onActiveFocusChanged: if (activeFocus) chips.lastFocused = index
 
-                        Accessible.role: Accessible.RadioButton
-                        Accessible.name: modelData.title
-                        Accessible.description: "Filter"
-                        Accessible.checkable: true
+                        Accessible.role: isView ? Accessible.Button : Accessible.RadioButton
+                        Accessible.name: isView ? "View: " + (screen.listMode ? "list" : "grid") : modelData.title
+                        Accessible.description: isView ? "Switch between grid and list" : "Filter"
+                        Accessible.checkable: !isView
                         Accessible.checked: selected
                         Accessible.onPressAction: apply()
                         Text {
@@ -185,9 +245,14 @@ FocusScope {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: { chip.forceActiveFocus(); screen.library.filter = chip.modelData.key }
+                            onClicked: { chip.forceActiveFocus(); chip.apply() }
                         }
-                        function apply() { screen.library.filter = modelData.key }
+                        function apply() {
+                            if (isView)
+                                screen.listMode = !screen.listMode
+                            else
+                                screen.library.filter = modelData.key
+                        }
                         Keys.onReturnPressed: apply()
                         Keys.onEnterPressed: apply()
                         Keys.onSpacePressed: apply()
@@ -199,16 +264,130 @@ FocusScope {
         }
     }
 
-    // --- Row 2: result count + sort ------------------------------------------------------
-    Item {
-        id: infoRow
+    // --- Row 2: system filter chips (only systems that have games) ----------------------------
+    FocusScope {
+        id: systemChips
+        objectName: "systemChips"
         anchors.top: toolbar.bottom
-        anchors.topMargin: 10
+        anchors.topMargin: visible ? Theme.space3 : 0
         anchors.left: toolbar.left
         anchors.right: toolbar.right
-        height: 40
+        height: visible ? Theme.chipHeight : 0
+        visible: screen.systemsWithGames.length > 1 || screen.library.systemFilter.length > 0
+        property int lastFocused: -1
+        readonly property var entries: [{ systemId: "", shortName: "All systems", gameCount: screen.library.totalCount }]
+                                       .concat(screen.systemsWithGames)
+        function selectedIndex() {
+            for (let i = 0; i < entries.length; ++i) {
+                if (entries[i].systemId === screen.library.systemFilter)
+                    return i
+            }
+            return 0
+        }
+        function focusChip(i) {
+            systemList.currentIndex = Math.max(0, Math.min(i, systemList.count - 1))
+            systemList.forceActiveFocus()
+        }
+
+        ListView {
+            id: systemList
+            anchors.fill: parent
+            orientation: ListView.Horizontal
+            spacing: Theme.space2
+            clip: true
+            model: systemChips.entries
+            keyNavigationEnabled: true
+            highlightMoveDuration: Theme.animMove
+            boundsBehavior: Flickable.StopAtBounds
+            onCurrentIndexChanged: if (activeFocus) systemChips.lastFocused = currentIndex
+            onActiveFocusChanged: if (activeFocus) systemChips.lastFocused = currentIndex
+            delegate: Rectangle {
+                id: sysChip
+                required property var modelData
+                required property int index
+                readonly property bool selected: screen.library.systemFilter === modelData.systemId
+                readonly property bool current: ListView.isCurrentItem && systemList.activeFocus
+                objectName: "systemChip_" + (modelData.systemId.length > 0 ? modelData.systemId : "all")
+                height: systemList.height
+                width: sysLabel.implicitWidth + Theme.space6
+                radius: height / 2
+                color: selected ? Theme.accentSoft : Theme.surfaceRaised
+                border.width: current ? Theme.focusWidth : 1
+                border.color: current ? Theme.focusRing : (selected ? Theme.accent : Theme.border)
+                Accessible.role: Accessible.RadioButton
+                Accessible.name: modelData.shortName
+                Accessible.checked: selected
+                Text {
+                    id: sysLabel
+                    anchors.centerIn: parent
+                    text: sysChip.modelData.shortName + "  " + sysChip.modelData.gameCount
+                    color: sysChip.selected ? Theme.text : Theme.textMuted
+                    font.pixelSize: Theme.fontSmall + 1
+                    font.bold: sysChip.selected
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        systemChips.focusChip(sysChip.index)
+                        screen.library.systemFilter = sysChip.modelData.systemId
+                    }
+                }
+            }
+            Keys.onReturnPressed: screen.library.systemFilter = systemChips.entries[currentIndex].systemId
+            Keys.onEnterPressed: screen.library.systemFilter = systemChips.entries[currentIndex].systemId
+        }
+    }
+
+    // --- Row 3: scan progress + Cancel (while scanning) --------------------------------------
+    Rectangle {
+        id: scanBanner
+        objectName: "scanProgress"
+        anchors.top: systemChips.bottom
+        anchors.topMargin: visible ? Theme.space3 : 0
+        anchors.left: toolbar.left
+        anchors.right: toolbar.right
+        visible: screen.library.scanning
+        height: visible ? Theme.controlHeight + Theme.space2 : 0
+        radius: Theme.radiusSmall
+        color: Theme.surface
+        border.color: Theme.border
+        Text {
+            objectName: "scanProgressText"
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.space4
+            anchors.right: cancelScanButton.left
+            anchors.rightMargin: Theme.space4
+            anchors.verticalCenter: parent.verticalCenter
+            elide: Text.ElideMiddle
+            text: "Scanning" + (screen.library.scanCurrentRoot.length > 0 ? " " + screen.library.scanCurrentRoot : "")
+                  + "…  " + screen.library.scanFilesSeen + (screen.library.scanFilesSeen === 1 ? " file" : " files") + " seen"
+            color: Theme.text
+            font.pixelSize: Theme.fontSmall + 1
+        }
+        NxButton {
+            id: cancelScanButton
+            objectName: "cancelScanButton"
+            visible: screen.library.scanning
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.space1
+            anchors.verticalCenter: parent.verticalCenter
+            compact: true
+            text: "Cancel scan"
+            onClicked: screen.library.cancelScan()
+        }
+    }
+
+    // --- Row 4: result count + sort ------------------------------------------------------
+    Item {
+        id: infoRow
+        anchors.top: scanBanner.bottom
+        anchors.topMargin: Theme.space2
+        anchors.left: toolbar.left
+        anchors.right: toolbar.right
+        height: Theme.controlHeightCompact
 
         Text {
+            id: resultCount
             objectName: "resultCount"
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
@@ -221,16 +400,18 @@ FocusScope {
 
         Text {
             objectName: "selectedDetail"
-            anchors.left: parent.left
-            anchors.leftMargin: 160
+            anchors.left: resultCount.right
+            anchors.leftMargin: Theme.space5
             anchors.right: sortSelector.left
             anchors.rightMargin: Theme.spacing
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             elide: Text.ElideRight
             readonly property var game: grid.activeFocus ? grid.currentItem : null
-            text: game && !game.available ? "⚠  " + game.title + ": " + game.unavailableReason : ""
-            color: Theme.danger
+            text: !game ? ""
+                : !game.present ? "⚠  " + game.title + ": the game file is missing"
+                : !game.available ? "⚠  " + game.title + ": " + game.unavailableReason : ""
+            color: game && !game.present ? Theme.warning : Theme.danger
             font.pixelSize: Theme.fontSmall
         }
 
@@ -240,12 +421,12 @@ FocusScope {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             activeFocusOnTab: true
-            height: 38
-            width: sortRow.implicitWidth + 28
-            radius: 19
+            height: Theme.controlHeightCompact - 2
+            width: sortRow.implicitWidth + Theme.space5 + Theme.space1
+            radius: height / 2
             color: activeFocus ? Theme.surfaceHover : "transparent"
             border.width: activeFocus ? Theme.focusWidth : 1
-            border.color: activeFocus ? Theme.accent : Theme.border
+            border.color: activeFocus ? Theme.focusRing : Theme.border
 
             Accessible.role: Accessible.ComboBox
             Accessible.name: "Sort by " + Theme.sortLabel(screen.library.sortOrder)
@@ -255,7 +436,7 @@ FocusScope {
             Row {
                 id: sortRow
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: Theme.space2
                 Text {
                     text: "Sort"
                     color: Theme.textMuted
@@ -270,7 +451,7 @@ FocusScope {
                 }
                 Text {
                     objectName: "sortValue"
-                    width: 130
+                    width: Math.round(130 * Theme.scale)
                     horizontalAlignment: Text.AlignHCenter
                     text: Theme.sortLabel(screen.library.sortOrder)
                     color: Theme.text
@@ -301,211 +482,146 @@ FocusScope {
         }
     }
 
-    // --- Grid ----------------------------------------------------------------------------
-    GridView {
-        id: grid
-        objectName: "gameGrid"
+    // --- Results (grid / list, or the loading / empty states) ---------------------------------
+    Item {
+        id: resultsRow
         anchors.top: infoRow.bottom
-        anchors.topMargin: 4
+        anchors.topMargin: Theme.space1
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: summary.top
-        anchors.leftMargin: Theme.spacing * 2 - 8
-        anchors.rightMargin: Theme.spacing * 2 - 8
-        visible: count > 0
-        clip: true
-        model: screen.library.games
-        keyNavigationEnabled: true
-        boundsBehavior: Flickable.StopAtBounds
-        highlightMoveDuration: 120
-        highlightRangeMode: GridView.ApplyRange
-        preferredHighlightBegin: 12
-        preferredHighlightEnd: height - cellHeight - 12
-        topMargin: 12
-        bottomMargin: 12
+        anchors.leftMargin: Theme.space6 - Theme.space2
+        anchors.rightMargin: Theme.space6 - Theme.space2
 
-        readonly property int columns: Math.max(2, Math.floor(width / 240))
-        cellWidth: Math.floor(width / columns)
-        cellHeight: Math.round(cellWidth * 0.62) + 70 + 16
-
-        property real currentGameId: -1
-        onCurrentIndexChanged: if (currentIndex >= 0 && currentIndex < count) currentGameId = model.gameIdAt(currentIndex)
-        function restoreSelection() {
-            if (currentGameId < 0)
-                return
-            const i = model.indexOfGame(currentGameId)
-            if (i >= 0 && i !== currentIndex)
-                currentIndex = i
-            else if (i < 0 && currentIndex >= 0 && currentIndex < count)
-                currentGameId = model.gameIdAt(currentIndex) // the game left the list
+        GameGrid {
+            id: grid
+            objectName: "gameGrid"
+            anchors.fill: parent
+            visible: count > 0
+            focus: true
+            library: screen.library
+            model: screen.library.games
+            listMode: screen.listMode
+            onDetailsRequested: (gameId) => screen.detailsRequested(gameId)
+            onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
         }
-        function syncSelection() {
-            restoreSelection()
-            if (count > 0 && currentIndex < 0)
-                currentIndex = 0
-        }
-        // Deferred: after a model reset the view picks its own current index first.
-        onCountChanged: Qt.callLater(syncSelection)
 
-        delegate: Item {
-            id: cell
-            required property int index
-            required property real gameId
-            required property string title
-            required property string emulatorName
-            required property bool favorite
-            required property string lastPlayed
-            required property bool available
-            required property string unavailableReason
-            width: grid.cellWidth
-            height: grid.cellHeight
-            z: GridView.isCurrentItem ? 2 : 1
-
-            GameTile {
-                anchors.fill: parent
-                anchors.margins: 8
-                gameId: cell.gameId
-                title: cell.title
-                emulatorName: cell.emulatorName
-                favorite: cell.favorite
-                lastPlayed: cell.lastPlayed
-                available: cell.available
-                unavailableReason: cell.unavailableReason
-                selected: cell.GridView.isCurrentItem && grid.activeFocus
-                onPressed: { grid.currentIndex = cell.index; grid.forceActiveFocus() }
-                onActivated: screen.library.launch(cell.gameId)
-                onFavoriteClicked: screen.library.toggleFavorite(cell.gameId)
+        Column {
+            id: loading
+            objectName: "gamesLoading"
+            anchors.centerIn: parent
+            visible: screen.library.scanning && grid.count === 0
+            spacing: Theme.spacing
+            Item {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.round(56 * Theme.scale)
+                height: width
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: Theme.border
+                    border.width: Math.round(5 * Theme.scale)
+                }
+                Rectangle {
+                    width: Math.round(14 * Theme.scale)
+                    height: width
+                    radius: width / 2
+                    color: Theme.accent
+                    x: parent.width / 2 - width / 2
+                    y: -width / 4
+                }
+                RotationAnimation on rotation {
+                    // A continuous spin, not a discrete transition: reducedMotion stops it
+                    // outright rather than collapsing its duration to 0.
+                    running: loading.visible && !Theme.reducedMotion
+                    from: 0
+                    to: 360
+                    duration: 1100
+                    loops: Animation.Infinite
+                }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Scanning your library…"
+                color: Theme.text
+                font.pixelSize: Theme.fontLarge
             }
         }
 
-        Keys.onPressed: (event) => {
-            if (currentIndex < 0)
-                return
-            const id = model.gameIdAt(currentIndex)
-            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                screen.library.launch(id)
-                event.accepted = true
-            } else if (event.key === Qt.Key_Favorites
-                       || (event.key === Qt.Key_F && event.modifiers === Qt.NoModifier)) {
-                screen.library.toggleFavorite(id)
-                event.accepted = true
-            } else if (event.key === Qt.Key_Context1 || (event.key === Qt.Key_O && event.modifiers === Qt.NoModifier)) {
-                screen.optionsRequested(id)
-                event.accepted = true
-            }
-        }
-    }
+        Column {
+            id: empty
+            objectName: "gamesEmpty"
+            anchors.centerIn: parent
+            width: Math.min(parent.width - Theme.space6 * 3, 720 * Theme.scale)
+            visible: !screen.library.scanning && grid.count === 0
+            spacing: Theme.spacing
+            readonly property string mode: screen.library.totalCount === 0 && screen.library.filter !== "missing"
+                ? (screen.library.directories.length === 0 ? "noDirectories" : "noGames")
+                : (screen.library.searchText.length > 0 ? "noResults"
+                   : screen.library.systemFilter.length > 0 ? "noSystem"
+                   : screen.library.filter === "favorites" ? "noFavorites"
+                   : screen.library.filter === "missing" ? "noMissing" : "noRecent")
 
-    Connections {
-        target: screen.library
-        function onContentChanged() { Qt.callLater(grid.syncSelection) }
-    }
-
-    // --- Loading / empty states ------------------------------------------------------------
-    Column {
-        id: loading
-        objectName: "gamesLoading"
-        anchors.centerIn: grid
-        visible: screen.library.scanning && grid.count === 0
-        spacing: Theme.spacing
-        Item {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 56
-            height: 56
-            Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                color: "transparent"
-                border.color: Theme.border
-                border.width: 5
+            Text {
+                objectName: "gamesEmptyTitle"
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: empty.mode === "noDirectories" ? "No library folders yet"
+                    : empty.mode === "noGames" ? "No games found"
+                    : empty.mode === "noResults" ? "No results for “" + screen.library.searchText + "”"
+                    : empty.mode === "noSystem" ? "No games for this system with the current filter"
+                    : empty.mode === "noFavorites" ? "No favorites yet"
+                    : empty.mode === "noMissing" ? "No missing games"
+                    : "Nothing played yet"
+                color: Theme.text
+                font.pixelSize: Theme.fontTitle
+                font.bold: true
             }
-            Rectangle {
-                width: 14
-                height: 14
-                radius: 7
-                color: Theme.accent
-                x: parent.width / 2 - 7
-                y: -4
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: empty.mode === "noDirectories"
+                      ? "Nexora looks for games in the folders you add. Open Settings › Library, type the full path "
+                        + "of the folder that holds your game files (for example /home/you/roms) and select Add folder. "
+                        + "Every file one of your emulators can run shows up here."
+                    : empty.mode === "noGames"
+                      ? "None of the files in your library folders match an emulator's file extensions."
+                    : empty.mode === "noResults"
+                      ? "Try a shorter search or a different filter."
+                    : empty.mode === "noSystem"
+                      ? "Choose “All systems” or another filter."
+                    : empty.mode === "noFavorites"
+                      ? "Press Y / F on a game to mark it as a favorite."
+                    : empty.mode === "noMissing"
+                      ? "Every game file in the library is where it should be."
+                      : "Games you launch will appear here."
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontBody
             }
-            RotationAnimation on rotation {
-                // A continuous spin, not a discrete transition: reducedMotion stops it
-                // outright rather than collapsing its duration to 0.
-                running: loading.visible && !Theme.reducedMotion
-                from: 0
-                to: 360
-                duration: 1100
-                loops: Animation.Infinite
-            }
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "Scanning your library…"
-            color: Theme.text
-            font.pixelSize: Theme.fontLarge
-        }
-    }
-
-    Column {
-        id: empty
-        objectName: "gamesEmpty"
-        anchors.centerIn: grid
-        width: Math.min(parent.width - 96, 720)
-        visible: !screen.library.scanning && grid.count === 0
-        spacing: Theme.spacing
-        readonly property string mode: screen.library.totalCount === 0
-            ? (screen.library.directories.length === 0 ? "noDirectories" : "noGames")
-            : (screen.library.searchText.length > 0 ? "noResults"
-               : (screen.library.filter === "favorites" ? "noFavorites" : "noRecent"))
-
-        Text {
-            objectName: "gamesEmptyTitle"
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            text: empty.mode === "noDirectories" ? "No library folders yet"
-                : empty.mode === "noGames" ? "No games found"
-                : empty.mode === "noResults" ? "No results for “" + screen.library.searchText + "”"
-                : empty.mode === "noFavorites" ? "No favorites yet"
-                : "Nothing played yet"
-            color: Theme.text
-            font.pixelSize: Theme.fontTitle
-            font.bold: true
-        }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            text: empty.mode === "noDirectories"
-                  ? "Add the folder that holds your game files in Settings → Library folders."
-                : empty.mode === "noGames"
-                  ? "None of the files in your library folders match an emulator's file extensions."
-                : empty.mode === "noResults"
-                  ? "Try a shorter search or a different filter."
-                : empty.mode === "noFavorites"
-                  ? "Press Y / F on a game to mark it as a favorite."
-                  : "Games you launch will appear here."
-            color: Theme.textMuted
-            font.pixelSize: Theme.fontBody
-        }
-        NxButton {
-            id: emptyAction
-            objectName: "gamesEmptyAction"
-            anchors.horizontalCenter: parent.horizontalCenter
-            kind: "primary"
-            text: empty.mode === "noDirectories" ? "Open Settings"
-                : empty.mode === "noGames" ? "Rescan library"
-                : empty.mode === "noResults" ? "Clear search"
-                : "Show all games"
-            onClicked: {
-                if (empty.mode === "noDirectories") {
-                    screen.navigate("settings")
-                } else if (empty.mode === "noGames") {
-                    screen.library.refresh()
-                } else {
-                    if (empty.mode === "noResults")
-                        screen.library.searchText = ""
-                    screen.library.filter = "all"
-                    Qt.callLater(screen.focusResults)
+            NxButton {
+                id: emptyAction
+                objectName: "gamesEmptyAction"
+                anchors.horizontalCenter: parent.horizontalCenter
+                kind: "primary"
+                text: empty.mode === "noDirectories" ? "Add a game folder"
+                    : empty.mode === "noGames" ? "Rescan library"
+                    : empty.mode === "noResults" ? "Clear search"
+                    : "Show all games"
+                onClicked: {
+                    if (empty.mode === "noDirectories") {
+                        screen.navigate("settings")
+                    } else if (empty.mode === "noGames") {
+                        screen.library.refresh()
+                    } else {
+                        if (empty.mode === "noResults")
+                            screen.library.searchText = ""
+                        screen.library.systemFilter = ""
+                        screen.library.filter = "all"
+                        Qt.callLater(screen.focusResults)
+                    }
                 }
             }
         }
@@ -517,9 +633,9 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: Theme.spacing * 2
-        anchors.rightMargin: Theme.spacing * 2
-        anchors.bottomMargin: 8
+        anchors.leftMargin: Theme.space6
+        anchors.rightMargin: Theme.space6
+        anchors.bottomMargin: Theme.space2
         text: screen.library.lastScanSummary
         color: Theme.textFaint
         font.pixelSize: Theme.fontTiny

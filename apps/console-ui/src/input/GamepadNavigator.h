@@ -35,6 +35,10 @@ namespace nexora::input {
 // navigation, so it keeps working while the InputController drops navigation actions
 // (emulator in the foreground).
 //
+// Holding Start alone (Select not held on that device) for menuHoldDuration() emits
+// quickMenuRequested() once per hold; like the chord it is tracked independently of
+// navigation. The normal Menu action still fires on the press edge.
+//
 // State is kept per |device| (any backend-chosen id, e.g. an fd or SDL instance id), so
 // several connected pads do not release or override each other's held directions.
 class GamepadNavigator : public QObject
@@ -66,6 +70,8 @@ public:
     void setMapping(const ButtonMapping &mapping) { m_mapping = mapping; }
     const ButtonMapping &mapping() const { return m_mapping; }
     std::chrono::milliseconds chordHoldDuration() const { return m_chordHold; }
+    void setMenuHoldDuration(std::chrono::milliseconds duration);
+    std::chrono::milliseconds menuHoldDuration() const { return m_menuHold; }
 
     // Stick/hat dead zone as a fraction of full travel, clamped to
     // [kMinDeadzone, kMaxDeadzone]. Non-finite values are ignored. See the class comment
@@ -81,6 +87,8 @@ public:
 signals:
     void actionTriggered(nexora::input::NavAction action);
     void returnToLauncherRequested();
+    // Start held on its own for menuHoldDuration() (see the class comment).
+    void quickMenuRequested();
     // Every non-directional button press, before mapping (used to capture remaps).
     void buttonPressed(nexora::input::GamepadButton button, quint32 device);
     // Every button edge as it arrived from the backend, before mapping, autorepeat
@@ -127,6 +135,7 @@ private:
     void releaseSource(quint32 device, int source);
     void onRepeatTimeout();
     void updateChord();
+    void updateMenuHold();
 
     ButtonMapping m_mapping = ButtonMapping::defaults();
     std::map<quint32, DeviceState> m_devices;
@@ -137,6 +146,9 @@ private:
     QTimer m_chordTimer;
     std::optional<quint32> m_chordDevice;
     std::chrono::milliseconds m_chordHold{1000};
+    QTimer m_menuHoldTimer;
+    std::optional<quint32> m_menuHoldDevice;
+    std::chrono::milliseconds m_menuHold{1000};
     double m_deadzone = kDefaultDeadzone;
 };
 
