@@ -40,10 +40,10 @@ done
 status=0
 if [[ ${#posix[@]} -gt 0 ]]; then
     echo "shellcheck -s sh: ${#posix[@]} POSIX scripts"
-    shellcheck -s sh "${posix[@]}" || status=1
+    shellcheck -s sh -x -P SCRIPTDIR "${posix[@]}" || status=1
 fi
 if [[ ${#bash_scripts[@]} -gt 0 ]]; then
     echo "shellcheck -s bash: ${#bash_scripts[@]} bash scripts"
-    shellcheck -s bash "${bash_scripts[@]}" || status=1
+    shellcheck -s bash -x -P SCRIPTDIR "${bash_scripts[@]}" || status=1
 fi
 exit "$status"
