@@ -33,6 +33,7 @@ public:
         SystemIdRole,
         SystemShortNameRole,
         DisplayTitleRole,
+        PresentRole, // false: the game file is missing (only listed by the "missing" filter)
     };
     Q_ENUM(Role)
 

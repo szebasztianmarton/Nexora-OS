@@ -44,6 +44,20 @@ private slots:
         model.setEntries({});
         QCOMPARE(model.rowCount(), 0);
     }
+
+    void getReturnsRowAsMap()
+    {
+        SystemListModel model;
+        model.setEntries({{QStringLiteral("snes"), QStringLiteral("Super Nintendo"), QStringLiteral("SNES"), 3, 2}});
+        const QVariantMap row = model.get(0);
+        QCOMPARE(row.value(QStringLiteral("systemId")).toString(), QStringLiteral("snes"));
+        QCOMPARE(row.value(QStringLiteral("name")).toString(), QStringLiteral("Super Nintendo"));
+        QCOMPARE(row.value(QStringLiteral("shortName")).toString(), QStringLiteral("SNES"));
+        QCOMPARE(row.value(QStringLiteral("gameCount")).toInt(), 3);
+        QCOMPARE(row.value(QStringLiteral("emulatorCount")).toInt(), 2);
+        QVERIFY(model.get(1).isEmpty());
+        QVERIFY(model.get(-1).isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSystemListModel)

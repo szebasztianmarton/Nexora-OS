@@ -46,4 +46,16 @@ void SystemListModel::setEntries(const QList<Entry> &entries)
         emit countChanged();
 }
 
+QVariantMap SystemListModel::get(int row) const
+{
+    if (row < 0 || row >= m_entries.size())
+        return {};
+    const Entry &e = m_entries.at(row);
+    return {{QStringLiteral("systemId"), e.id},
+            {QStringLiteral("name"), e.name},
+            {QStringLiteral("shortName"), e.shortName},
+            {QStringLiteral("gameCount"), e.gameCount},
+            {QStringLiteral("emulatorCount"), e.emulatorCount}};
+}
+
 } // namespace nexora::ui

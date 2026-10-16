@@ -1,11 +1,14 @@
 import QtQuick
 import Nexora.Console
 
-// Modal layer shown while an emulator process is active. Only "Stop" is available.
+// Modal layer shown while an emulator process is active: "Stop" plus the quick menu
+// (Menu / F1 here; Guide or holding Start on a controller, see GameBarController).
 FocusScope {
     id: overlay
     objectName: "runningOverlay"
     required property AppController app
+
+    signal quickMenuRequested()
 
     Rectangle {
         anchors.fill: parent
@@ -51,12 +54,12 @@ FocusScope {
             objectName: "stopButton"
             anchors.horizontalCenter: parent.horizontalCenter
             focus: true
-            height: 56
-            width: 240
-            radius: 12
+            height: Math.round(56 * Theme.scale)
+            width: Math.round(240 * Theme.scale)
+            radius: Theme.radius
             color: Theme.surfaceRaised
             border.width: activeFocus ? Theme.focusWidth : 1
-            border.color: activeFocus ? Theme.accent : Theme.border
+            border.color: activeFocus ? Theme.focusRing : Theme.border
             opacity: overlay.app.state === "stopping" ? 0.5 : 1.0
             scale: activeFocus ? 1.04 : 1.0
             Text {
@@ -74,13 +77,18 @@ FocusScope {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Nexora returns here automatically when the emulator exits.\n"
-                  + "Controller: hold Select + Start to stop the emulator and return."
+                  + "Controller: Guide or hold Start for the quick menu · hold Select + Start to stop and return.\n"
+                  + "Keyboard: Menu / F1 for the quick menu."
             horizontalAlignment: Text.AlignHCenter
             color: Theme.textMuted
             font.pixelSize: Theme.fontSmall
         }
     }
 
-    // Back / Menu / navigation do nothing while an emulator runs; consume them here.
-    Keys.onPressed: (event) => { event.accepted = true }
+    // Menu / F1 open the quick menu; Back and navigation do nothing while an emulator runs.
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_Menu || event.key === Qt.Key_F1)
+            overlay.quickMenuRequested()
+        event.accepted = true
+    }
 }

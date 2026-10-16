@@ -12,6 +12,8 @@ GamepadNavigator::GamepadNavigator(QObject *parent)
     connect(&m_repeatTimer, &QTimer::timeout, this, &GamepadNavigator::onRepeatTimeout);
     m_chordTimer.setSingleShot(true);
     connect(&m_chordTimer, &QTimer::timeout, this, &GamepadNavigator::returnToLauncherRequested);
+    m_menuHoldTimer.setSingleShot(true);
+    connect(&m_menuHoldTimer, &QTimer::timeout, this, &GamepadNavigator::quickMenuRequested);
 }
 
 void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 device)
@@ -51,6 +53,7 @@ void GamepadNavigator::buttonEvent(GamepadButton button, bool pressed, quint32 d
     if (button == GamepadButton::Start || button == GamepadButton::Select) {
         (button == GamepadButton::Start ? state.startHeld : state.selectHeld) = pressed;
         updateChord();
+        updateMenuHold();
     }
     if (!pressed)
         return;
@@ -135,6 +138,30 @@ void GamepadNavigator::updateChord()
     }
 }
 
+void GamepadNavigator::updateMenuHold()
+{
+    const auto holdsStartAlone = [](const DeviceState &state) { return state.startHeld && !state.selectHeld; };
+    if (m_menuHoldDevice) {
+        const auto it = m_devices.find(*m_menuHoldDevice);
+        if (it != m_devices.end() && holdsStartAlone(it->second))
+            return;
+        m_menuHoldTimer.stop();
+        m_menuHoldDevice.reset();
+    }
+    for (const auto &[device, state] : m_devices) {
+        if (holdsStartAlone(state)) {
+            m_menuHoldDevice = device;
+            m_menuHoldTimer.start(m_menuHold);
+            return;
+        }
+    }
+}
+
+void GamepadNavigator::setMenuHoldDuration(std::chrono::milliseconds duration)
+{
+    m_menuHold = std::max(duration, std::chrono::milliseconds{1});
+}
+
 void GamepadNavigator::setChordHoldDuration(std::chrono::milliseconds duration)
 {
     m_chordHold = std::max(duration, std::chrono::milliseconds{1});
@@ -152,6 +179,8 @@ void GamepadNavigator::reset()
     m_devices.clear();
     m_chordTimer.stop();
     m_chordDevice.reset();
+    m_menuHoldTimer.stop();
+    m_menuHoldDevice.reset();
     m_repeatTimer.stop();
     m_repeat.reset();
 }
@@ -164,6 +193,7 @@ void GamepadNavigator::resetDevice(quint32 device)
         m_repeatTimer.stop();
     }
     updateChord();
+    updateMenuHold();
 }
 
 void GamepadNavigator::setRepeatDelays(std::chrono::milliseconds initial, std::chrono::milliseconds interval)

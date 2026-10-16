@@ -1,28 +1,80 @@
 import QtQuick
 import Nexora.Console
 
-// Read-only diagnostics plus a configuration reload action.
+// System: version and build, update status, hardware (CPU, memory, GPUs, storage, audio,
+// display outputs), the recent launch history and the diagnostics that used to have their
+// own tab (configuration, input, library, settings and log state). The action buttons at the
+// top open the update panel, export a redacted diagnostics report and reload the emulator
+// configuration; Down scrolls the information below them.
 FocusScope {
     id: screen
-    objectName: "diagnosticsScreen"
+    objectName: "systemScreen"
     required property AppController app
     required property LibraryController library
     required property SettingsController settings
     required property SystemController system
+    required property UpdateController updates
 
-    readonly property var hints: [{ button: "↑ ↓", action: "Scroll" }, { button: "A / Enter", action: "Reload config" },
-                                  { button: "L1 / R1", action: "Switch tab" }]
+    signal updatesRequested()
+
+    readonly property var hints: flick.activeFocus
+        ? [{ button: "↑ ↓", action: "Scroll" }, { button: "A / Enter", action: "Reload config" },
+           { button: "L1 / R1", action: "Switch tab" }]
+        : [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Run" },
+           { button: "↓", action: "Details" }, { button: "L1 / R1", action: "Switch tab" }]
 
     property var logLines: []
+    property string lastDiagnosticsPath: ""
     function refresh() {
-        logLines = app.recentLog().slice(-40)
+        const lines = app.recentLog()
+        logLines = lines.slice(Math.max(0, lines.length - 40))
         system.refresh()
     }
     function reload() {
         app.reloadConfig()
         refresh()
     }
-    function focusDefault() { flick.focus = true }
+    function focusDefault() { updateButton.focus = true; actions.focus = true }
+    function list(values) {
+        const out = []
+        for (let i = 0; i < values.length; ++i)
+            out.push(values[i])
+        return out
+    }
+    function hardwareText() {
+        const hw = system.hardware
+        const lines = []
+        lines.push("CPU: " + (hw.cpuModel || "unknown") + (hw.cpuThreads ? " (" + hw.cpuThreads + " threads)" : ""))
+        if (hw.memTotalKiB)
+            lines.push("Memory: " + Theme.formatBytes(hw.memTotalKiB * 1024) + " total, "
+                       + Theme.formatBytes((hw.memAvailableKiB || 0) * 1024) + " available")
+        for (const g of (hw.gpus || []))
+            lines.push("GPU: " + (g.vendorName || g.vendorId || "unknown") + " " + (g.deviceId || "")
+                       + (g.driver ? " · driver " + g.driver : "") + (g.card ? " · " + g.card : ""))
+        for (const st of (hw.storage || []).filter(e => e.path && Number(e.totalBytes) > 0))
+            lines.push("Storage " + st.path + ": " + Theme.formatBytes(st.availableBytes) + " free of "
+                       + Theme.formatBytes(st.totalBytes) + (st.fsType ? " (" + st.fsType + ")" : ""))
+        for (const a of (hw.audio || []))
+            lines.push("Audio: " + a.name)
+        for (const o of (hw.outputs || []))
+            lines.push("Display " + o.name + ": " + (o.connected ? (o.modes && o.modes.length > 0 ? o.modes[0] : "connected")
+                                                                  : "disconnected"))
+        return lines.join("\n")
+    }
+    function historyText() {
+        const records = app.launchHistory
+        if (records.length === 0)
+            return "No games or emulators launched yet."
+        const lines = []
+        for (const r of records) {
+            const when = r.startedAt ? new Date(r.startedAt).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""
+            lines.push(when + "  " + (r.gameTitle || r.emulatorId) + " — " + (r.finalState || "unknown")
+                       + (r.exitCode !== undefined && r.exitCode !== null ? " (exit " + r.exitCode + ")" : "")
+                       + (r.startupFailure ? " · failed to start" : "")
+                       + (r.error ? " · " + r.error : ""))
+        }
+        return lines.join("\n")
+    }
     Component.onCompleted: refresh()
     onVisibleChanged: if (visible) refresh()
 
@@ -30,66 +82,93 @@ FocusScope {
         id: title
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.leftMargin: Theme.spacing * 2
-        anchors.topMargin: Theme.spacing * 1.5
-        text: "Diagnostics"
+        anchors.leftMargin: Theme.space6
+        anchors.topMargin: Theme.space5
+        text: "System"
         color: Theme.text
         font.pixelSize: Theme.fontHero
         font.bold: true
     }
 
-    Rectangle {
-        id: reloadButton
-        objectName: "reloadButton"
+    FocusScope {
+        id: actions
+        objectName: "systemActions"
         anchors.verticalCenter: title.verticalCenter
         anchors.right: parent.right
-        anchors.rightMargin: Theme.spacing * 2
-        height: 44
-        width: reloadLabel.implicitWidth + 40
-        radius: 10
-        color: Theme.surfaceRaised
-        border.width: flick.activeFocus ? Theme.focusWidth : 1
-        border.color: flick.activeFocus ? Theme.accent : Theme.border
-        Text {
-            id: reloadLabel
-            anchors.centerIn: parent
-            text: "↻  Reload configuration  (A / Enter)"
-            color: Theme.text
-            font.pixelSize: Theme.fontSmall + 1
-            font.bold: true
+        anchors.rightMargin: Theme.space6
+        width: actionRow.width
+        height: actionRow.height
+        Row {
+            id: actionRow
+            spacing: Theme.space3
+            NxButton {
+                id: updateButton
+                objectName: "systemUpdateButton"
+                focus: true
+                compact: true
+                glyph: "⇪"
+                text: "Software update"
+                KeyNavigation.right: exportButton
+                onClicked: screen.updatesRequested()
+            }
+            NxButton {
+                id: exportButton
+                objectName: "exportDiagnosticsButton"
+                compact: true
+                glyph: "⎙"
+                text: "Export diagnostics"
+                KeyNavigation.left: updateButton
+                KeyNavigation.right: reloadButton
+                onClicked: screen.lastDiagnosticsPath = screen.system.exportDiagnostics()
+            }
+            NxButton {
+                id: reloadButton
+                objectName: "reloadButton"
+                compact: true
+                glyph: "↻"
+                text: "Reload configuration"
+                KeyNavigation.left: exportButton
+                onClicked: screen.reload()
+            }
         }
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: screen.reload()
-        }
+        Keys.onDownPressed: flick.forceActiveFocus()
     }
 
     Flickable {
         id: flick
+        objectName: "systemDetails"
         anchors.top: title.bottom
         anchors.topMargin: Theme.spacing
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: Theme.spacing * 2
-        anchors.rightMargin: Theme.spacing * 2
+        anchors.leftMargin: Theme.space6
+        anchors.rightMargin: Theme.space6
         contentHeight: content.implicitHeight + Theme.spacing
         clip: true
-        focus: true
         boundsBehavior: Flickable.StopAtBounds
 
-        // Up at the top hands focus to the tab bar.
-        Keys.onUpPressed: (event) => {
+        // Up at the top returns to the action buttons.
+        Keys.onUpPressed: {
             if (contentY <= 0)
-                event.accepted = false
+                actions.forceActiveFocus()
             else
-                contentY = Math.max(0, contentY - 120)
+                contentY = Math.max(0, contentY - 120 * Theme.scale)
         }
-        Keys.onDownPressed: contentY = Math.max(0, Math.min(contentHeight - height, contentY + 120))
+        Keys.onDownPressed: contentY = Math.max(0, Math.min(contentHeight - height, contentY + 120 * Theme.scale))
         Keys.onReturnPressed: screen.reload()
         Keys.onEnterPressed: screen.reload()
         Behavior on contentY { NumberAnimation { duration: Theme.animFast } }
+
+        Rectangle {
+            anchors.fill: parent
+            visible: flick.activeFocus
+            color: "transparent"
+            border.width: Theme.focusWidth
+            border.color: Theme.focusRing
+            radius: Theme.radiusSmall
+            z: 5
+        }
 
         Column {
             id: content
@@ -102,10 +181,12 @@ FocusScope {
                 property string body
                 property color bodyColor: Theme.text
                 property bool mono: false
-                width: parent ? (parent.columns ? (parent.width - parent.columnSpacing * (parent.columns - 1)) / parent.columns
-                                                : parent.width) : 0
-                height: sectionColumn.implicitHeight + 24
-                radius: 10
+                // Inside the Grid: one column's width; directly in the Column: full width.
+                width: !parent ? 0
+                     : parent.columns > 1 ? (parent.width - parent.columnSpacing * (parent.columns - 1)) / parent.columns
+                     : parent.width
+                height: sectionColumn.implicitHeight + Theme.space5
+                radius: Theme.radiusSmall
                 color: Theme.surface
                 border.color: Theme.border
                 Column {
@@ -113,8 +194,8 @@ FocusScope {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.margins: 12
-                    spacing: 4
+                    anchors.margins: Theme.space3
+                    spacing: Theme.space1
                     Text {
                         text: section.heading
                         color: Theme.accent
@@ -138,13 +219,45 @@ FocusScope {
             Grid {
                 id: grid
                 width: parent.width
-                columns: width > 900 ? 2 : 1
+                columns: width > 900 * Theme.scale ? 2 : 1
                 columnSpacing: Theme.spacing
                 rowSpacing: Theme.spacing
 
                 Section {
-                    heading: "Version"
-                    body: "Nexora OS " + screen.app.version + " (MVP 2 prototype)\nPlatform: " + screen.system.platform
+                    objectName: "systemVersion"
+                    heading: "Nexora OS"
+                    body: "Nexora " + screen.app.version
+                          + (screen.system.buildId.length > 0 ? " · build " + screen.system.buildId : "")
+                          + "\nOperating system: " + (screen.system.osVersion.length > 0 ? screen.system.osVersion : "unknown")
+                          + "\nBoard " + screen.system.board + " · platform " + screen.system.platform
+                }
+                Section {
+                    objectName: "systemUpdates"
+                    heading: "Software update"
+                    body: !screen.updates.supported ? screen.updates.message
+                          : screen.updates.state === "idle" ? "No update selected · use Software update above"
+                          : Theme.capitalize(screen.updates.state)
+                            + (screen.updates.availableVersion.length > 0 ? " · version " + screen.updates.availableVersion : "")
+                            + (screen.updates.message.length > 0 ? "\n" + screen.updates.message : "")
+                    bodyColor: screen.updates.error.length > 0 ? Theme.danger : Theme.text
+                }
+                Section {
+                    objectName: "systemHardware"
+                    heading: "Hardware"
+                    body: screen.hardwareText()
+                }
+                Section {
+                    objectName: "systemLaunchHistory"
+                    heading: "Launch history"
+                    body: screen.historyText()
+                }
+                Section {
+                    heading: "Diagnostics export"
+                    body: screen.lastDiagnosticsPath.length > 0 ? "Saved to " + screen.lastDiagnosticsPath
+                          : screen.system.lastError.length > 0 ? screen.system.lastError
+                          : "A redacted text report for troubleshooting (Export diagnostics above)"
+                    bodyColor: screen.lastDiagnosticsPath.length === 0 && screen.system.lastError.length > 0
+                               ? Theme.danger : Theme.text
                 }
                 Section {
                     heading: "Security"
@@ -158,7 +271,7 @@ FocusScope {
                 }
                 Section {
                     heading: "Configuration issues"
-                    body: screen.app.configIssues.join("\n")
+                    body: screen.list(screen.app.configIssues).join("\n")
                     bodyColor: screen.app.configIssues.length > 0 ? Theme.warning : Theme.text
                 }
                 Section {
@@ -166,11 +279,11 @@ FocusScope {
                     body: screen.app.state + (screen.app.statusMessage.length > 0 ? " — " + screen.app.statusMessage : "")
                     bodyColor: screen.app.statusIsError ? Theme.danger : Theme.text
                 }
-                Section { heading: "Disabled emulators"; body: screen.app.disabledEmulators.join(", ") }
+                Section { heading: "Disabled emulators"; body: screen.list(screen.app.disabledEmulators).join(", ") }
                 Section {
                     heading: "Controller input"
                     body: screen.app.inputBackend + " — " + screen.app.inputStatus
-                          + (screen.app.inputDevices.length > 0 ? "\nDevices: " + screen.app.inputDevices.join(", ") : "")
+                          + (screen.app.inputDevices.length > 0 ? "\nDevices: " + screen.list(screen.app.inputDevices).join(", ") : "")
                 }
                 Section {
                     heading: "Log file"
@@ -184,23 +297,23 @@ FocusScope {
                     heading: "Game library"
                     body: (screen.library.available ? screen.library.totalCount + " game(s)" : "Library database unavailable")
                           + "\n" + screen.library.lastScanSummary
-                          + (screen.library.directories.length > 0 ? "\nFolders: " + screen.library.directories.join(", ") : "")
+                          + (screen.library.directories.length > 0 ? "\nFolders: " + screen.list(screen.library.directories).join(", ") : "")
                 }
                 Section {
                     heading: "Library issues"
-                    body: screen.library.issues.join("\n")
+                    body: screen.list(screen.library.issues).join("\n")
                     bodyColor: screen.library.issues.length > 0 ? Theme.warning : Theme.text
                 }
                 Section {
                     heading: "Settings"
                     body: "User file: " + screen.settings.userFile
-                          + (screen.settings.issues.length > 0 ? "\n" + screen.settings.issues.join("\n") : "\nNo issues")
+                          + (screen.settings.issues.length > 0 ? "\n" + screen.list(screen.settings.issues).join("\n") : "\nNo issues")
                           + (screen.settings.lastError.length > 0 ? "\nLast error: " + screen.settings.lastError : "")
                     bodyColor: screen.settings.issues.length > 0 || screen.settings.lastError.length > 0 ? Theme.warning : Theme.text
                 }
                 Section {
-                    heading: "System"
-                    body: screen.system.statusLines.join("\n")
+                    heading: "System status"
+                    body: screen.list(screen.system.statusLines).join("\n")
                           + (screen.system.lastError.length > 0 ? "\nLast error: " + screen.system.lastError : "")
                 }
             }

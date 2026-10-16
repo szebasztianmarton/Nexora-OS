@@ -95,6 +95,9 @@ public:
     //  lastPlayedText (local, for display), addedAt (ISO), present, notes}. Empty map for an
     //  unknown id.
     Q_INVOKABLE QVariantMap gameDetails(qint64 id) const;
+    // Display name of a catalog system id ("" for an unknown or empty id). Used by the
+    // game details screen to label the system candidates it offers.
+    Q_INVOKABLE QString systemName(const QString &systemId) const;
     // |title| empty = use the derived (file name) title.
     Q_INVOKABLE bool setGameMetadata(qint64 id, const QString &title, const QString &notes);
     // |systemId| empty clears the override.

@@ -37,7 +37,7 @@ Column {
         text: empty.app.configIssues.length > 0
               ? empty.app.configIssues[0]
                 + (empty.app.configIssues.length > 1
-                   ? "\n(+" + (empty.app.configIssues.length - 1) + " more issue(s) in Diagnostics)" : "")
+                   ? "\n(+" + (empty.app.configIssues.length - 1) + " more issue(s) on the System tab)" : "")
               : ""
         color: Theme.danger
         font.pixelSize: Theme.fontSmall
@@ -45,7 +45,7 @@ Column {
     Text {
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
-        text: "Press Menu / F1 for diagnostics"
+        text: "Press Menu / F1 for system information"
         color: Theme.textMuted
         font.pixelSize: Theme.fontSmall
     }

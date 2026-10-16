@@ -389,6 +389,86 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(games->rowCount(), 2, Timeout);
     }
 
+    // Guide opens the quick menu (not the game bar) while an emulator runs, toggles the bar
+    // otherwise; holding Start opens the menu too; both keep input flowing to the shell.
+    void quickMenuOpensOnlyWhileAnEmulatorRuns()
+    {
+        input::InputController input;
+        QVERIFY(input.start(std::make_unique<FakeBackend>(input.navigator())));
+        input.navigator()->setMenuHoldDuration(std::chrono::milliseconds(50));
+        ui::UiContext ctx(options(), &input);
+        ctx.start();
+        auto *bar = ctx.gameBar();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+
+        // Idle: no quick menu; Guide toggles the bar.
+        QVERIFY(!bar->openQuickMenu());
+        QVERIFY(!bar->isQuickMenuOpen());
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(bar->isOpen());
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(!bar->isOpen());
+
+        QVERIFY(ctx.library()->launchWithProfile(id, QStringLiteral("long")));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("running"), Timeout);
+        QVERIFY(input.isSuspended());
+
+        // Running: Guide opens the quick menu; input resumes; Guide again closes it.
+        QSignalSpy menuChanged(bar, &ui::GameBarController::quickMenuOpenChanged);
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(bar->isQuickMenuOpen());
+        QVERIFY(!bar->isOpen());
+        QVERIFY(!input.isSuspended());
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(!bar->isQuickMenuOpen());
+        QVERIFY(input.isSuspended());
+        QCOMPARE(menuChanged.size(), 2);
+
+        // Holding Start (while suspended) opens it as well.
+        input.navigator()->buttonEvent(input::GamepadButton::Start, true);
+        QTRY_VERIFY_WITH_TIMEOUT(bar->isQuickMenuOpen(), Timeout);
+        input.navigator()->buttonEvent(input::GamepadButton::Start, false);
+        QVERIFY(!input.isSuspended());
+
+        // Ctrl+G's toggle() still reaches the bar, which replaces the menu.
+        bar->toggle();
+        QVERIFY(bar->isOpen());
+        bar->close();
+        QVERIFY(bar->openQuickMenu());
+
+        // The menu closes by itself once the emulator is gone.
+        QVERIFY(ctx.app()->stop());
+        QTRY_VERIFY_WITH_TIMEOUT(!ctx.app()->isBusy(), Timeout);
+        QVERIFY(!bar->isQuickMenuOpen());
+    }
+
+    void presentRoleAndSystemNames()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
+        QVERIFY(ctx.library()->games()->index(0).data(ui::GameListModel::PresentRole).toBool());
+        QVERIFY(ctx.library()->games()->roleNames().values().contains("present"));
+
+        QVERIFY(QFile::remove(gamesDir() + QStringLiteral("/Alpha.rom")));
+        QVERIFY(ctx.library()->refresh());
+        waitForScan(ctx);
+        ctx.library()->setFilter(QStringLiteral("missing"));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.library()->games()->rowCount(), 1, Timeout);
+        QVERIFY(!ctx.library()->games()->index(0).data(ui::GameListModel::PresentRole).toBool());
+
+        QCOMPARE(ctx.library()->systemName({}), QString());
+        QCOMPARE(ctx.library()->systemName(QStringLiteral("no-such-system")), QString());
+        QVERIFY(ctx.library()->systems()->rowCount() > 0);
+        const QModelIndex first = ctx.library()->systems()->index(0);
+        QCOMPARE(ctx.library()->systemName(first.data(ui::SystemListModel::SystemIdRole).toString()),
+                 first.data(ui::SystemListModel::NameRole).toString());
+    }
+
     void failedStartIsNotPlayed()
     {
         // Executable bit set but not a program: passes validation, then fails to start.

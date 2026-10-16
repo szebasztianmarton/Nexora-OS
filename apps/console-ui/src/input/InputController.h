@@ -119,6 +119,10 @@ signals:
     // The game bar button (Guide by default) was pressed. Emitted even while suspended, so
     // the bar can be opened on top of a running emulator.
     void gameBarRequested();
+    // Start was held on its own for the navigator's menuHoldDuration(). Emitted even while
+    // suspended (that is when it matters: the quick menu opens over a running emulator);
+    // never in test mode.
+    void quickMenuRequested();
 
 private:
     bool startBackend(std::unique_ptr<InputBackend> backend);

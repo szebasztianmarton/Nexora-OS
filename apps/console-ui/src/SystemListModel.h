@@ -3,6 +3,7 @@
 #include <QAbstractListModel>
 #include <QList>
 #include <QString>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 namespace nexora::ui {
@@ -45,6 +46,10 @@ public:
     // Replaces the content. |entries| should already have its "Other" bucket (id "")
     // dropped by the caller when it is empty.
     void setEntries(const QList<Entry> &entries);
+
+    // {systemId, name, shortName, gameCount, emulatorCount} of |row|; empty for a bad row.
+    // Lets QML pick rows (e.g. only systems with games) without a proxy model.
+    Q_INVOKABLE QVariantMap get(int row) const;
 
 signals:
     void countChanged();
