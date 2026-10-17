@@ -27,6 +27,7 @@
 #include <QQuickWindow>
 #include <QtQml/QQmlExtensionPlugin>
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 
@@ -120,7 +121,10 @@ int runHeadlessAction(nexora::ui::UiContext &context, const QCommandLineParser &
         auto *updates = context.updates();
         bool ok = updates->checkBundle(parser.value(verifyUpdateOption)) && updates->verify();
         if (ok) {
-            QDeadlineTimer deadline(30000);
+            // No short timeout: hashing a 2 GiB image from a slow USB stick takes minutes.
+            // Verification always ends (hash done, read error or mismatch), so the bound only
+            // guards against a stuck device and is far above any real run.
+            QDeadlineTimer deadline(std::chrono::hours(2));
             while (!deadline.hasExpired()
                    && (updates->state() == QStringLiteral("checking")
                        || updates->state() == QStringLiteral("verifying"))) {
