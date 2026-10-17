@@ -152,6 +152,10 @@ private:
     void onErrorOccurred(QProcess::ProcessError error);
     void onFinished(int exitCode, QProcess::ExitStatus status);
     void onStopTimeout();
+    // Sends |signal| to the emulator's whole process group (the child is made a group
+    // leader at fork time, so helpers and grandchildren it spawns are included). Falls back
+    // to the direct child if the group is gone. Returns false while no pid is known yet.
+    bool signalGroup(int signal);
     void finish(ProcessOutcome outcome);
     void releaseProcess();
     void openOutputLog(const ResolvedLaunch &launch);
@@ -169,6 +173,7 @@ private:
     std::chrono::milliseconds m_activeStopTimeout{5000};
     bool m_stopRequested = false;
     bool m_killed = false;
+    bool m_terminatePending = false; // stop() came before the pid was known; see onStarted()
     bool m_activePausable = false;
     bool m_paused = false;
     qint64 m_pid = 0;
