@@ -1,2 +1,4 @@
 # Staff engineer — index
 [DISCOVERED] Conventions: controllers expose Q_PROPERTYs to QML; QML never touches processes/files; atomic JSON writes (AtomicFile, mode 0600); every setting validated in Settings schema; tests: QtTest unit/integration, QuickTest QML, tst_qmlsmoke at 1280x720 and 1920x1080 failing on any QML warning; clang-format-18; qmllint errors fail CI; docs per feature, check-docs link checker.
+
+- sessions-foundation: see sessions-foundation.md

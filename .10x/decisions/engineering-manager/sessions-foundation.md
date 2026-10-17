@@ -1,0 +1,2 @@
+# EM — sessions-foundation
+Order: (1) NotificationService + settings + Toast view + tests; (2) capabilities parsing + adapter interface + control-socket adapter + fake emulator protocol + RetroArch adapter + tests; (3) SessionStore + GameSessionManager + AppController/LibraryController integration + shutdown path + tests; (4) QML Home row, Quick Menu entry, dialogs + QML tests; (5) docs (quick-resume.md, notifications in docs, emulator-integration.md, settings.md, testing.md), full verification, PR.

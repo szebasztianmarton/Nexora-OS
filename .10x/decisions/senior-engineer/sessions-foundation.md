@@ -1,0 +1,2 @@
+# Senior engineer — sessions-foundation
+Tricky parts: async save completion vs process exit races (guard with session state checks); the control socket path must stay under XDG_RUNTIME_DIR/state dir with 0600 perms; SHA-256 computed off the GUI thread is unnecessary for <=512 MiB? compute via QtConcurrent if large (cap read). EmulatorManager::shutdown must become graceful with a bounded wait. Keep EmulatorManager single-process; GameSessionManager is the only caller of launch/stop for games.

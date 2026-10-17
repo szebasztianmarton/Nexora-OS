@@ -1,0 +1,2 @@
+# Staff engineer — sessions-foundation
+Reuse AtomicFile (writeFileAtomically, readFileLimited, moveAside), DataLayout (add statesDir), Settings schema (new keys validated), QCryptographicHash for SHA-256, QLocalServer for the control socket, QUdpSocket for RetroArch. Keep QML free of process/file logic. Tests: QtTest with the fake emulator; QML tests under tests/qml; smoke tests must stay warning-free at both resolutions.
