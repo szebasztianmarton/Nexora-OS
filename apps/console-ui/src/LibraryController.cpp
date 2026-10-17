@@ -408,19 +408,73 @@ QVariantMap LibraryController::gameDetails(qint64 id) const
     };
 }
 
+QString LibraryController::failureReason(qint64 id) const
+{
+    if (!m_library->entry(id))
+        return QStringLiteral("the game is no longer in the library");
+    const QString error = m_library->lastError();
+    return error.isEmpty() ? QStringLiteral("the library database refused the change") : error;
+}
+
+QVariantList LibraryController::defaultEmulatorChoices(const QString &systemId) const
+{
+    if (systemId.isEmpty() || !m_catalog || !m_catalog->find(systemId))
+        return {};
+    QVariantList choices{
+        QVariantMap{{QStringLiteral("id"), QString()}, {QStringLiteral("name"), QStringLiteral("Automatic")}}};
+    for (const auto &config : m_app->enabledEmulators()) {
+        if (config.systems.contains(systemId))
+            choices.append(QVariantMap{{QStringLiteral("id"), config.id},
+                                       {QStringLiteral("name"), config.name.isEmpty() ? config.id : config.name}});
+    }
+    return choices;
+}
+
+bool LibraryController::setDefaultEmulator(const QString &systemId, const QString &emulatorId)
+{
+    const QVariantList choices = defaultEmulatorChoices(systemId);
+    const bool offered = std::any_of(choices.cbegin(), choices.cend(), [&emulatorId](const QVariant &choice) {
+        return choice.toMap().value(QStringLiteral("id")).toString() == emulatorId;
+    });
+    if (!offered) {
+        qCWarning(lcLibrary).noquote() << "Refused default emulator" << emulatorId << "for system" << systemId;
+        return false;
+    }
+    QVariantMap defaults = m_settings->mapValue(Settings::EmulatorDefaultForSystem);
+    if (emulatorId.isEmpty())
+        defaults.remove(systemId);
+    else
+        defaults.insert(systemId, emulatorId);
+    QString error;
+    if (!m_settings->setValue(Settings::EmulatorDefaultForSystem, defaults, &error) || !m_settings->save()) {
+        emit notice(error.isEmpty() ? QStringLiteral("Could not save the default emulator") : error, true);
+        return false;
+    }
+    return true;
+}
+
 bool LibraryController::setGameMetadata(qint64 id, const QString &title, const QString &notes)
 {
-    return m_library->setMetadata(id, title, notes);
+    if (m_library->setMetadata(id, title, notes))
+        return true;
+    emit notice(QStringLiteral("Could not save the game details: %1").arg(failureReason(id)), true);
+    return false;
 }
 
 bool LibraryController::setGameSystem(qint64 id, const QString &systemId)
 {
-    return m_library->setSystemOverride(id, systemId);
+    if (m_library->setSystemOverride(id, systemId))
+        return true;
+    emit notice(QStringLiteral("Could not change the system: %1").arg(failureReason(id)), true);
+    return false;
 }
 
 bool LibraryController::removeGame(qint64 id)
 {
-    return m_library->removeFromLibrary(id);
+    if (m_library->removeFromLibrary(id))
+        return true;
+    emit notice(QStringLiteral("Could not remove the game: %1").arg(failureReason(id)), true);
+    return false;
 }
 
 int LibraryController::restoreRemovedGames()

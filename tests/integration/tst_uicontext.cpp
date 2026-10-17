@@ -655,6 +655,73 @@ private slots:
         QCOMPARE(rowOf(QString()), -1);
         QVERIFY(rowOf(QStringLiteral("snes")) >= 0); // the recognised bucket is unaffected
     }
+
+    // Settings › Emulators › Default emulator: only an enabled emulator that declares the
+    // system may become its default; "Other" (no system id) and unknown systems have none.
+    // Invoked by name so the test also documents the QML-facing API.
+    void defaultEmulatorIsValidated()
+    {
+        write(configDir() + QStringLiteral("/snesemu.json"),
+              "{\"id\":\"snesemu\",\"name\":\"Snes Emu\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".sfc\"],\"systems\":[\"snes\"]}");
+        write(configDir() + QStringLiteral("/gbaemu.json"),
+              "{\"id\":\"gbaemu\",\"name\":\"Gba Emu\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".gba\"],\"systems\":[\"gba\"]}");
+        ui::UiContext ctx(options());
+        ctx.start();
+        auto *library = ctx.library();
+        auto set = [library](const QString &systemId, const QString &emulatorId) {
+            bool ok = false;
+            const bool invoked = QMetaObject::invokeMethod(library, "setDefaultEmulator", Q_RETURN_ARG(bool, ok),
+                                                           Q_ARG(QString, systemId), Q_ARG(QString, emulatorId));
+            return invoked && ok;
+        };
+        auto stored
+            = [&ctx](const QString &systemId) { return ctx.settings()->defaultEmulators().value(systemId).toString(); };
+
+        QVERIFY(set(QStringLiteral("snes"), QStringLiteral("snesemu")));
+        QCOMPARE(stored(QStringLiteral("snes")), QStringLiteral("snesemu"));
+        // Incompatible emulator, unknown emulator, "Other" and unknown systems are refused
+        // and leave the stored value alone.
+        QVERIFY(!set(QStringLiteral("snes"), QStringLiteral("gbaemu")));
+        QVERIFY(!set(QStringLiteral("snes"), QStringLiteral("nope")));
+        QVERIFY(!set(QString(), QStringLiteral("snesemu")));
+        QVERIFY(!set(QStringLiteral("no-such-system"), QStringLiteral("snesemu")));
+        QCOMPARE(stored(QStringLiteral("snes")), QStringLiteral("snesemu"));
+        QVERIFY(!ctx.settings()->defaultEmulators().contains(QString()));
+        // "" = back to automatic.
+        QVERIFY(set(QStringLiteral("snes"), QString()));
+        QVERIFY(!ctx.settings()->defaultEmulators().contains(QStringLiteral("snes")));
+
+        // The choices offered for a system: Automatic + compatible emulators only.
+        QVariantList choices;
+        QVERIFY(QMetaObject::invokeMethod(library, "defaultEmulatorChoices", Q_RETURN_ARG(QVariantList, choices),
+                                          Q_ARG(QString, QStringLiteral("snes"))));
+        QCOMPARE(choices.size(), 2);
+        QCOMPARE(choices.at(0).toMap().value(QStringLiteral("id")).toString(), QString());
+        QCOMPARE(choices.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("snesemu"));
+        QVERIFY(QMetaObject::invokeMethod(library, "defaultEmulatorChoices", Q_RETURN_ARG(QVariantList, choices),
+                                          Q_ARG(QString, QString())));
+        QVERIFY(choices.isEmpty());
+    }
+
+    // Edits that fail (unknown/removed game) say so through notice(..., true) instead of
+    // failing silently.
+    void failedEditsEmitNotices()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QSignalSpy notices(ctx.library(), &ui::LibraryController::notice);
+        const qint64 unknown = 987654;
+        QVERIFY(!ctx.library()->setGameMetadata(unknown, QStringLiteral("Title"), QString()));
+        QVERIFY(!ctx.library()->setGameSystem(unknown, QStringLiteral("snes")));
+        QVERIFY(!ctx.library()->removeGame(unknown));
+        QCOMPARE(notices.size(), 3);
+        for (const auto &args : notices) {
+            QVERIFY(args.at(1).toBool()); // isError
+            QVERIFY(!args.at(0).toString().isEmpty());
+        }
+    }
 };
 
 QTEST_MAIN(TestUiContext)

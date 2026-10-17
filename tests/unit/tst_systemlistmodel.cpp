@@ -45,6 +45,38 @@ private slots:
         QCOMPARE(model.rowCount(), 0);
     }
 
+    // Rebuilding with the same systems in the same order (only counts changed, e.g. after a
+    // settings change or a favorite) must not reset the model: views (the Settings
+    // default-emulator rows) would recreate their delegates and drop keyboard focus.
+    void sameSystemsUpdateInPlace()
+    {
+        SystemListModel model;
+        QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        model.setEntries({{QStringLiteral("snes"), QStringLiteral("Super Nintendo"), QStringLiteral("SNES"), 3, 1},
+                          {QStringLiteral("nes"), QStringLiteral("NES"), QStringLiteral("NES"), 1, 1}});
+        QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
+        QSignalSpy changes(&model, &QAbstractItemModel::dataChanged);
+        QSignalSpy countSpy(&model, &SystemListModel::countChanged);
+
+        model.setEntries({{QStringLiteral("snes"), QStringLiteral("Super Nintendo"), QStringLiteral("SNES"), 3, 1},
+                          {QStringLiteral("nes"), QStringLiteral("NES"), QStringLiteral("NES"), 1, 1}});
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(changes.size(), 0); // nothing changed at all
+
+        model.setEntries({{QStringLiteral("snes"), QStringLiteral("Super Nintendo"), QStringLiteral("SNES"), 3, 1},
+                          {QStringLiteral("nes"), QStringLiteral("NES"), QStringLiteral("NES"), 4, 2}});
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(changes.at(0).at(0).toModelIndex().row(), 1);
+        QCOMPARE(model.index(1).data(SystemListModel::GameCountRole).toInt(), 4);
+        QCOMPARE(countSpy.size(), 0);
+
+        // A different set of systems still resets.
+        model.setEntries({{QStringLiteral("nes"), QStringLiteral("NES"), QStringLiteral("NES"), 4, 2}});
+        QCOMPARE(resets.size(), 1);
+        QCOMPARE(countSpy.size(), 1);
+    }
+
     void getReturnsRowAsMap()
     {
         SystemListModel model;

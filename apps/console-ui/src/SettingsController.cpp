@@ -157,16 +157,6 @@ QString SettingsController::logLevel() const
     return m_settings->stringValue(Settings::LogLevel);
 }
 
-bool SettingsController::setDefaultEmulatorForSystem(const QString &systemId, const QString &emulatorId)
-{
-    QVariantMap defaults = m_settings->mapValue(Settings::EmulatorDefaultForSystem);
-    if (emulatorId.isEmpty())
-        defaults.remove(systemId);
-    else
-        defaults.insert(systemId, emulatorId);
-    return set(Settings::EmulatorDefaultForSystem, defaults);
-}
-
 QString SettingsController::defaultEmulatorForSystem(const QString &systemId) const
 {
     return m_settings->mapValue(Settings::EmulatorDefaultForSystem).value(systemId).toString();

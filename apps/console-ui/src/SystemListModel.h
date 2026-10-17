@@ -43,8 +43,9 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    // Replaces the content. |entries| should already have its "Other" bucket (id "")
-    // dropped by the caller when it is empty.
+    // Replaces the content. |entries| should already have its "Other" bucket dropped by the
+    // caller when it is empty. When the system ids (and their order) are unchanged, the rows
+    // are updated in place (dataChanged) instead of resetting the model.
     void setEntries(const QList<Entry> &entries);
 
     // {systemId, name, shortName, gameCount, emulatorCount} of |row|; empty for a bad row.

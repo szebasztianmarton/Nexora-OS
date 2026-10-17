@@ -36,8 +36,12 @@ QList<GameEntry> LibraryQuery::apply(QList<GameEntry> entries, const QueryOption
             return true;
         if (!options.emulatorId.isEmpty() && !e.emulatorCandidates.contains(options.emulatorId))
             return true;
-        if (!options.systemId.isEmpty() && e.systemId != options.systemId)
+        if (options.systemId == UnknownSystemFilter) {
+            if (!e.systemId.isEmpty())
+                return true;
+        } else if (!options.systemId.isEmpty() && e.systemId != options.systemId) {
             return true;
+        }
         return !matchesSearch(e, options.search, options.systemNames);
     });
 

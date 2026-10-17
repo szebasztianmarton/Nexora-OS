@@ -11,13 +11,17 @@ namespace nexora::library {
 enum class SortOrder { Title, Recent, Emulator, Added };
 enum class LibraryFilter { All, Favorites, Recent, Missing };
 
+// QueryOptions::systemId value matching only entries without a recognised system (the
+// "Other" bucket). Never a catalog id: "@" does not occur in one.
+inline const QString UnknownSystemFilter = QStringLiteral("@other");
+
 struct QueryOptions
 {
     QString search; // whitespace-separated terms; all must match (case-insensitive)
     LibraryFilter filter = LibraryFilter::All;
     SortOrder sort = SortOrder::Title;
     QString emulatorId; // empty = any
-    QString systemId; // empty = any
+    QString systemId; // empty = any; UnknownSystemFilter = no recognised system
     QHash<QString, QString> systemNames; // system id -> short name, searched as well as the title
     int recentLimit = 20; // LibraryFilter::Recent keeps this many most recent entries
 };
