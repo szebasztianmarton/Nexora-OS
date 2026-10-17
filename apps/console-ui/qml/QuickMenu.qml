@@ -44,8 +44,16 @@ FocusScope {
             mainRows.focusFirst()
     }
     function showPage(name) {
+        if (name === "info")
+            system.refreshIfStale(30000) // the hardware probe only runs on demand
         page = name
         Qt.callLater(focusDefault)
+    }
+    // "Return to game" means playing again: a paused emulator is resumed first.
+    function returnToGame() {
+        if (app.paused)
+            app.resume()
+        gameBar.closeQuickMenu()
     }
     function back() {
         if (page !== "main") {
@@ -114,6 +122,7 @@ FocusScope {
                 spacing: Theme.space3
 
                 Text {
+                    textFormat: Text.PlainText
                     text: "QUICK MENU"
                     color: Theme.overlayTextMuted
                     font.pixelSize: Theme.fontSmall
@@ -121,6 +130,7 @@ FocusScope {
                     font.letterSpacing: 2
                 }
                 Text {
+                    textFormat: Text.PlainText
                     objectName: "quickMenuTitle"
                     width: parent.width
                     elide: Text.ElideRight
@@ -130,6 +140,7 @@ FocusScope {
                     font.bold: true
                 }
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: menu.app.paused ? "Paused" : Theme.capitalize(menu.app.state)
                     color: menu.app.paused ? Theme.warning : Theme.statusColor(menu.app.state)
@@ -147,8 +158,9 @@ FocusScope {
                     SettingRow {
                         objectName: "quickReturn"
                         label: "Return to game"
+                        description: menu.app.paused ? "Resumes the paused emulator" : ""
                         actionText: "Resume play"
-                        onAccepted: menu.gameBar.closeQuickMenu()
+                        onAccepted: menu.returnToGame()
                     }
                     SettingRow {
                         objectName: "quickPause"
@@ -159,6 +171,7 @@ FocusScope {
                         onAccepted: menu.app.paused ? menu.app.resume() : menu.app.pause()
                     }
                     Text {
+                        textFormat: Text.PlainText
                         objectName: "quickControllers"
                         width: parent.width
                         wrapMode: Text.Wrap
@@ -219,6 +232,7 @@ FocusScope {
                     onLastFocusedChanged: flick.ensureVisible(lastFocused)
 
                     Text {
+                        textFormat: Text.PlainText
                         text: "Display settings"
                         color: Theme.overlayText
                         font.pixelSize: Theme.fontLarge
@@ -250,6 +264,7 @@ FocusScope {
                         onIncrement: menu.settings.uiScale = Math.min(150, menu.settings.uiScale + 5)
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         wrapMode: Text.Wrap
                         text: "The emulator's own video settings are not changed from here."
@@ -271,6 +286,7 @@ FocusScope {
                     width: parent.width
                     spacing: Theme.space2
                     Text {
+                        textFormat: Text.PlainText
                         text: "System info"
                         color: Theme.overlayText
                         font.pixelSize: Theme.fontLarge
@@ -291,12 +307,14 @@ FocusScope {
                             required property var modelData
                             spacing: Theme.space3
                             Text {
+                                textFormat: Text.PlainText
                                 width: Math.round(110 * Theme.scale)
                                 text: modelData[0]
                                 color: Theme.overlayTextMuted
                                 font.pixelSize: Theme.fontSmall
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 width: body.width - Math.round(110 * Theme.scale) - Theme.space3
                                 text: modelData[1]
                                 color: Theme.overlayText

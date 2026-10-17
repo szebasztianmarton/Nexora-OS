@@ -161,6 +161,7 @@ FocusScope {
                 border.width: searchField.activeFocus ? Theme.focusWidth : 1
                 border.color: searchField.activeFocus ? Theme.focusRing : Theme.border
                 Text {
+                    textFormat: Text.PlainText
                     anchors.left: parent.left
                     anchors.leftMargin: Theme.space4
                     anchors.verticalCenter: parent.verticalCenter
@@ -195,7 +196,8 @@ FocusScope {
                               { key: "recent", title: "Recent" }]
                 if (screen.library.missingCount > 0 || screen.library.filter === "missing")
                     list.push({ key: "missing", title: "⚠ Missing (" + screen.library.missingCount + ")" })
-                list.push({ key: "view", title: screen.listMode ? "☰ List" : "▦ Grid" })
+                // Cards that do not fit (large interface scale) show as the list as well.
+                list.push({ key: "view", title: grid.effectiveListMode ? "☰ List" : "▦ Grid" })
                 return list
             }
             function focusChip(i) {
@@ -227,12 +229,13 @@ FocusScope {
                         onActiveFocusChanged: if (activeFocus) chips.lastFocused = index
 
                         Accessible.role: isView ? Accessible.Button : Accessible.RadioButton
-                        Accessible.name: isView ? "View: " + (screen.listMode ? "list" : "grid") : modelData.title
+                        Accessible.name: isView ? "View: " + (grid.effectiveListMode ? "list" : "grid") : modelData.title
                         Accessible.description: isView ? "Switch between grid and list" : "Filter"
                         Accessible.checkable: !isView
                         Accessible.checked: selected
                         Accessible.onPressAction: apply()
                         Text {
+                            textFormat: Text.PlainText
                             id: chipLabel
                             anchors.centerIn: parent
                             text: chip.modelData.title
@@ -273,10 +276,31 @@ FocusScope {
         anchors.left: toolbar.left
         anchors.right: toolbar.right
         height: visible ? Theme.chipHeight : 0
-        visible: screen.systemsWithGames.length > 1 || screen.library.systemFilter.length > 0
+        visible: entries.length > 2 || screen.library.systemFilter.length > 0
         property int lastFocused: -1
-        readonly property var entries: [{ systemId: "", shortName: "All systems", gameCount: screen.library.totalCount }]
-                                       .concat(screen.systemsWithGames)
+        // All systems, every system with games, "Other" (games without a recognised
+        // system), and the active filter even when it has no games (opened from Systems).
+        readonly property var entries: {
+            void screen.systemsRevision
+            const list = [{ systemId: "", shortName: "All systems", gameCount: screen.library.totalCount }]
+                         .concat(screen.systemsWithGames)
+            const otherFilter = screen.library.otherSystemFilter
+            const model = screen.library.systems
+            let active = null
+            for (let i = 0; i < model.count; ++i) {
+                const s = model.get(i)
+                if (s.systemId.length === 0 && s.gameCount > 0)
+                    list.push({ systemId: otherFilter, shortName: "Other", gameCount: s.gameCount })
+                else if (s.systemId === screen.library.systemFilter)
+                    active = s
+            }
+            const filter = screen.library.systemFilter
+            if (filter.length > 0 && !list.some(e => e.systemId === filter))
+                list.push(filter === otherFilter ? { systemId: filter, shortName: "Other", gameCount: 0 }
+                          : { systemId: filter, shortName: active ? active.shortName : filter,
+                              gameCount: active ? active.gameCount : 0 })
+            return list
+        }
         function selectedIndex() {
             for (let i = 0; i < entries.length; ++i) {
                 if (entries[i].systemId === screen.library.systemFilter)
@@ -307,7 +331,9 @@ FocusScope {
                 required property int index
                 readonly property bool selected: screen.library.systemFilter === modelData.systemId
                 readonly property bool current: ListView.isCurrentItem && systemList.activeFocus
-                objectName: "systemChip_" + (modelData.systemId.length > 0 ? modelData.systemId : "all")
+                objectName: "systemChip_" + (modelData.systemId.length === 0 ? "all"
+                                             : modelData.systemId === screen.library.otherSystemFilter ? "other"
+                                             : modelData.systemId)
                 height: systemList.height
                 width: sysLabel.implicitWidth + Theme.space6
                 radius: height / 2
@@ -318,6 +344,7 @@ FocusScope {
                 Accessible.name: modelData.shortName
                 Accessible.checked: selected
                 Text {
+                    textFormat: Text.PlainText
                     id: sysLabel
                     anchors.centerIn: parent
                     text: sysChip.modelData.shortName + "  " + sysChip.modelData.gameCount
@@ -352,6 +379,7 @@ FocusScope {
         color: Theme.surface
         border.color: Theme.border
         Text {
+            textFormat: Text.PlainText
             objectName: "scanProgressText"
             anchors.left: parent.left
             anchors.leftMargin: Theme.space4
@@ -387,6 +415,7 @@ FocusScope {
         height: Theme.controlHeightCompact
 
         Text {
+            textFormat: Text.PlainText
             id: resultCount
             objectName: "resultCount"
             anchors.left: parent.left
@@ -399,6 +428,7 @@ FocusScope {
         }
 
         Text {
+            textFormat: Text.PlainText
             objectName: "selectedDetail"
             anchors.left: resultCount.right
             anchors.leftMargin: Theme.space5
@@ -438,18 +468,21 @@ FocusScope {
                 anchors.centerIn: parent
                 spacing: Theme.space2
                 Text {
+                    textFormat: Text.PlainText
                     text: "Sort"
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSmall
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: "‹"
                     color: sortSelector.activeFocus ? Theme.accent : Theme.textFaint
                     font.pixelSize: Theme.fontLarge
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
+                    textFormat: Text.PlainText
                     objectName: "sortValue"
                     width: Math.round(130 * Theme.scale)
                     horizontalAlignment: Text.AlignHCenter
@@ -460,6 +493,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: "›"
                     color: sortSelector.activeFocus ? Theme.accent : Theme.textFaint
                     font.pixelSize: Theme.fontLarge
@@ -490,6 +524,7 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: summary.top
+        anchors.bottomMargin: Theme.space1
         anchors.leftMargin: Theme.space6 - Theme.space2
         anchors.rightMargin: Theme.space6 - Theme.space2
 
@@ -542,6 +577,7 @@ FocusScope {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Scanning your library…"
                 color: Theme.text
@@ -564,6 +600,7 @@ FocusScope {
                    : screen.library.filter === "missing" ? "noMissing" : "noRecent")
 
             Text {
+                textFormat: Text.PlainText
                 objectName: "gamesEmptyTitle"
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
@@ -580,6 +617,7 @@ FocusScope {
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -628,6 +666,7 @@ FocusScope {
     }
 
     Text {
+        textFormat: Text.PlainText
         id: summary
         objectName: "scanSummary"
         anchors.left: parent.left

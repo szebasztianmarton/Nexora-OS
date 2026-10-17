@@ -34,6 +34,7 @@ Rectangle {
                     color: Theme.surfaceRaised
                     border.color: Theme.border
                     Text {
+                        textFormat: Text.PlainText
                         id: keyLabel
                         anchors.centerIn: parent
                         text: hint.modelData.button
@@ -43,6 +44,7 @@ Rectangle {
                     }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: hint.modelData.action
                     color: Theme.textMuted

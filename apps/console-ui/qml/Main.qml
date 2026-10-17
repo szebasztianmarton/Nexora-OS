@@ -102,12 +102,12 @@ ApplicationWindow {
         openTab("settings")
         settingsScreen.focusSection(name)
     }
-    // Systems tab / Home systems row: the Games tab filtered to one system ("" = all; the
-    // "Other" bucket has no system id, so it shows every game).
+    // Systems tab / Home systems row: the Games tab filtered to one system. The "Other"
+    // bucket has no system id; it maps to the library's filter for games without one.
     function showSystem(systemId) {
         window.library.searchText = ""
         window.library.filter = "all"
-        window.library.systemFilter = systemId
+        window.library.systemFilter = systemId.length > 0 ? systemId : window.library.otherSystemFilter
         openTab("games")
     }
     function openGameDetails(gameId) {
@@ -197,10 +197,7 @@ ApplicationWindow {
     footer: HintBar {
         visible: window.settings.showHints
         hints: window.gameBar.quickMenuOpen ? quickMenu.hints
-               : window.app.busy
-               ? [{ button: "A / Enter", action: "Stop emulator" },
-                  { button: "Guide / hold Start", action: "Quick menu" },
-                  { button: "Select + Start (hold)", action: "Return to Nexora" }]
+               : window.app.busy ? overlay.hints
                : tutorial.visible ? tutorial.hints
                : updatePanel.visible ? updatePanel.hints
                : gameOptions.visible ? gameOptions.hints
@@ -318,6 +315,7 @@ ApplicationWindow {
                 system: window.system
                 updates: window.updates
                 onOpenUpdatePanel: window.openUpdatePanel()
+                onNotice: (message, isError) => toast.show(message, isError)
             }
             DiagnosticsScreen {
                 id: systemScreen
@@ -375,9 +373,13 @@ ApplicationWindow {
             case Qt.Key_Escape:
             case Qt.Key_Back:
             case Qt.Key_Backspace:
-                // A console UI never quits on Back; from the tab bar it re-enters the tab.
+                // A console UI never quits on Back. Inside a page (nothing there consumed
+                // it: no dialog, details or field) it moves to the tab bar; from the tab bar
+                // it re-enters the tab.
                 if (tabBar.activeFocus)
                     window.focusPage()
+                else
+                    tabBar.forceActiveFocus()
                 break
             case Qt.Key_Up:
                 tabBar.forceActiveFocus()
@@ -567,7 +569,9 @@ ApplicationWindow {
         // Every screen reads these back off Theme; binding them once here keeps the
         // accessibility settings (high contrast, UI scale, reduced motion) wired to the
         // whole interface without each screen having to know about SettingsController.
-        Theme.scale = Qt.binding(() => window.settings.uiScale / 100)
+        Theme.userScale = Qt.binding(() => window.settings.uiScale / 100)
+        // The layout is designed for 1280x720; larger windows scale up (never down).
+        Theme.resolutionScale = Qt.binding(() => Math.max(1, Math.min(window.width / 1280, window.height / 720)))
         Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
         Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
         // Settings › General › Start screen.

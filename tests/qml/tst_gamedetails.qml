@@ -176,6 +176,44 @@ Item {
             compare(testLibrary.gameDetails(id).title, original)
         }
 
+        // Titles and notes are user/file data: markup is shown literally, never as rich text.
+        function test_markupInTitleIsShownLiterally() {
+            const id = testLibrary.games.gameIdAt(0)
+            const title = "<b>Bold</b> <font size=40>Big</font>"
+            verify(testLibrary.setGameMetadata(id, title, "<i>note</i>"))
+            tryCompare(testLibrary.games, "count", 2)
+            details.open(id, grid)
+            tryVerify(function() { return details.visible })
+            const label = root.findByName(details, "gameDetailsTitle")
+            compare(label.text, title)
+            compare(label.textFormat, Text.PlainText)
+            compare(root.findByName(details, "gameDetailsNotes").textFormat, Text.PlainText)
+            details.close()
+            verify(testLibrary.setGameMetadata(id, "", ""))
+        }
+
+        // A failed save keeps the editor open with the edits instead of discarding them.
+        function test_failedSaveKeepsTheEditorOpen() {
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return details.visible })
+            focusRow("detailsEdit")
+            keyClick(Qt.Key_Return)
+            const editor = root.findByName(details, "metadataEditor")
+            tryVerify(function() { return editor.visible })
+            editor.notes = "Unsaved notes"
+            editor.gameId = 987654 // no such game: the library refuses the save
+            const save = root.findByName(editor, "metadataSave")
+            for (let i = 0; i < 6 && !save.activeFocus; ++i)
+                keyClick(Qt.Key_Down)
+            verify(save.activeFocus)
+            keyClick(Qt.Key_Return)
+            verify(editor.visible)
+            compare(editor.notes, "Unsaved notes")
+            tryVerify(function() { return save.activeFocus })
+            keyClick(Qt.Key_Escape)
+            verify(!editor.visible)
+        }
+
         function test_unknownGameShowsErrorState() {
             details.open(-12345, grid)
             verify(details.visible)

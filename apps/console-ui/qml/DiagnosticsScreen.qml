@@ -25,14 +25,23 @@ FocusScope {
 
     property var logLines: []
     property string lastDiagnosticsPath: ""
+    // The log tail is cheap; the hardware probe is synchronous, so it runs shortly after the
+    // tab becomes current (never on the start-up path) and only when the last one is older
+    // than 30 s. "Reload" (an explicit request) probes again at once.
     function refresh() {
         const lines = app.recentLog()
         logLines = lines.slice(Math.max(0, lines.length - 40))
-        system.refresh()
+        probeTimer.restart()
     }
     function reload() {
         app.reloadConfig()
         refresh()
+        system.refresh()
+    }
+    Timer {
+        id: probeTimer
+        interval: 150
+        onTriggered: if (screen.visible) screen.system.refreshIfStale(30000)
     }
     function focusDefault() { updateButton.focus = true; actions.focus = true }
     function list(values) {
@@ -75,10 +84,11 @@ FocusScope {
         }
         return lines.join("\n")
     }
-    Component.onCompleted: refresh()
+    Component.onCompleted: if (visible) refresh()
     onVisibleChanged: if (visible) refresh()
 
     Text {
+        textFormat: Text.PlainText
         id: title
         anchors.top: parent.top
         anchors.left: parent.left
@@ -197,6 +207,7 @@ FocusScope {
                     anchors.margins: Theme.space3
                     spacing: Theme.space1
                     Text {
+                        textFormat: Text.PlainText
                         text: section.heading
                         color: Theme.accent
                         font.pixelSize: Theme.fontTiny
@@ -205,6 +216,7 @@ FocusScope {
                         font.capitalization: Font.AllUppercase
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         text: section.body.length > 0 ? section.body : "—"
                         color: section.bodyColor

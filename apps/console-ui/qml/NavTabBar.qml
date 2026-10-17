@@ -21,6 +21,23 @@ FocusScope {
     readonly property real keyCapsWidth: Theme.space6 * 3
     readonly property real maxTabWidth: tabs.length > 0
         ? Math.max(0, (width - keyCapsWidth - tabs.length * tabRow.spacing) / tabs.length) : 0
+    // When the widest label does not fit (large UI scale at 1280 px), every tab switches to a
+    // slightly smaller font and tighter padding instead of eliding a label.
+    FontMetrics {
+        id: labelMetrics
+        font.pixelSize: Theme.fontBody
+        font.bold: true
+    }
+    readonly property real widestLabel: {
+        void labelMetrics.font.pixelSize
+        let widest = 0
+        for (const t of tabs)
+            widest = Math.max(widest, labelMetrics.advanceWidth(t.title))
+        return widest
+    }
+    readonly property bool compact: widestLabel + Theme.space5 > maxTabWidth
+    readonly property real labelPadding: compact ? Theme.space2 : Theme.space5
+    readonly property real labelFontSize: compact ? Math.round(Theme.fontBody * 0.82) : Theme.fontBody
 
     Rectangle {
         anchors.fill: parent
@@ -42,6 +59,7 @@ FocusScope {
         color: Theme.surfaceRaised
         border.color: Theme.border
         Text {
+            textFormat: Text.PlainText
             id: capLabel
             anchors.centerIn: parent
             text: parent.label
@@ -72,7 +90,8 @@ FocusScope {
                 objectName: "tab_" + modelData.key
                 anchors.verticalCenter: parent.verticalCenter
                 height: Theme.tabHeight
-                width: Math.min(bar.maxTabWidth, Math.max(96 * Theme.scale, tabLabel.implicitWidth + Theme.space5))
+                width: Math.min(bar.maxTabWidth, Math.max(bar.compact ? 0 : 96 * Theme.scale,
+                                                          tabLabel.implicitWidth + bar.labelPadding))
                 radius: height / 2
                 color: current ? (bar.activeFocus ? Theme.accent : Theme.accentSoft)
                      : tabMouse.containsMouse ? Theme.surfaceRaised : "transparent"
@@ -87,15 +106,16 @@ FocusScope {
                 Accessible.onPressAction: bar.tabRequested(index)
 
                 Text {
+                    textFormat: Text.PlainText
                     id: tabLabel
                     anchors.centerIn: parent
-                    width: Math.min(implicitWidth, tab.width - Theme.space3)
+                    width: Math.min(implicitWidth, tab.width - bar.labelPadding / 2)
                     elide: Text.ElideRight
                     horizontalAlignment: Text.AlignHCenter
                     text: tab.modelData.title
                     color: tab.current ? (bar.activeFocus && Theme.highContrast ? Theme.background : Theme.text)
                                        : Theme.textMuted
-                    font.pixelSize: Theme.fontBody
+                    font.pixelSize: bar.labelFontSize
                     font.bold: tab.current
                 }
                 MouseArea {

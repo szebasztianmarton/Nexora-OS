@@ -155,12 +155,14 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.space1
                     Text {
+                        textFormat: Text.PlainText
                         text: screen.noGames ? "Welcome to Nexora" : "Welcome back"
                         color: Theme.text
                         font.pixelSize: Theme.fontHero
                         font.bold: true
                     }
                     Text {
+                        textFormat: Text.PlainText
                         objectName: "homeSummary"
                         width: parent.width
                         elide: Text.ElideRight
@@ -300,11 +302,13 @@ FocusScope {
                                 anchors.leftMargin: Theme.space5 + Theme.space1
                                 spacing: 2
                                 Text {
+                                    textFormat: Text.PlainText
                                     text: card.modelData.title
                                     color: Theme.textMuted
                                     font.pixelSize: Theme.fontSmall
                                 }
                                 Text {
+                                    textFormat: Text.PlainText
                                     objectName: "statusValue_" + card.modelData.key
                                     width: parent.width
                                     elide: Text.ElideRight
@@ -314,6 +318,7 @@ FocusScope {
                                     font.bold: true
                                 }
                                 Text {
+                                    textFormat: Text.PlainText
                                     width: parent.width
                                     elide: Text.ElideRight
                                     text: card.modelData.detail
@@ -357,6 +362,7 @@ FocusScope {
                     anchors.margins: Theme.space5
                     spacing: Theme.space3
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         text: screen.library.scanning ? "Scanning your library…"
                             : screen.noDirectories ? "Let's add your games"
@@ -366,6 +372,7 @@ FocusScope {
                         font.bold: true
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         wrapMode: Text.Wrap
                         color: Theme.textMuted
@@ -378,6 +385,7 @@ FocusScope {
                                 : "Your library folders (" + screen.library.directories.join(", ") + ") contain no files that a configured emulator can run. Check that the emulator definitions list the right file extensions, then rescan."
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         visible: !screen.library.scanning && screen.app.emulators.count === 0
                         wrapMode: Text.Wrap
@@ -440,6 +448,7 @@ FocusScope {
                 height: systemsHeading.height + Theme.space3 + systemsList.height
                 onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
                 Text {
+                    textFormat: Text.PlainText
                     id: systemsHeading
                     text: "Systems"
                     color: systemsRow.activeFocus ? Theme.text : Theme.textMuted
@@ -481,6 +490,7 @@ FocusScope {
                             anchors.margins: Theme.space4
                             spacing: 2
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 elide: Text.ElideRight
                                 text: sysCard.modelData.name
@@ -489,6 +499,7 @@ FocusScope {
                                 font.bold: true
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 text: sysCard.modelData.gameCount === 1 ? "1 game" : sysCard.modelData.gameCount + " games"
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.fontSmall

@@ -8,6 +8,8 @@ import Nexora.Console
 // A physical keyboard types straight into the text; Backspace deletes, Return finishes.
 //
 // Modal: open(title, text) traps focus until accepted(text) or cancelled() is emitted.
+// The panel never grows past the space it is given: with little height (large interface
+// scale at 720p) the keys get shorter and the help line (the hint bar says the same) hides.
 FocusScope {
     id: osk
     objectName: "onScreenKeyboard"
@@ -30,6 +32,15 @@ FocusScope {
         ["z", "x", "c", "v", "b", "n", "m", ".", "'", ":"],
         ["SHIFT", "DEL", "SPACE", "CLEAR", "DONE"]
     ]
+
+    // Layout budget: the panel may use the whole height minus a small margin.
+    readonly property real fullKeyHeight: Math.round(58 * Theme.scale)
+    readonly property real maxPanelHeight: height - Theme.space2 * 2
+    readonly property real chromeHeight: Theme.space4 * 2 + Theme.controlHeight + Theme.space2
+    readonly property bool showHelp: chromeHeight + 5 * fullKeyHeight + helpText.implicitHeight + Theme.space2
+                                     <= maxPanelHeight
+    readonly property real keyHeight: Math.max(24, Math.min(fullKeyHeight,
+                 Math.floor((maxPanelHeight - chromeHeight - (showHelp ? helpText.implicitHeight + Theme.space2 : 0)) / 5)))
     readonly property var hints: [{ button: "← → ↑ ↓", action: "Choose key" }, { button: "A / Enter", action: "Type" },
                                   { button: "Y", action: "Delete" }, { button: "Start", action: "Done" },
                                   { button: "B / Esc", action: "Cancel" }]
@@ -104,9 +115,10 @@ FocusScope {
     MouseArea { anchors.fill: parent; onClicked: osk.cancel() }
 
     Rectangle {
+        objectName: "oskPanel"
         anchors.centerIn: parent
         width: Math.min(parent.width - Theme.space6 * 2, 980 * Theme.scale)
-        height: content.implicitHeight + Theme.space5 * 2
+        height: content.implicitHeight + Theme.space4 * 2
         radius: Theme.radiusLarge
         color: Theme.surface
         border.color: Theme.border
@@ -117,32 +129,46 @@ FocusScope {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: Theme.space5
-            spacing: Theme.space4
+            anchors.margins: Theme.space4
+            spacing: Theme.space2
 
-            Text {
-                text: osk.title
-                color: Theme.text
-                font.pixelSize: Theme.fontTitle
-                font.bold: true
-            }
-            Rectangle {
+            // What is being edited, then the text so far, on one line.
+            Item {
                 width: parent.width
                 height: Theme.controlHeight
-                radius: Theme.radiusSmall
-                color: Theme.surfaceRaised
-                border.width: Theme.focusWidth
-                border.color: Theme.focusRing
                 Text {
-                    objectName: "oskText"
-                    anchors.fill: parent
+                    textFormat: Text.PlainText
+                    id: titleText
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, parent.width * 0.3)
+                    elide: Text.ElideRight
+                    text: osk.title
+                    color: Theme.text
+                    font.pixelSize: Theme.fontTitle
+                    font.bold: true
+                }
+                Rectangle {
+                    anchors.left: titleText.right
                     anchors.leftMargin: Theme.space4
-                    anchors.rightMargin: Theme.space4
-                    verticalAlignment: Text.AlignVCenter
-                    text: osk.text.length === 0 ? "Start typing…" : osk.text + "▏"
-                    color: osk.text.length === 0 ? Theme.textFaint : Theme.text
-                    font.pixelSize: Theme.fontBody
-                    elide: Text.ElideLeft
+                    anchors.right: parent.right
+                    height: Theme.controlHeight
+                    radius: Theme.radiusSmall
+                    color: Theme.surfaceRaised
+                    border.width: Theme.focusWidth
+                    border.color: Theme.focusRing
+                    Text {
+                        textFormat: Text.PlainText
+                        objectName: "oskText"
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.space4
+                        anchors.rightMargin: Theme.space4
+                        verticalAlignment: Text.AlignVCenter
+                        text: osk.text.length === 0 ? "Start typing…" : osk.text + "▏"
+                        color: osk.text.length === 0 ? Theme.textFaint : Theme.text
+                        font.pixelSize: Theme.fontBody
+                        elide: Text.ElideLeft
+                    }
                 }
             }
 
@@ -166,7 +192,7 @@ FocusScope {
                                 readonly property bool current: keys.activeFocus && osk.row === keyRow.index
                                                                 && osk.column === index
                                 width: keys.width / keyRow.modelData.length
-                                height: Math.round(58 * Theme.scale)
+                                height: osk.keyHeight
                                 Rectangle {
                                     anchors.fill: parent
                                     anchors.margins: Theme.space1
@@ -178,10 +204,11 @@ FocusScope {
                                     border.width: keyItem.current ? Theme.focusWidth : 1
                                     border.color: keyItem.current ? Theme.focusRing : Theme.border
                                     Text {
+                                        textFormat: Text.PlainText
                                         anchors.centerIn: parent
                                         text: osk.label(keyItem.modelData)
                                         color: keyItem.current && Theme.highContrast ? Theme.background : Theme.text
-                                        font.pixelSize: Theme.fontBody
+                                        font.pixelSize: Math.min(Theme.fontBody, Math.round(osk.keyHeight * 0.45))
                                         font.bold: keyItem.current
                                     }
                                     MouseArea {
@@ -240,6 +267,9 @@ FocusScope {
             }
 
             Text {
+                textFormat: Text.PlainText
+                id: helpText
+                visible: osk.showHelp
                 width: parent.width
                 horizontalAlignment: Text.AlignRight
                 wrapMode: Text.Wrap

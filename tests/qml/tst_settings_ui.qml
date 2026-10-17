@@ -41,6 +41,13 @@ Item {
         title: "Confirm?"
         message: "Body"
     }
+    SettingRow {
+        id: longRow
+        y: 900
+        label: "Restore backup"
+        value: "1 / 3 · nexora-backup-2026-10-17T12-00-00-with-a-very-long-directory-name-that-goes-on-and-on"
+        adjustable: true
+    }
     SignalSpy { id: confirmedSpy; target: dialog; signalName: "confirmed" }
     SignalSpy { id: cancelledSpy; target: dialog; signalName: "cancelled" }
 
@@ -72,12 +79,44 @@ Item {
             screen.focusDefault()
             screen.forceActiveFocus()
             tryVerify(function() { return screen.focusedItem !== null && screen.isInside(screen.focusedItem) })
+            // Every focus stop of the screen, in focus-chain order (visible, enabled rows only).
+            const expected = []
+            const first = screen.focusedItem
+            for (let item = first, guard = 0; guard < 400; ++guard) {
+                if (screen.isInside(item) && item.visible && item.enabled && item.activeFocusOnTab
+                        && expected.indexOf(item) < 0)
+                    expected.push(item)
+                item = item.nextItemInFocusChain(true)
+                if (item === first)
+                    break
+            }
+            verify(expected.length > 20, "only " + expected.length + " focus stops found")
+            const visited = [first]
             for (let i = 0; i < 150; ++i) {
                 keyClick(Qt.Key_Down)
                 verify(screen.focusedItem === null || screen.isInside(screen.focusedItem))
+                if (screen.focusedItem && visited.indexOf(screen.focusedItem) < 0)
+                    visited.push(screen.focusedItem)
             }
-            const reset = root.findByName(screen, "resetRow")
-            verify(reset !== null)
+            for (const item of expected)
+                verify(visited.indexOf(item) >= 0, "not reachable with Down: " + item.objectName + " " + item)
+            // The walk ends on the true last row (Restart / Power off are hidden on desktop).
+            compare(screen.focusedItem.objectName, "resetRow")
+        }
+
+        // A long value is elided instead of squeezing the label (at 100 % too).
+        function test_longValueElidesAndKeepsTheLabelReadable() {
+            longRow.width = 700
+            const value = root.findByName(longRow, "value")
+            verify(value !== null)
+            verify(value.width <= longRow.width * 0.5 + 1, "value " + value.width + " of " + longRow.width)
+            verify(value.truncated)
+            compare(value.textFormat, Text.PlainText)
+            const label = root.findByName(longRow, "label")
+            verify(label !== null)
+            // Row lays out on the next polish: wait for it.
+            tryVerify(function() { return label.width >= longRow.width * 0.4 }, 1000, "label " + label.width)
+            verify(!label.truncated)
         }
 
         function test_confirmDialogDefaultsToCancelAndBackCancelsWithoutAction() {

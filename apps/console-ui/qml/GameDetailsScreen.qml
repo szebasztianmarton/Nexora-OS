@@ -125,6 +125,7 @@ FocusScope {
         width: Math.min(parent.width - Theme.space6 * 2, 640 * Theme.scale)
         spacing: Theme.space4
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
@@ -134,6 +135,7 @@ FocusScope {
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
@@ -177,6 +179,7 @@ FocusScope {
                     GradientStop { position: 1.0; color: Theme.artColor((details.info.title || "") + "~", 0.16) }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     text: Theme.initials(details.info.title || "")
                     color: Theme.artInk
@@ -196,6 +199,7 @@ FocusScope {
                     color: Theme.badgeScrim
                     border.color: Theme.warning
                     Text {
+                        textFormat: Text.PlainText
                         id: missingLabel
                         anchors.centerIn: parent
                         text: "⚠ File missing"
@@ -212,10 +216,12 @@ FocusScope {
                 columnSpacing: Theme.space4
                 rowSpacing: Theme.space2
                 component Fact: Text {
+                    textFormat: Text.PlainText
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSmall
                 }
                 component Value: Text {
+                    textFormat: Text.PlainText
                     width: parent ? parent.width * 0.6 : 0
                     color: Theme.text
                     font.pixelSize: Theme.fontSmall
@@ -265,6 +271,7 @@ FocusScope {
                 spacing: Theme.space3
 
                 Text {
+                    textFormat: Text.PlainText
                     objectName: "gameDetailsTitle"
                     width: parent.width
                     wrapMode: Text.Wrap
@@ -274,6 +281,7 @@ FocusScope {
                     font.bold: true
                 }
                 Text {
+                    textFormat: Text.PlainText
                     objectName: "gameDetailsSubtitle"
                     width: parent.width
                     wrapMode: Text.Wrap
@@ -284,6 +292,7 @@ FocusScope {
                     font.pixelSize: Theme.fontBody
                 }
                 Text {
+                    textFormat: Text.PlainText
                     objectName: "gameDetailsNotes"
                     width: parent.width
                     visible: (details.info.notes || "").length > 0

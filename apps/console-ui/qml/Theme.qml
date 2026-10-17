@@ -6,7 +6,11 @@ import QtQuick
 //
 // Accessibility inputs: set once at start-up (see Main.qml), everything else derives from
 // them so every screen reacts the same way without having to know about settings itself.
-//   scale          Theme.scale (= settings.uiScale / 100). Multiplies spacing, typography,
+//   userScale      Theme.userScale (= settings.uiScale / 100, Settings › Interface scale).
+//   resolutionScale  Theme.resolutionScale (= max(1, min(window width / 1280, window height
+//                  / 720)), set by Main.qml): the layout is designed for 1280x720, so a
+//                  1080p screen draws everything 1.5x instead of with 720p-sized text.
+//   scale          userScale x resolutionScale (read-only). Multiplies spacing, typography,
 //                  radii, icon sizes and the game/emulator card grid.
 //   highContrast   Theme.highContrast (= settings.theme === "highContrast"). Swaps the whole
 //                  palette for a pure-black-background / white-text / yellow-focus-ring one;
@@ -18,7 +22,9 @@ import QtQuick
 QtObject {
     id: theme
 
-    property real scale: 1.0
+    property real userScale: 1.0
+    property real resolutionScale: 1.0
+    readonly property real scale: userScale * resolutionScale
     property bool highContrast: false
     property bool reducedMotion: false
 

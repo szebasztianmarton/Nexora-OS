@@ -4,10 +4,14 @@ import Nexora.Console
 // The game grid shared by Games, Favorites and Recent: cover cards (grid) or compact rows
 // (|listMode|). Arrow keys move, Accept opens the game's details, Y / F toggles the favorite,
 // Select / O opens the launch options. Keeps the same game selected when the model is rebuilt.
+// Card size follows the space available: when a whole card does not fit the view's height
+// (large interface scale at 720p) the cards get smaller (more columns); when even small cards
+// do not fit, the view shows compact rows instead (|effectiveListMode|).
 GridView {
     id: grid
     required property LibraryController library
     property bool listMode: false
+    readonly property bool effectiveListMode: listMode || !cardsFit
 
     signal detailsRequested(real gameId)
     signal optionsRequested(real gameId)
@@ -22,10 +26,19 @@ GridView {
     topMargin: Theme.space3
     bottomMargin: Theme.space3
 
-    readonly property int columns: listMode ? 1 : Math.max(2, Math.floor(width / (240 * Theme.scale)))
+    // A card is its art (0.62 x the cell width) plus the title/emulator area.
+    readonly property real cardInfoHeight: Math.round(70 * Theme.scale) + Theme.space4
+    readonly property int preferredColumns: Math.max(2, Math.floor(width / (240 * Theme.scale)))
+    // Enough columns that one row of cards fits the visible height.
+    readonly property int fitColumns: {
+        const room = height - topMargin - bottomMargin - cardInfoHeight - 1
+        return room > 0 ? Math.max(preferredColumns, Math.ceil(width * 0.62 / room)) : 1000
+    }
+    readonly property bool cardsFit: width <= 0 || height <= 0 || Math.floor(width / fitColumns) >= 160 * Theme.scale
+    readonly property int columns: effectiveListMode ? 1 : fitColumns
     cellWidth: Math.floor(width / columns)
-    cellHeight: listMode ? Math.round(76 * Theme.scale)
-                         : Math.round(cellWidth * 0.62) + Math.round(70 * Theme.scale) + Theme.space4
+    cellHeight: effectiveListMode ? Math.round(76 * Theme.scale)
+                                  : Math.round(cellWidth * 0.62) + cardInfoHeight
 
     property real currentGameId: -1
     onCurrentIndexChanged: if (currentIndex >= 0 && currentIndex < count) currentGameId = model.gameIdAt(currentIndex)
@@ -45,7 +58,7 @@ GridView {
     }
     // Deferred: after a model reset the view picks its own current index first.
     onCountChanged: Qt.callLater(syncSelection)
-    onListModeChanged: Qt.callLater(() => positionViewAtIndex(currentIndex, GridView.Contain))
+    onEffectiveListModeChanged: Qt.callLater(() => positionViewAtIndex(currentIndex, GridView.Contain))
 
     Connections {
         target: grid.library
@@ -70,7 +83,7 @@ GridView {
         z: GridView.isCurrentItem ? 2 : 1
 
         GameTile {
-            visible: !grid.listMode
+            visible: !grid.effectiveListMode
             anchors.fill: parent
             anchors.margins: Theme.space2
             gameId: cell.gameId
@@ -91,7 +104,7 @@ GridView {
         // List mode: one compact row per game.
         Rectangle {
             objectName: "gameListRow"
-            visible: grid.listMode
+            visible: grid.effectiveListMode
             anchors.fill: parent
             anchors.margins: Theme.space1
             radius: Theme.radiusSmall
@@ -113,6 +126,7 @@ GridView {
                 opacity: cell.available && cell.present ? 1.0 : 0.45
                 color: Theme.artColor(cell.title, 0.28)
                 Text {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     text: Theme.initials(cell.title)
                     color: Theme.artInk
@@ -128,6 +142,7 @@ GridView {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 2
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: cell.title
                     color: Theme.text
@@ -136,6 +151,7 @@ GridView {
                     elide: Text.ElideRight
                 }
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: (cell.systemShortName.length > 0 ? cell.systemShortName + " · " : "")
                           + (!cell.present ? "File missing"
@@ -148,6 +164,7 @@ GridView {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 id: badges
                 anchors.right: parent.right
                 anchors.rightMargin: Theme.space4

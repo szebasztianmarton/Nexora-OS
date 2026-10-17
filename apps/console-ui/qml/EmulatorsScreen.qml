@@ -43,6 +43,7 @@ FocusScope {
     }
 
     Text {
+        textFormat: Text.PlainText
         id: title
         anchors.top: parent.top
         anchors.left: parent.left
@@ -55,6 +56,7 @@ FocusScope {
     }
 
     Text {
+        textFormat: Text.PlainText
         id: statusLine
         objectName: "statusLine"
         visible: list.count > 0
@@ -187,6 +189,7 @@ FocusScope {
                 anchors.margins: Theme.spacing * 1.5
                 spacing: Theme.spacing
                 Text {
+                    textFormat: Text.PlainText
                     text: "Launch " + picker.emulatorName
                     color: Theme.text
                     font.pixelSize: Theme.fontTitle
@@ -195,6 +198,7 @@ FocusScope {
                     elide: Text.ElideRight
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: "Choose a launch profile · Y / F makes it the default for this emulator and its games"
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSmall
@@ -225,12 +229,14 @@ FocusScope {
                             anchors.leftMargin: Theme.spacing
                             spacing: 2
                             Text {
+                                textFormat: Text.PlainText
                                 text: choice.modelData.name + (choice.modelData.isDefault ? "   ★ default" : "")
                                 color: Theme.text
                                 font.pixelSize: Theme.fontBody
                                 font.bold: true
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 text: choice.modelData.detail
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.fontTiny

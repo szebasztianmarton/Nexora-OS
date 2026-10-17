@@ -95,6 +95,22 @@ Item {
             tryVerify(function() { return !testApp.paused })
         }
 
+        // "Return to game" (Resume play) also resumes a paused emulator.
+        function test_returnToGameResumesAPausedEmulator() {
+            startGame()
+            verify(testGameBar.openQuickMenu())
+            tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })
+            focusRow("quickPause")
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return testApp.paused })
+            keyClick(Qt.Key_Up)
+            tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })
+            keyClick(Qt.Key_Return)
+            verify(!testGameBar.quickMenuOpen)
+            tryVerify(function() { return !testApp.paused })
+            compare(testApp.state, "running")
+        }
+
         function test_volumeAndDisplayPage() {
             startGame()
             verify(testGameBar.openQuickMenu())

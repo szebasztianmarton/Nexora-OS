@@ -35,6 +35,7 @@ Rectangle {
         }
         Item { width: 6; height: 1 }
         Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: "NEXORA"
             color: Theme.text
@@ -43,6 +44,7 @@ Rectangle {
             font.letterSpacing: 4
         }
         Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: "OS"
             color: Theme.accent
@@ -85,6 +87,7 @@ Rectangle {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.min(implicitWidth, 360)
                 text: chip.label
@@ -125,6 +128,7 @@ Rectangle {
         Column {
             anchors.verticalCenter: parent.verticalCenter
             Text {
+                textFormat: Text.PlainText
                 id: clock
                 objectName: "clock"
                 anchors.right: parent.right
@@ -134,6 +138,7 @@ Rectangle {
                 text: Qt.formatTime(new Date(), "hh:mm")
             }
             Text {
+                textFormat: Text.PlainText
                 id: date
                 anchors.right: parent.right
                 color: Theme.textFaint

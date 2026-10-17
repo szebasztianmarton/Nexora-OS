@@ -3,10 +3,12 @@ import Nexora.Console
 
 // One focusable settings row: label (+ description) on the left, value on the right.
 // Left/Right adjust (|adjustable|), Accept activates; |requireConfirm| needs Accept twice.
+// The value takes at most half the row and elides, so a long value never squeezes the label.
 Rectangle {
     id: row
     property string label
     property string description
+    property color descriptionColor: Theme.textMuted // e.g. Theme.danger for a failed action
     property string value
     property color valueColor: Theme.text
     property bool adjustable: false
@@ -16,6 +18,8 @@ Rectangle {
     property color labelColor: Theme.text
     property real meter: -1           // 0..1 draws a level bar under the value
     property bool armed: false
+    readonly property real maxValueWidth: Math.max(Math.round(80 * Theme.scale),
+        width * 0.5 - (adjustable ? leftArrow.implicitWidth + rightArrow.implicitWidth + 2 * valueRow.spacing : 0))
 
     signal decrement()
     signal increment()
@@ -62,6 +66,8 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 3
         Text {
+            textFormat: Text.PlainText
+            objectName: "label"
             width: parent.width
             text: row.label
             color: row.labelColor
@@ -70,10 +76,11 @@ Rectangle {
             elide: Text.ElideMiddle
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             visible: text.length > 0
             text: row.armed ? row.confirmText : row.description
-            color: row.armed ? Theme.danger : Theme.textMuted
+            color: row.armed ? Theme.danger : row.descriptionColor
             font.pixelSize: Theme.fontSmall
             wrapMode: Text.Wrap
         }
@@ -92,6 +99,8 @@ Rectangle {
             anchors.right: parent.right
             spacing: 10
             Text {
+                textFormat: Text.PlainText
+                id: leftArrow
                 visible: row.adjustable
                 text: "‹"
                 color: row.activeFocus ? Theme.accent : Theme.textFaint
@@ -100,6 +109,7 @@ Rectangle {
                 MouseArea { anchors.fill: parent; anchors.margins: -8; onClicked: { row.forceActiveFocus(); row.decrement() } }
             }
             Text {
+                textFormat: Text.PlainText
                 objectName: "value"
                 text: row.actionText.length > 0 ? row.actionText : row.value
                 color: row.actionText.length > 0 ? (row.activeFocus ? Theme.accent : Theme.textMuted) : row.valueColor
@@ -107,9 +117,12 @@ Rectangle {
                 font.bold: row.actionText.length === 0
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignHCenter
-                width: row.adjustable ? Math.max(implicitWidth, 150) : implicitWidth
+                elide: Text.ElideRight
+                width: Math.min(row.adjustable ? Math.max(implicitWidth, 150) : implicitWidth, row.maxValueWidth)
             }
             Text {
+                textFormat: Text.PlainText
+                id: rightArrow
                 visible: row.adjustable
                 text: "›"
                 color: row.activeFocus ? Theme.accent : Theme.textFaint

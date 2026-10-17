@@ -27,9 +27,11 @@ FocusScope {
                                  { key: "performance", icon: "chart", title: "Performance" }]
     property int currentTab: 0
     readonly property string currentKey: tabs[currentTab].key
-    readonly property var hints: [{ button: "Guide / B", action: "Close" },
-                                  { button: "A", action: "Select" },
-                                  { button: "← → ↑ ↓", action: "Move" }]
+    readonly property var hints: confirmReboot.visible || confirmPowerOff.visible
+        ? [{ button: "← →", action: "Choose" }, { button: "A", action: "Confirm" }, { button: "B", action: "Cancel" }]
+        : [{ button: "Guide / B", action: "Close" },
+           { button: "A", action: "Select" },
+           { button: "← → ↑ ↓", action: "Move" }]
 
     // Game Bar palette (Theme.overlay*): graphite surfaces and light selected buttons, or the
     // high-contrast scheme when that theme is active.
@@ -194,6 +196,7 @@ FocusScope {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: "›"
                 color: Theme.overlayTextSoft
@@ -247,6 +250,7 @@ FocusScope {
                            && !bar.gameBar.batteryCharging ? Theme.danger : Theme.overlayText
                 }
                 Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: bar.gameBar.batteryPercent + "%"
                     color: Theme.overlayText
@@ -254,6 +258,7 @@ FocusScope {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 id: barClock
                 objectName: "gameBarClock"
                 anchors.verticalCenter: parent.verticalCenter
@@ -315,6 +320,7 @@ FocusScope {
                             clip: true
                             color: bar.app.busy ? Theme.artColor(bar.app.activeEmulatorName, 0.32) : Theme.overlayArtEmpty
                             Text {
+                                textFormat: Text.PlainText
                                 visible: bar.app.busy
                                 anchors.centerIn: parent
                                 text: Theme.initials(bar.app.activeEmulatorName)
@@ -347,6 +353,7 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 8
                             Text {
+                                textFormat: Text.PlainText
                                 objectName: "gameBarTitle"
                                 width: Math.min(implicitWidth, home.width - artwork.width - 22)
                                 elide: Text.ElideRight
@@ -359,12 +366,14 @@ FocusScope {
                                 visible: bar.app.busy
                                 spacing: 14
                                 Text {
+                                    textFormat: Text.PlainText
                                     text: Theme.capitalize(bar.app.state)
                                     color: Theme.statusColor(bar.app.state)
                                     font.pixelSize: Theme.fontBody
                                     font.bold: true
                                 }
                                 Text {
+                                    textFormat: Text.PlainText
                                     objectName: "sessionTime"
                                     text: "Playing for " + bar.formatDuration(bar.gameBar.sessionSeconds)
                                     color: Theme.overlayTextMuted
@@ -372,6 +381,7 @@ FocusScope {
                                 }
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 visible: !bar.app.busy
                                 text: "Nexora OS " + bar.app.version
                                 color: Theme.overlayTextMuted
@@ -470,9 +480,7 @@ FocusScope {
                             enabled: bar.system.powerSupported
                             icon: "reboot"
                             label: "Restart"
-                            requireConfirm: true
-                            confirmLabel: "Press again to restart"
-                            onActivated: bar.system.reboot()
+                            onActivated: confirmReboot.open()
                         }
                         ActionTile {
                             objectName: "gameBarPowerOff"
@@ -480,12 +488,11 @@ FocusScope {
                             icon: "power"
                             label: "Power off"
                             tone: Theme.overlayDanger
-                            requireConfirm: true
-                            confirmLabel: "Press again to power off"
-                            onActivated: bar.system.powerOff()
+                            onActivated: confirmPowerOff.open()
                         }
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         wrapMode: Text.WordWrap
                         text: (bar.app.inputDevices.length > 0 ? "Controller: " + bar.app.inputDevices.join(", ")
@@ -558,6 +565,7 @@ FocusScope {
                                 }
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 id: volumeValue
                                 objectName: "gameBarVolumeValue"
                                 anchors.verticalCenter: parent.verticalCenter
@@ -582,6 +590,7 @@ FocusScope {
                         Keys.onUpPressed: bar.focusDefault()
                     }
                     Text {
+                        textFormat: Text.PlainText
                         visible: !bar.settings.volumeSupported
                         width: parent.width
                         wrapMode: Text.WordWrap
@@ -603,6 +612,7 @@ FocusScope {
                     Row {
                         spacing: 12
                         Text {
+                            textFormat: Text.PlainText
                             id: cpuText
                             objectName: "cpuValue"
                             text: bar.gameBar.cpuPercent >= 0 ? bar.gameBar.cpuPercent + "%" : "—"
@@ -611,6 +621,7 @@ FocusScope {
                             font.bold: true
                         }
                         Text {
+                            textFormat: Text.PlainText
                             anchors.baseline: cpuText.baseline
                             text: "CPU"
                             color: Theme.overlayTextMuted
@@ -668,6 +679,7 @@ FocusScope {
                                 : "Unavailable"
                     }
                     Text {
+                        textFormat: Text.PlainText
                         text: "Load (1 min): " + (bar.gameBar.load1 >= 0 ? bar.gameBar.load1.toFixed(2) : "—")
                         color: Theme.overlayTextMuted
                         font.pixelSize: Theme.fontSmall
@@ -679,6 +691,7 @@ FocusScope {
 
     // Small upper-case heading inside a panel.
     component PanelTitle: Text {
+        textFormat: Text.PlainText
         color: Theme.overlayTextMuted
         font.pixelSize: Theme.fontSmall
         font.bold: true
@@ -721,6 +734,7 @@ FocusScope {
             spacing: 18
         }
         Text {
+            textFormat: Text.PlainText
             objectName: "tileLabel"
             width: parent.width
             height: implicitHeight
@@ -797,6 +811,7 @@ FocusScope {
             color: Theme.overlayText
         }
         Text {
+            textFormat: Text.PlainText
             visible: tile.artTitle.length > 0
             anchors.centerIn: parent
             text: Theme.initials(tile.artTitle)
@@ -829,6 +844,7 @@ FocusScope {
         Row {
             width: parent.width
             Text {
+                textFormat: Text.PlainText
                 width: parent.width - meterDetail.width
                 text: meter.label
                 color: Theme.overlayText
@@ -836,6 +852,7 @@ FocusScope {
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 id: meterDetail
                 text: meter.detail
                 color: Theme.overlayTextMuted
@@ -854,6 +871,26 @@ FocusScope {
                 color: meter.percent >= 90 ? Theme.danger : meter.percent >= 75 ? Theme.warning : Theme.overlayGraph
             }
         }
+    }
+
+    // Restart / Power off ask first (default Cancel), like everywhere else in Nexora.
+    ConfirmDialog {
+        id: confirmReboot
+        objectName: "confirmGameBarReboot"
+        title: "Restart Nexora?"
+        message: "The system will restart immediately. Any running emulator will be stopped."
+        confirmText: "Restart"
+        dangerous: true
+        onConfirmed: bar.system.reboot()
+    }
+    ConfirmDialog {
+        id: confirmPowerOff
+        objectName: "confirmGameBarPowerOff"
+        title: "Power off?"
+        message: "The system will shut down immediately. Any running emulator will be stopped."
+        confirmText: "Power off"
+        dangerous: true
+        onConfirmed: bar.system.powerOff()
     }
 
     // Guide arrives as gameBarRequested (not a key); keyboard Back / Home close the bar.

@@ -13,6 +13,9 @@ Rectangle {
     property bool armed: false
     property bool compact: false
     readonly property bool highlighted: activeFocus || mouse.containsMouse
+    // High contrast: a focused primary button is filled with the yellow accent, so its label
+    // is drawn in the background colour (white on #ffd400 would be ~1.4:1).
+    readonly property bool inkOnAccent: Theme.highContrast && kind === "primary" && activeFocus && !armed
 
     Accessible.role: Accessible.Button
     Accessible.name: text || confirmText || glyph || "Button"
@@ -42,7 +45,9 @@ Rectangle {
          : kind === "primary" ? (activeFocus ? Theme.accent : Theme.accentSoft)
          : mouse.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
     border.width: activeFocus ? Theme.focusWidth : 1
-    border.color: activeFocus ? (armed || kind === "danger" ? Theme.danger : (kind === "primary" ? Theme.text : Theme.accent))
+    border.color: activeFocus ? (armed || kind === "danger" ? Theme.danger
+                                 : Theme.highContrast ? Theme.focusRing
+                                 : (kind === "primary" ? Theme.text : Theme.accent))
                               : (armed ? Theme.danger : Theme.border)
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
@@ -59,16 +64,21 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 8
         Text {
+            textFormat: Text.PlainText
             visible: button.glyph.length > 0 && !button.armed
             text: button.glyph
-            color: button.kind === "danger" ? Theme.danger : (button.kind === "primary" ? Theme.text : Theme.accent)
+            color: button.kind === "danger" ? Theme.danger
+                 : button.inkOnAccent ? Theme.background
+                 : (button.kind === "primary" ? Theme.text : Theme.accent)
             font.pixelSize: button.compact ? Theme.fontBody : Theme.fontLarge
             anchors.verticalCenter: parent.verticalCenter
         }
         Text {
+            textFormat: Text.PlainText
             text: button.armed ? button.confirmText : button.text
             color: button.armed ? Theme.danger
-                 : button.kind === "danger" ? Theme.danger : Theme.text
+                 : button.kind === "danger" ? Theme.danger
+                 : button.inkOnAccent ? Theme.background : Theme.text
             font.pixelSize: button.compact ? Theme.fontSmall : Theme.fontBody
             font.bold: true
             anchors.verticalCenter: parent.verticalCenter

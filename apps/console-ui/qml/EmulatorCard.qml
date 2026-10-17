@@ -52,6 +52,7 @@ Rectangle {
                 GradientStop { position: 1.0; color: Theme.surface }
             }
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: card.name.length > 0 ? card.name.charAt(0).toUpperCase() : "?"
                 color: Theme.artInk
@@ -61,6 +62,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: card.name
             color: Theme.text
@@ -78,6 +80,7 @@ Rectangle {
             border.color: Theme.statusColor(card.status)
             border.width: 2
             Text {
+                textFormat: Text.PlainText
                 id: pillLabel
                 anchors.centerIn: parent
                 text: card.statusText
@@ -88,6 +91,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: (card.extensions.length > 0 ? "Files: " + card.extensions : "No game file types")
                   + (card.enabledProfileCount > 0
@@ -101,6 +105,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: card.detail
             visible: text.length > 0

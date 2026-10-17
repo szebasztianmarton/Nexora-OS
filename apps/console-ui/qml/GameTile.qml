@@ -65,6 +65,7 @@ Item {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: Theme.initials(tile.title)
                 color: Theme.artInk
@@ -86,6 +87,7 @@ Item {
             color: Theme.badgeScrim
             border.color: Theme.warning
             Text {
+                textFormat: Text.PlainText
                 id: missingLabel
                 anchors.centerIn: parent
                 text: "File missing"
@@ -105,6 +107,7 @@ Item {
             radius: Theme.space1
             color: Theme.badgeScrim
             Text {
+                textFormat: Text.PlainText
                 id: systemLabel
                 anchors.centerIn: parent
                 text: tile.systemShortName
@@ -125,6 +128,7 @@ Item {
             color: Theme.badgeScrim
             border.color: Theme.danger
             Text {
+                textFormat: Text.PlainText
                 id: badgeLabel
                 anchors.centerIn: parent
                 text: "Unavailable"
@@ -145,6 +149,7 @@ Item {
             radius: width / 2
             color: Theme.badgeScrim
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: "★"
                 color: Theme.favorite
@@ -163,6 +168,7 @@ Item {
             spacing: 2
 
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tile.title
                 color: Theme.text
@@ -171,6 +177,7 @@ Item {
                 elide: Text.ElideRight
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tile.available ? (tile.emulatorName.length > 0 ? tile.emulatorName : "Unknown emulator")
                                      : (tile.unavailableReason.length > 0 ? tile.unavailableReason : "No emulator available")
@@ -179,6 +186,7 @@ Item {
                 elide: Text.ElideRight
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tile.lastPlayed.length > 0 ? "Played " + tile.lastPlayed : "Never played"
                 color: Theme.textFaint

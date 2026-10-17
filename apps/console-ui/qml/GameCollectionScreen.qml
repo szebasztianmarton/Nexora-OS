@@ -53,12 +53,14 @@ FocusScope {
         anchors.rightMargin: Theme.space6
         spacing: Theme.space1
         Text {
+            textFormat: Text.PlainText
             text: screen.title
             color: Theme.text
             font.pixelSize: Theme.fontHero
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             objectName: screen.objectName + "Count"
             width: parent.width
             elide: Text.ElideRight
@@ -92,6 +94,7 @@ FocusScope {
         visible: grid.count === 0 && screen.library.scanning && screen.library.totalCount === 0
         spacing: Theme.space3
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Scanning your library…"
             color: Theme.text
@@ -106,6 +109,7 @@ FocusScope {
         visible: grid.count === 0 && !(screen.library.scanning && screen.library.totalCount === 0)
         spacing: Theme.space4
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
@@ -115,6 +119,7 @@ FocusScope {
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap

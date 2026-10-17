@@ -76,7 +76,7 @@ Item {
         when: windowShown
 
         function cleanup() {
-            Theme.scale = 1.0
+            Theme.userScale = 1.0
         }
 
         function tabsWidth() {
@@ -105,7 +105,7 @@ Item {
 
         function test_tabsFitAtTvResolutionAndLargeScale() {
             verify(tabsWidth() <= tabBar.width, "tabs " + tabsWidth() + " > " + tabBar.width)
-            Theme.scale = 1.5
+            Theme.userScale = 1.5
             verify(tabsWidth() <= tabBar.width, "tabs at 150% " + tabsWidth() + " > " + tabBar.width)
         }
 

@@ -8,13 +8,30 @@ Item {
     width: 400
     height: 300
 
+    function findText(item, text) {
+        for (let i = 0; i < item.children.length; ++i) {
+            const c = item.children[i]
+            if (c.text === text && c.color !== undefined && c.font !== undefined)
+                return c
+            const found = findText(c, text)
+            if (found)
+                return found
+        }
+        return null
+    }
+    Row {
+        NxButton { id: primary; kind: "primary"; text: "Play" }
+        NxButton { id: normal; text: "Other" }
+    }
+
     TestCase {
         name: "Theme"
         when: windowShown
 
         // Theme is process-wide for this file's TestCase; leave it as found.
         function cleanup() {
-            Theme.scale = 1.0
+            Theme.userScale = 1.0
+            Theme.resolutionScale = 1.0
             Theme.highContrast = false
             Theme.reducedMotion = false
         }
@@ -23,10 +40,37 @@ Item {
             compare(Theme.scale, 1.0)
             compare(Theme.fontBody, 17)
             compare(Theme.space4, 16)
-            Theme.scale = 1.5
+            Theme.userScale = 1.5
             compare(Theme.fontBody, Math.round(17 * 1.5))
             compare(Theme.space4, Math.round(16 * 1.5))
             compare(Theme.cardWidth, Math.round(230 * 1.5))
+        }
+
+        // Theme.scale = user scale (Settings › Interface scale) x resolution factor
+        // (Main.qml: max(1, window size / 1280x720)), so 1080p is not drawn with 720p sizes.
+        function test_resolutionFactorMultipliesTheUserScale() {
+            Theme.resolutionScale = 1.5
+            compare(Theme.scale, 1.5)
+            compare(Theme.fontBody, Math.round(17 * 1.5))
+            compare(Theme.fontSmall, 21)
+            Theme.userScale = 1.5
+            compare(Theme.scale, 2.25)
+            compare(Theme.controlHeight, Math.round(48 * 2.25))
+        }
+
+        // Focused primary buttons in high contrast: black text on the yellow accent (not white,
+        // ~1.4:1) and the focus-ring colour as border.
+        function test_highContrastPrimaryButtonIsReadable() {
+            Theme.highContrast = true
+            primary.forceActiveFocus()
+            verify(primary.activeFocus)
+            tryCompare(primary, "color", Theme.accent) // animated (Behavior on color)
+            const label = findText(primary, "Play")
+            verify(label !== null)
+            compare(label.color, Theme.background)
+            compare(primary.border.color, Theme.focusRing)
+            normal.forceActiveFocus()
+            compare(normal.border.color, Theme.focusRing)
         }
 
         function test_highContrastSwitchesPalette() {
@@ -50,7 +94,7 @@ Item {
         function test_controlSizesScale() {
             compare(Theme.controlHeight, 48)
             compare(Theme.rowHeight, 60)
-            Theme.scale = 1.5
+            Theme.userScale = 1.5
             compare(Theme.controlHeight, 72)
             compare(Theme.chipHeight, Math.round(44 * 1.5))
             compare(Theme.iconLarge, 60)

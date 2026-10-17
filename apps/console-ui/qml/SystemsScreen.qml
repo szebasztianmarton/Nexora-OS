@@ -73,12 +73,14 @@ FocusScope {
         anchors.rightMargin: Theme.space6
         spacing: Theme.space1
         Text {
+            textFormat: Text.PlainText
             text: "Systems"
             color: Theme.text
             font.pixelSize: Theme.fontHero
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             objectName: "systemsSummary"
             width: parent.width
             wrapMode: Text.Wrap
@@ -144,6 +146,7 @@ FocusScope {
                     radius: Theme.radiusSmall
                     color: Theme.artColor(cell.modelData.name, 0.3)
                     Text {
+                        textFormat: Text.PlainText
                         id: badgeText
                         anchors.centerIn: parent
                         text: cell.modelData.shortName
@@ -159,6 +162,7 @@ FocusScope {
                     anchors.margins: Theme.space4
                     spacing: 2
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: cell.modelData.name
@@ -167,6 +171,7 @@ FocusScope {
                         font.bold: true
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: (cell.modelData.gameCount === 1 ? "1 game" : cell.modelData.gameCount + " games")
@@ -196,6 +201,7 @@ FocusScope {
         anchors.centerIn: grid
         visible: grid.count === 0 && screen.library.scanning
         Text {
+            textFormat: Text.PlainText
             text: "Scanning your library…"
             color: Theme.text
             font.pixelSize: Theme.fontLarge
@@ -209,6 +215,7 @@ FocusScope {
         visible: grid.count === 0 && !screen.library.scanning
         spacing: Theme.space4
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
@@ -218,6 +225,7 @@ FocusScope {
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap

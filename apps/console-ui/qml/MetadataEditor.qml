@@ -4,7 +4,9 @@ import Nexora.Console
 // Edits the user metadata of one game (display title and notes) with the on-screen keyboard.
 // Modal: Up/Down choose a row, Accept edits it / runs it, Back cancels without saving.
 // Saving goes through LibraryController.setGameMetadata(); an empty title means "use the
-// title derived from the file name".
+// title derived from the file name". A failed save keeps the editor open with the edits (the
+// library shows why in a notice). The panel never grows past the space it is given (large
+// interface scale): its rows scroll to keep the focused one visible.
 FocusScope {
     id: editor
     objectName: "metadataEditor"
@@ -47,82 +49,107 @@ FocusScope {
         restoreFocusItem = null
     }
     function save() {
-        const ok = library.setGameMetadata(gameId, title.trim(), notes.trim())
+        if (!library.setGameMetadata(gameId, title.trim(), notes.trim()))
+            return false // stays open; LibraryController emitted the error notice
         close()
-        if (ok)
-            saved()
+        saved()
+        return true
     }
 
     Rectangle { anchors.fill: parent; color: Theme.background; opacity: 0.8 }
     MouseArea { anchors.fill: parent; onClicked: editor.close() }
 
     Rectangle {
+        objectName: "metadataPanel"
         anchors.centerIn: parent
         width: Math.min(parent.width - Theme.space6 * 2, 720 * Theme.scale)
-        height: content.implicitHeight + Theme.space5 * 2
+        height: Math.min(content.implicitHeight + Theme.space5 * 2, parent.height - Theme.space2 * 2)
         radius: Theme.radiusLarge
         color: Theme.surface
         border.color: Theme.border
         MouseArea { anchors.fill: parent }
 
-        Column {
-            id: content
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
+        Flickable {
+            id: flick
+            anchors.fill: parent
             anchors.margins: Theme.space5
-            spacing: Theme.space4
+            contentWidth: width
+            contentHeight: content.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
 
-            Text {
-                text: "Edit game details"
-                color: Theme.text
-                font.pixelSize: Theme.fontTitle
-                font.bold: true
-            }
-            Text {
-                width: parent.width
-                wrapMode: Text.Wrap
-                text: "Only the library entry changes; the game file is never renamed or modified."
-                color: Theme.textMuted
-                font.pixelSize: Theme.fontSmall
+            function ensureVisible(item) {
+                if (!item)
+                    return
+                const p = item.mapToItem(content, 0, 0)
+                if (p.y < contentY)
+                    contentY = Math.max(0, p.y - Theme.space2)
+                else if (p.y + item.height > contentY + height)
+                    contentY = Math.min(p.y + item.height - height + Theme.space2, Math.max(0, contentHeight - height))
             }
 
-            NavColumn {
-                id: rows
-                width: parent.width
-                SettingRow {
-                    objectName: "metadataTitle"
-                    label: "Title"
-                    value: editor.title.length > 0 ? editor.title : editor.originalTitle + " (from file name)"
-                    description: "A / Enter: edit with the on-screen keyboard"
-                    actionText: ""
-                    onAccepted: keyboard.open("Title", editor.title.length > 0 ? editor.title : editor.originalTitle)
+            Column {
+                id: content
+                width: flick.width
+                spacing: Theme.space4
+
+                Text {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    text: "Edit game details"
+                    color: Theme.text
+                    font.pixelSize: Theme.fontTitle
+                    font.bold: true
                 }
-                SettingRow {
-                    objectName: "metadataNotes"
-                    label: "Notes"
-                    value: editor.notes.length > 0 ? editor.notes : "None"
-                    valueColor: editor.notes.length > 0 ? Theme.text : Theme.textFaint
-                    onAccepted: keyboard.open("Notes", editor.notes)
+                Text {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    text: "Only the library entry changes; the game file is never renamed or modified."
+                    color: Theme.textMuted
+                    font.pixelSize: Theme.fontSmall
                 }
-                SettingRow {
-                    objectName: "metadataResetTitle"
-                    visible: editor.title.length > 0
-                    label: "Use the title from the file name"
-                    actionText: "Reset"
-                    onAccepted: editor.title = ""
-                }
-                SettingRow {
-                    objectName: "metadataSave"
-                    label: "Save changes"
-                    actionText: "Save"
-                    onAccepted: editor.save()
-                }
-                SettingRow {
-                    objectName: "metadataCancel"
-                    label: "Discard changes"
-                    actionText: "Cancel"
-                    onAccepted: editor.close()
+
+                NavColumn {
+                    id: rows
+                    width: parent.width
+                    onLastFocusedChanged: flick.ensureVisible(lastFocused)
+                    SettingRow {
+                        objectName: "metadataTitle"
+                        label: "Title"
+                        value: editor.title.length > 0 ? editor.title : editor.originalTitle + " (from file name)"
+                        description: "A / Enter: edit with the on-screen keyboard"
+                        actionText: ""
+                        onAccepted: keyboard.open("Title", editor.title.length > 0 ? editor.title : editor.originalTitle)
+                    }
+                    SettingRow {
+                        objectName: "metadataNotes"
+                        label: "Notes"
+                        value: editor.notes.length > 0 ? editor.notes : "None"
+                        valueColor: editor.notes.length > 0 ? Theme.text : Theme.textFaint
+                        onAccepted: keyboard.open("Notes", editor.notes)
+                    }
+                    SettingRow {
+                        objectName: "metadataResetTitle"
+                        visible: editor.title.length > 0
+                        label: "Use the title from the file name"
+                        actionText: "Reset"
+                        onAccepted: editor.title = ""
+                    }
+                    SettingRow {
+                        objectName: "metadataSave"
+                        label: "Save changes"
+                        actionText: "Save"
+                        onAccepted: editor.save()
+                    }
+                    SettingRow {
+                        objectName: "metadataCancel"
+                        label: "Discard changes"
+                        actionText: "Cancel"
+                        onAccepted: editor.close()
+                    }
                 }
             }
         }
