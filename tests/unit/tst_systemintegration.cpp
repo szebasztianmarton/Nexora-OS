@@ -54,25 +54,38 @@ private slots:
         QCOMPARE(SystemIntegration::create(env)->platformName(), QStringLiteral("embedded"));
     }
 
-    void reportsUpdateInfoWithoutAMechanism()
+    void reportsUpdateInfo()
     {
         QTemporaryDir dir;
-        const auto env = fakeEnv(dir);
+        auto env = fakeEnv(dir);
+        env.updateRequestFifo = dir.filePath(QStringLiteral("run/update-request"));
         auto desktop = SystemIntegration::create(env, QStringLiteral("desktop"));
         QVERIFY(!desktop->supports(Capability::Update));
         UpdateInfo info = desktop->updateInfo();
         QVERIFY(!info.supported);
         QVERIFY(info.installedVersion.isEmpty());
         QVERIFY(!info.message.isEmpty());
+        QVERIFY(!info.message.contains(QStringLiteral("not implemented")));
 
+        // The image ships signed A/B updates through the root-run update helper; the
+        // capability is live only while the helper's request FIFO exists.
         write(env.nexoraReleaseFile, "NEXORA_VERSION=\"0.2.0\"\nNEXORA_PLATFORM=embedded\nNEXORA_UPDATE_CHANNEL=dev\n");
         auto embedded = SystemIntegration::create(env);
         QVERIFY(!embedded->supports(Capability::Update));
         info = embedded->updateInfo();
-        QVERIFY(!info.supported);
+        QVERIFY(info.supported);
         QCOMPARE(info.installedVersion, QStringLiteral("0.2.0"));
         QCOMPARE(info.channel, QStringLiteral("dev"));
-        QVERIFY(info.message.contains(QStringLiteral("image")));
+        QVERIFY2(!info.message.contains(QStringLiteral("not implemented")), qPrintable(info.message));
+        QVERIFY2(info.message.contains(QStringLiteral("not running")), qPrintable(info.message));
+
+        QVERIFY(QDir().mkpath(dir.filePath(QStringLiteral("run"))));
+        QCOMPARE(::mkfifo(QFile::encodeName(env.updateRequestFifo).constData(), 0600), 0);
+        QVERIFY(embedded->supports(Capability::Update));
+        info = embedded->updateInfo();
+        QVERIFY(info.supported);
+        QVERIFY2(info.message.contains(QStringLiteral("update bundle")), qPrintable(info.message));
+        QVERIFY2(!info.message.contains(QStringLiteral("not running")), qPrintable(info.message));
     }
 
     void readsStatusFromProc()

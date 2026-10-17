@@ -44,12 +44,13 @@ struct DeviceStatus
     QString network = QStringLiteral("none"); // "ethernet", "wifi" or "none" (no interface up)
 };
 
-// What the system can say about updates. MVP 2 has no update mechanism: this is the seam a
-// future one (e.g. A/B image updates via a privileged helper) plugs into, so the UI can
-// already show the installed version and how to update.
+// What the system can say about updates. The Nexora OS image installs signed update
+// bundles to its inactive A/B root slot through the root-run update helper (nexora-updated,
+// requested over updateRequestFifo; the workflow itself is nexora::update::UpdateService).
+// On the desktop the host system manages the installation.
 struct UpdateInfo
 {
-    bool supported = false; // an in-place update mechanism exists
+    bool supported = false; // this platform has an in-place update mechanism (the image)
     QString installedVersion; // NEXORA_VERSION from /etc/nexora-release; empty on desktop
     QString channel; // NEXORA_UPDATE_CHANNEL from /etc/nexora-release, if any
     QString message; // how updates work on this platform
@@ -63,6 +64,7 @@ struct SystemEnvironment
     QString osReleaseFile = QStringLiteral("/etc/os-release");
     QString nexoraReleaseFile = QStringLiteral("/etc/nexora-release");
     QString powerRequestFifo = QStringLiteral("/run/nexora/power-request");
+    QString updateRequestFifo = QStringLiteral("/run/nexora/update-request");
     QString mixerProgram = QStringLiteral("/usr/bin/amixer");
 };
 
