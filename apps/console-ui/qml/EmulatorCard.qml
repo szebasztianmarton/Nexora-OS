@@ -31,6 +31,7 @@ Rectangle {
     width: 300
     height: 360
     radius: Theme.radius
+    GlassSheen {}
     color: selected ? Theme.surfaceHover : Theme.surfaceRaised
     opacity: available ? 1.0 : 0.65
     border.width: selected ? Theme.focusWidth : 1

@@ -67,7 +67,8 @@ FocusScope {
         width: Math.min(parent.width - Theme.spacing * 4, 460)
         height: content.implicitHeight + Theme.spacing * 3
         radius: Theme.radius
-        color: Theme.surface
+        color: Theme.surfaceFloating
+        GlassSheen {}
         border.width: Theme.focusWidth
         border.color: Theme.focusRing
         // Absorb clicks inside the panel so they never fall through to the Cancel-on-outside-click area.

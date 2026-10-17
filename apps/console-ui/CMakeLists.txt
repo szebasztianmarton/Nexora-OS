@@ -37,11 +37,23 @@ set(NEXORA_QML_FILES
     qml/OnScreenKeyboard.qml
     qml/QuickMenu.qml
     qml/UpdatePanel.qml
+    qml/Backdrop.qml
+    qml/GlassSheen.qml
+)
+# Glass theme backdrop glows (scripts/make-glass-glows.py), served next to the QML files.
+set(NEXORA_QML_RESOURCES
+    qml/images/glow-blue.png
+    qml/images/glow-violet.png
+    qml/images/glow-teal.png
 )
 # Serve the files at qrc:/qt/qml/Nexora/Console/<Name>.qml (without the qml/ subdirectory).
 foreach(qml_file IN LISTS NEXORA_QML_FILES)
     get_filename_component(qml_name ${qml_file} NAME)
     set_source_files_properties(${qml_file} PROPERTIES QT_RESOURCE_ALIAS ${qml_name})
+endforeach()
+foreach(resource IN LISTS NEXORA_QML_RESOURCES)
+    get_filename_component(resource_name ${resource} NAME)
+    set_source_files_properties(${resource} PROPERTIES QT_RESOURCE_ALIAS images/${resource_name})
 endforeach()
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
@@ -51,6 +63,7 @@ qt_add_qml_module(nexora_ui
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/qml/Nexora/Console
     QML_FILES ${NEXORA_QML_FILES}
+    RESOURCES ${NEXORA_QML_RESOURCES}
     SOURCES
         src/AppController.h src/AppController.cpp
         src/EmulatorListModel.h src/EmulatorListModel.cpp

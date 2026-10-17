@@ -120,7 +120,8 @@ FocusScope {
         width: Math.min(parent.width - Theme.space6 * 2, 980 * Theme.scale)
         height: content.implicitHeight + Theme.space4 * 2
         radius: Theme.radiusLarge
-        color: Theme.surface
+        color: Theme.surfaceFloating
+        GlassSheen {}
         border.color: Theme.border
         MouseArea { anchors.fill: parent }
 

@@ -52,7 +52,7 @@ FocusScope {
         function onTestModeExited() { panel.close() }
     }
 
-    Rectangle { anchors.fill: parent; color: Theme.background }
+    Backdrop { anchors.fill: parent }
 
     Column {
         anchors.centerIn: parent

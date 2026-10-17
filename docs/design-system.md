@@ -34,7 +34,8 @@ Set in `Main.qml` with bindings, so they change live when the setting changes:
 | `Theme.userScale` | `settings.uiScale / 100` (`ui.scale`, 75–150 %, default 100) | the user's part of `Theme.scale` |
 | `Theme.resolutionScale` | `max(1, min(window width / 1280, window height / 720))` | the layout is designed for 1280×720; larger windows scale up (1920×1080 → 1.5), never down |
 | `Theme.scale` (read-only) | `userScale × resolutionScale` | multiplies spacing, typography, radii, icon sizes, control heights and the card grid |
-| `Theme.highContrast` | `settings.theme === "highContrast"` (`ui.theme`: `dark` or `highContrast`) | swaps the whole palette: pure black background, white text, yellow `#ffd400` focus ring and accent, wider focus ring; every colour used for text keeps a contrast ratio of at least 7:1 against the background it is drawn on (stated in `Theme.qml`; the ratios were chosen by design, not measured by a test) |
+| `Theme.glass` | `settings.theme === "glass"` (`ui.theme`: `glass` (default), `dark` or `highContrast`) | the glass look: translucent surfaces over the `Backdrop`'s light glows, dense `surfaceFloating` panels for anything that floats over other content, a light top rim (`GlassSheen`); `Theme.glassActive` is `glass && !highContrast` |
+| `Theme.highContrast` | `settings.theme === "highContrast"` | swaps the whole palette: pure black background, white text, yellow `#ffd400` focus ring and accent, wider focus ring; every colour used for text keeps a contrast ratio of at least 7:1 against the background it is drawn on (stated in `Theme.qml`; the ratios were chosen by design, not measured by a test) |
 | `Theme.reducedMotion` | `settings.reducedMotion` (`ui.reducedMotion`) | `animFast`, `animNormal`, `animSlow` and `animMove` become 0; continuous animations (library scan spinner, pulsing status dot) stop |
 
 All three are in Settings › General (Theme, Interface scale, Reduce motion); the interface scale can also be changed from the quick menu's display page.
@@ -43,23 +44,27 @@ All three are in Settings › General (Theme, Interface scale, Reduce motion); t
 
 ### Colour
 
-| Token | Dark | High contrast | Use |
-| --- | --- | --- | --- |
-| `background` | `#0b0d13` | `#000000` | window background |
-| `surface` | `#141821` | `#000000` | cards, panels |
-| `surfaceRaised` | `#1d2230` | `#141414` | raised panels, dialogs |
-| `surfaceHover` | `#252b3c` | `#262626` | focused/hovered rows |
-| `border` | `#2c3244` | `#ffffff` | separators, outlines |
-| `accent` | `#5b8cff` | `#ffd400` | primary actions, selection |
-| `accentSoft` | `#263a6b` | `#4a3d00` | selected backgrounds |
-| `text` | `#eef1f7` | `#ffffff` | primary text |
-| `textMuted` | `#a2a9bc` | `#cfcfcf` | secondary text |
-| `textFaint` | `#6f778c` | `#b5b5b5` | tertiary text, hints |
-| `success` / `warning` / `danger` | `#3ecf8e` / `#f2b84b` / `#ff6372` | `#00ff6a` / `#ffa500` / `#ff3b3b` | status |
-| `favorite` | `#ffc94d` | `#ffd400` | favorite star |
-| `focusRing` | = `accent` | `#ffd400` | focus outline |
+| Token | Glass (default) | Dark | High contrast | Use |
+| --- | --- | --- | --- | --- |
+| `background` | `#070a14` + `Backdrop` glows | `#0b0d13` | `#000000` | window background |
+| `surface` | white 6 % | `#141821` | `#000000` | cards, panels, bars |
+| `surfaceRaised` | white 9 % | `#1d2230` | `#141414` | raised panels, tiles |
+| `surfaceHover` | white 15 % | `#252b3c` | `#262626` | focused/hovered rows |
+| `surfaceFloating` | `rgba(26, 31, 48, 0.90)` | = `surface` | `#000000` | panels over other content: dialogs, on-screen keyboard, update panel, tutorial, profile picker, toasts |
+| `border` | white 16 % | `#2c3244` | `#ffffff` | separators, outlines |
+| `accent` | `#6f9bff` | `#5b8cff` | `#ffd400` | primary actions, selection |
+| `accentSoft` | accent 30 % | `#263a6b` | `#4a3d00` | selected backgrounds |
+| `text` | `#eef1f7` | `#eef1f7` | `#ffffff` | primary text |
+| `textMuted` | `#b6bdce` | `#a2a9bc` | `#cfcfcf` | secondary text |
+| `textFaint` | `#8c94aa` | `#6f778c` | `#b5b5b5` | tertiary text, hints (brighter in glass, where surfaces let light through) |
+| `success` / `warning` / `danger` | as dark | `#3ecf8e` / `#f2b84b` / `#ff6372` | `#00ff6a` / `#ffa500` / `#ff3b3b` | status |
+| `favorite` | as dark | `#ffc94d` | `#ffd400` | favorite star |
+| `focusRing` | = `accent` | = `accent` | `#ffd400` | focus outline |
+| `glassSheen` | white 10 % | transparent | transparent | top rim of glass panels (`GlassSheen`) |
 
-The game bar and quick menu use a separate `overlay*` family (Xbox Game Bar–style greys in the dark theme, black/white/yellow in high contrast) defined next to the main palette.
+The game bar and quick menu use a separate `overlay*` family (Xbox Game Bar–style greys in the dark theme, the same greys as tinted glass in the glass theme, black/white/yellow in high contrast) defined next to the main palette.
+
+**Glass without blur:** the glass look comes from translucent surfaces over a smooth backdrop: three large pre-rendered light glows (`qml/images/glow-*.png`, regenerated by `scripts/make-glass-glows.py`) under a vignette. There is no backdrop blur or shader effect, so it renders identically with Qt's software renderer (tests) and llvmpipe (image without a GPU driver). Because the backdrop is already smooth, a blur would change little; panels that float over busy content use the dense `surfaceFloating` instead. The backdrop is static: an animated full-screen background would repaint every frame, also behind a running emulator.
 
 ### Spacing, radii, sizes (× `scale`, i.e. user scale × resolution factor)
 
@@ -96,6 +101,7 @@ Reusable items in `apps/console-ui/qml/` (QML module `Nexora.Console`):
 | `OnScreenKeyboard` | controller-operable keyboard (used by `MetadataEditor`); never taller than the space it gets: with little height the keys get shorter and the help line hides |
 | `BarIcon` | line icons drawn on a 24×24 grid (no icon font needed on the image) |
 | `EmulatorCard` | emulator with health status |
+| `Backdrop`, `GlassSheen` | window background (glass: dark base, light glows, vignette; otherwise the background colour), used by `Main.qml`, `GameDetailsScreen` and `InputTestPanel`; one-pixel light rim at the top of glass panels |
 | Overlays | `RunningOverlay`, `GameBar`, `QuickMenu`, `GameOptionsDialog`, `TutorialOverlay`, `InputTestPanel`, `UpdatePanel`, `MetadataEditor` |
 
 ## Screens and navigation
@@ -129,7 +135,7 @@ Every screen that loads data has a loading state (scan spinner, "Scanning… N f
 
 | Test | Checks |
 | --- | --- |
-| `tst_console_qml` → `tst_theme.qml` | user scale 1.5 multiplies `fontBody`, `space4`, `cardWidth` and control sizes; the resolution factor multiplies the user scale; high contrast gives `#000000` background, white text, `#ffd400` focus ring and switches the overlay palette, and a focused primary button stays readable; reduced motion zeroes the animation tokens; old names still resolve |
+| `tst_console_qml` → `tst_theme.qml` | user scale 1.5 multiplies `fontBody`, `space4`, `cardWidth` and control sizes; the resolution factor multiplies the user scale; high contrast gives `#000000` background, white text, `#ffd400` focus ring and switches the overlay palette; glass makes surfaces translucent, floating panels dense and yields completely to high contrast; the backdrop shows its glows (loaded) only in glass, and a focused primary button stays readable; reduced motion zeroes the animation tokens; old names still resolve |
 | `tst_console_qml` → `tst_settings_ui.qml` | the seven settings sections exist; keyboard navigation stays inside the screen; `ConfirmDialog` defaults to Cancel and Back cancels; a long value elides at half the row and is plain text |
 | `tst_console_qml` → `tst_navigation.qml` | all eight tabs with keys only; tabs fit at TV resolutions and large scale |
 | `tst_console_qml` → `tst_gamedetails.qml` | markup in a title or note is shown literally; a failed save keeps the editor open |
@@ -144,4 +150,5 @@ All UI tests run on the offscreen platform with the software renderer; nothing h
 - No screen-reader support was tested (components set `Accessible` names and roles, but no assistive technology was used to check them).
 - Contrast ratios are documented design intent, not measured by an automated test.
 - No light theme; no per-user font choice.
+- Glass has no real backdrop blur (see [Colour](#colour)); text contrast in glass depends on where the glows fall and is design intent, not measured.
 - Artwork is a generated placeholder; there is no cover-art download or import.
