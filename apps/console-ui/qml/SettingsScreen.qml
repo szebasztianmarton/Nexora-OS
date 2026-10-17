@@ -337,6 +337,26 @@ FocusScope {
                 onAccepted: screen.settings.reducedMotion = !screen.settings.reducedMotion
             }
             SettingRow {
+                objectName: "settingNotificationsQuiet"
+                label: "Quiet notifications"
+                description: "Only warnings pop up; everything else goes to the history on the System tab"
+                value: screen.settings.notificationsQuiet ? "On" : "Off"
+                valueColor: screen.settings.notificationsQuiet ? Theme.success : Theme.textMuted
+                adjustable: true
+                onDecrement: screen.settings.notificationsQuiet = !screen.settings.notificationsQuiet
+                onIncrement: screen.settings.notificationsQuiet = !screen.settings.notificationsQuiet
+                onAccepted: screen.settings.notificationsQuiet = !screen.settings.notificationsQuiet
+            }
+            SettingRow {
+                objectName: "settingNotificationTime"
+                label: "Notification time"
+                description: "How long a notice stays on screen (warnings twice as long)"
+                value: screen.settings.notificationSeconds + " s"
+                adjustable: true
+                onDecrement: screen.settings.notificationSeconds = Math.max(2, screen.settings.notificationSeconds - 1)
+                onIncrement: screen.settings.notificationSeconds = Math.min(15, screen.settings.notificationSeconds + 1)
+            }
+            SettingRow {
                 objectName: "settingHints"
                 label: "Show control hints"
                 description: "The bar at the bottom listing the buttons you can press"
@@ -823,7 +843,7 @@ FocusScope {
     ConfirmDialog {
         id: confirmRestart
         title: "Restart Nexora?"
-        message: "The system will restart immediately. Any running emulator will be stopped."
+        message: "The system will restart. A running game is saved for Quick Resume first when its emulator supports it; otherwise it is closed and unsaved progress may be lost."
         confirmText: "Restart"
         dangerous: true
         onConfirmed: screen.system.reboot()
@@ -831,7 +851,7 @@ FocusScope {
     ConfirmDialog {
         id: confirmPowerOff
         title: "Power off?"
-        message: "The system will shut down immediately. Any running emulator will be stopped."
+        message: "The system will shut down. A running game is saved for Quick Resume first when its emulator supports it; otherwise it is closed and unsaved progress may be lost."
         confirmText: "Power off"
         dangerous: true
         onConfirmed: screen.system.powerOff()

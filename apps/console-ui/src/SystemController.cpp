@@ -1,6 +1,7 @@
 #include "SystemController.h"
 
 #include "AppController.h"
+#include "GameSessionManager.h"
 #include "LibraryController.h"
 #include "SettingsController.h"
 
@@ -163,20 +164,35 @@ bool SystemController::refreshIfStale(int maxAgeMs)
 
 bool SystemController::powerOff()
 {
-    QString error;
-    const bool ok = m_deps.system->requestPower(system::PowerAction::Poweroff, &error);
-    m_lastError = error;
-    emit statusChanged();
-    return ok;
+    return requestPower(system::PowerAction::Poweroff);
 }
 
 bool SystemController::reboot()
 {
-    QString error;
-    const bool ok = m_deps.system->requestPower(system::PowerAction::Reboot, &error);
-    m_lastError = error;
-    emit statusChanged();
-    return ok;
+    return requestPower(system::PowerAction::Reboot);
+}
+
+bool SystemController::requestPower(system::PowerAction action)
+{
+    auto send = [this, action] {
+        QString error;
+        const bool ok = m_deps.system->requestPower(action, &error);
+        m_lastError = error;
+        emit statusChanged();
+        return ok;
+    };
+    // BusyBox init sends SIGTERM to every process, the emulator included, so a running game
+    // must be saved (or closed) before the request goes out.
+    if (m_sessions && m_deps.app && m_deps.app->isBusy()) {
+        m_sessions->closeForPower([send](bool ok) {
+            if (ok)
+                send();
+            else
+                qCWarning(lcSystem) << "Power request dropped: the running game could not be saved";
+        });
+        return true;
+    }
+    return send();
 }
 
 QString SystemController::exportDiagnostics()

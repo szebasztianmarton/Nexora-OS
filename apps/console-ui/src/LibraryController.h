@@ -19,6 +19,7 @@ class Settings;
 namespace nexora::ui {
 
 class AppController;
+class GameSessionManager;
 
 // QML-facing game library: search/filter/sort state, the visible lists, refresh and
 // favorites. Scanning and storage live in nexora::library::GameLibrary.
@@ -128,6 +129,8 @@ public:
     // they changed since the last completed scan (or |force|).
     // |autoScan| = false only updates the options (the caller scans itself).
     void updateScanOptions(bool force = false, bool autoScan = true);
+    // Game launches go through the session manager (Quick Resume) when set.
+    void setSessions(GameSessionManager *sessions);
 
 signals:
     void queryChanged();
@@ -153,6 +156,7 @@ private:
     library::GameLibrary *m_library;
     shared::Settings *m_settings;
     AppController *m_app;
+    GameSessionManager *m_sessions = nullptr;
     const shared::SystemCatalog *m_catalog;
     library::QueryOptions m_query;
     GameListModel m_games;

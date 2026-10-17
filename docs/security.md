@@ -108,6 +108,9 @@ A flood of bad requests is throttled (1 s pause after each invalid request in bo
 | Backup manifest | paths must stay inside the backup (no absolute, no `..`, no symlinks, no unlisted files), every SHA-256 verified before anything is touched | `apps/system/src/BackupService.cpp`, `tst_backupservice` (`security`) |
 | `/proc`, `/sys` files | each ≤ 1 MiB | `apps/system/src/HardwareInfo.cpp`, `tst_hardwareinfo` |
 | Launch history | 50 records, stderr tail ≤ 4 KiB, redacted | `apps/emulator-manager/src/LaunchHistory.cpp`, `tst_launchhistory` |
+| Emulator control-socket answers | one line ≤ 4096 bytes, one request at a time, timeout; a state file must be a non-empty regular file inside the session directory (no symlinks, no paths outside) | `apps/emulator-manager/src/SaveStateAdapter.cpp`, `tst_savestateadapter` |
+| Quick Resume `meta.json` | 64 KiB, strict schema (version, id = directory name, file names `^[A-Za-z0-9._-]{1,128}$`, SHA-256 length), unreadable files moved aside; the state's SHA-256 is checked before every resume | `apps/console-ui/src/GameSessionManager.cpp`, `tst_gamesessionmanager` |
+| Notification history | 256 KiB, versioned, broken file moved aside | `apps/console-ui/src/NotificationService.cpp`, `tst_notificationservice` |
 
 ### Signed updates
 
@@ -120,6 +123,7 @@ A flood of bad requests is throttled (1 s pause after each invalid request in bo
 - Atomic writes with `QSaveFile` and mode 0600 for every file the application owns (`shared/src/AtomicFile.cpp`, `tst_atomicfile`); user data directories are created with mode 0700 (`shared/src/DataLayout.cpp`, `tst_datalayout`).
 - Corrupt files are moved aside (`*.corrupt-<timestamp>`), never silently overwritten; schema migrations back up the database first (`tst_librarymigration`).
 - "Remove from library" hides the entry; Nexora never deletes a game file (`GameLibrary::removeFromLibrary`, tested in `tst_gamelibrary`).
+- Quick Resume never deletes a state because of a failure or a limit: only an explicit Remove (confirmed) or a newer verified state of the same session (newest two kept) removes one ([quick-resume.md](quick-resume.md#limits-and-removal)).
 - "Clear artwork cache" removes only the cache directory (`DataLayout::cacheOnlyDirs()`), never saves or data (`tst_datalayout`).
 
 ### Privacy and redaction
@@ -158,6 +162,7 @@ Tested on the build host against scratch files only (`test_update_helper`).
 - **No disk encryption.** User data, saves and backups are stored in plain ext4.
 - **Development root access.** The image's root password is empty and logins on ttyS0 and tty2 are always enabled (by design for recovery); the GRUB menu is not password-protected, so kernel arguments can be edited at boot. Set a root password before distributing an image ([buildroot.md](buildroot.md#start-up-design-and-recovery-access)).
 - **Update keys are only as strong as their storage.** Whoever obtains a release private key can sign updates that every image trusting the matching public key will install. Rotation and revocation require shipping an update signed by a still-trusted key; there is no separate revocation list and no hardware-backed key storage.
+- **Save-state control channels.** The control-socket adapter's Unix socket lives in the temporary directory with owner-only permissions; any process of the same user can connect first and answer instead of the emulator (it can then only point Nexora at files inside the session directory). The RetroArch adapter's UDP network commands on 127.0.0.1 are unauthenticated: any local process can send RetroArch commands while a game runs (unverified adapter; [emulator-integration.md](emulator-integration.md#retroarch-adapter-unverified)).
 - **UI and emulators run as the same user.** A compromised emulator can read and modify all user data and use both FIFOs exactly as the UI can. Emulators are not sandboxed (no namespaces, seccomp or separate users).
 - **Logs on the image are volatile.** The supervisor passes `--log-file /var/log/nexora/console-ui.log`, and `/var/log` is tmpfs, so logs are lost on reboot unless a diagnostics report was exported to the data partition first.
 - **Same-version or downgrade bundles** are refused, but there is no protection against a validly signed, *newer* bundle being installed by anyone with access to the update FIFO (which includes a compromised UI). That is by design: authorization is "signed by the release key", not "requested by the owner".

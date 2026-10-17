@@ -36,10 +36,6 @@ void AppController::setInputController(input::InputController *input)
     if (m_input) {
         connect(m_input, &input::InputController::statusChanged, this, &AppController::inputChanged);
         connect(m_input, &input::InputController::returnToLauncherRequested, this, &AppController::returnToLauncher);
-        connect(m_input, &input::InputController::deviceDisconnected, this, [this](const QString &name) {
-            if (isBusy())
-                setStatusMessage(QStringLiteral("Controller disconnected: %1").arg(name), true);
-        });
     }
     updateInputSuspension();
     emit inputChanged();
@@ -121,11 +117,11 @@ bool AppController::launchProfile(const QString &emulatorId, const QString &prof
         setStatusMessage(QStringLiteral("Unknown emulator \"%1\"").arg(emulatorId), true);
         return false;
     }
-    return startLaunch({*config, profileId, {}, {}});
+    return startLaunch({*config, profileId, {}, {}, {}});
 }
 
 bool AppController::launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
-                               const QString &profileId, bool applyDefaultProfile)
+                               const QString &profileId, bool applyDefaultProfile, const QStringList &extraArguments)
 {
     const auto config = m_model.find(emulatorId);
     if (!config) {
@@ -143,7 +139,7 @@ bool AppController::launchGame(const QString &emulatorId, const QString &gamePat
             profile.clear();
     }
     const QString display = QStringLiteral("%1 (%2)").arg(title, config->name);
-    return startLaunch({*config, profile, gamePath, display});
+    return startLaunch({*config, profile, gamePath, display, extraArguments});
 }
 
 QString AppController::unavailableReason(const QString &emulatorId) const

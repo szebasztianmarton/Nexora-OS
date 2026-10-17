@@ -94,7 +94,8 @@ Reusable items in `apps/console-ui/qml/` (QML module `Nexora.Console`):
 | `SettingRow` | one settings line: label, value, Left/Right to change, Accept to activate; the value takes at most half the row and elides; an optional `descriptionColor` (e.g. `danger` for a failed action) |
 | `ConfirmDialog` | modal confirmation; focus trapped (Left/Right move between the two buttons, every other key, including L1/R1, Menu and Search, stops there); **default focus on the safe button (Cancel)**; Back cancels without action; if its page or layer is hidden while it is open, it cancels itself |
 | `EmptyState` | icon, title, explanation and an action for empty/error states |
-| `Toast` | transient notice at the bottom; errors in `danger` |
+| `QuickResumeRow` | Home row of saved Quick Resume sessions (cards with title, saved time, size, emulator, problem/age warning in `warning`); hidden when empty |
+| `Toast` | view of the [notification service](notifications.md)'s current entry at the bottom; warnings in `warning`, criticals in `danger`, "×N" for repeats |
 | `GameTile`, `GameGrid`, `GameRow` | game card (artwork or a placeholder drawn from the title, missing-file badge, favorite star), grid/list container, horizontal row for Home |
 | `NavTabBar`, `NavColumn` | top tab bar; vertical list that skips hidden and info rows |
 | `Header`, `HintBar` | title/status header; context-sensitive button hints (`ui.showHints`) |

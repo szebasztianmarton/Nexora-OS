@@ -1,0 +1,2 @@
+# Architect — sessions-foundation
+Components: NotificationService (console-ui), shared EmulatorConfig.capabilities + ConfigLoader, emulator-manager SaveStateAdapter (+ControlSocketAdapter, RetroArchAdapter), emulator-manager GameSessionManager (wraps EmulatorManager; owns SessionStore persistence), AppController delegates launches/stop/pause to the session manager, QML Home row + Quick Menu entry. Failure modes: save timeout/error -> game keeps running; state mismatch -> RecoveryRequired (state kept); crash -> Failed; limits -> refuse, list candidates. ADR-001, 002, 003.

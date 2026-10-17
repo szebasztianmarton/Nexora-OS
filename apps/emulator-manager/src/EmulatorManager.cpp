@@ -117,6 +117,7 @@ std::optional<ResolvedLaunch> EmulatorManager::resolve(const LaunchRequest &requ
         if (!substituted)
             resolved.arguments.append(path);
     }
+    resolved.arguments.append(request.extraArguments);
     if (error)
         *error = EmulatorError::None;
     return resolved;
@@ -272,15 +273,30 @@ void EmulatorManager::shutdown()
         return;
     QProcess *process = m_process;
     process->disconnect(this);
+    QString footer = QStringLiteral("launcher shut down");
     if (process->state() != QProcess::NotRunning) {
-        qCInfo(lcProcess) << "Shutdown: killing" << m_activeId;
-        signalGroup(SIGKILL);
-        process->kill();
-        process->waitForFinished(2000);
+        // SIGTERM first so the emulator can write its own save data; SIGKILL only if it is
+        // still running after its stop timeout (capped: the system may be powering off).
+        const auto grace = std::min(m_activeStopTimeout, ShutdownGraceLimit);
+        qCInfo(lcProcess) << "Shutdown: stopping" << m_activeId << "(SIGTERM, up to" << grace.count() << "ms)";
+        if (m_paused)
+            signalGroup(SIGCONT);
+        signalGroup(SIGTERM);
+        if (process->waitForFinished(int(grace.count()))) {
+            footer += QStringLiteral("; process stopped");
+        } else {
+            qCWarning(lcProcess) << "Shutdown:" << m_activeId << "ignored SIGTERM; killing it";
+            signalGroup(SIGKILL);
+            process->kill();
+            process->waitForFinished(2000);
+            footer += QStringLiteral("; process killed after SIGTERM timed out");
+        }
+        if (m_pid > 0)
+            ::kill(-static_cast<pid_t>(m_pid), SIGKILL); // helpers left in the group; no pid fallback
     }
     m_process = nullptr;
     delete process;
-    closeOutputLog(QStringLiteral("launcher shut down; process killed"));
+    closeOutputLog(footer);
 }
 
 void EmulatorManager::setState(ProcessState state)

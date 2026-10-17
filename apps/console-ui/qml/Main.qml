@@ -19,6 +19,8 @@ ApplicationWindow {
     required property SystemController system
     required property GameBarController gameBar
     required property UpdateController updates
+    required property NotificationService notifications
+    required property GameSessionManager sessions
 
     width: 1280
     height: 720
@@ -243,6 +245,7 @@ ApplicationWindow {
                 app: window.app
                 library: window.library
                 updates: window.updates
+                sessions: window.sessions
                 onNavigate: (tab) => window.navigate(tab)
                 onOptionsRequested: (gameId) => window.openGameOptions(gameId)
                 onDetailsRequested: (gameId) => window.openGameDetails(gameId)
@@ -316,7 +319,7 @@ ApplicationWindow {
                 system: window.system
                 updates: window.updates
                 onOpenUpdatePanel: window.openUpdatePanel()
-                onNotice: (message, isError) => toast.show(message, isError)
+                onNotice: (message, isError) => window.notifications.postMessage("system", message, isError)
             }
             DiagnosticsScreen {
                 id: systemScreen
@@ -327,6 +330,7 @@ ApplicationWindow {
                 settings: window.settings
                 system: window.system
                 updates: window.updates
+                notifications: window.notifications
                 onUpdatesRequested: window.openUpdatePanel()
             }
 
@@ -399,6 +403,7 @@ ApplicationWindow {
     }
     Toast {
         id: toast
+        service: window.notifications
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.spacing * 1.5
@@ -409,21 +414,16 @@ ApplicationWindow {
         function onNotice(message, isError) {
             // The automatic scan at start-up is not worth a notice unless it failed.
             if (isError || !startupQuiet.running)
-                toast.show(message, isError)
+                window.notifications.postMessage("library", message, isError)
         }
     }
-    Connections {
-        target: window.app
-        function onStatusMessageChanged() {
-            if (window.app.statusIsError)
-                toast.show(window.app.statusMessage, true)
-        }
-    }
+    // Launch errors (app.statusMessage) reach the notification service in C++ (UiContext).
 
     GameOptionsDialog {
         id: gameOptions
         anchors.fill: parent
         library: window.library
+        sessions: window.sessions
     }
 
     UpdatePanel {
@@ -528,6 +528,7 @@ ApplicationWindow {
         app: window.app
         settings: window.settings
         system: window.system
+        sessions: window.sessions
     }
     Connections {
         target: window.gameBar
@@ -557,6 +558,27 @@ ApplicationWindow {
                         window.lower() // back to the game
                 }
             }
+        }
+    }
+
+    // A Quick Resume state that cannot be resumed (or did not load): the state is kept.
+    ConfirmDialog {
+        id: resumeFailedDialog
+        objectName: "resumeFailedDialog"
+        property string sessionId
+        z: 60
+        confirmText: "Start fresh"
+        cancelText: "Not now"
+        onConfirmed: window.sessions.startFresh(sessionId)
+    }
+    Connections {
+        target: window.sessions
+        function onResumeFailed(sessionId, title, reason) {
+            resumeFailedDialog.sessionId = sessionId
+            resumeFailedDialog.title = "Can't resume " + title
+            resumeFailedDialog.message = reason + ".\n\nThe saved state is kept. Start fresh begins the game "
+                + "without it; you can remove the state from Home later."
+            resumeFailedDialog.open()
         }
     }
 

@@ -41,13 +41,15 @@ struct ProcessOutcome
 // them. With a game file, every argument containing "{file}" has it replaced by the
 // absolute game path; if no argument contains it, the path is appended as the last
 // argument. Without a game file, arguments containing "{file}" are dropped. The game file
-// is only ever passed as an argument; it is never executed.
+// is only ever passed as an argument; it is never executed. |extraArguments| (from a
+// save-state adapter, already substituted) are appended after everything else.
 struct LaunchRequest
 {
     shared::EmulatorConfig emulator;
     QString profileId; // empty = emulator defaults
     QString gamePath; // empty = start the emulator without a game
     QString displayName; // empty = emulator name
+    QStringList extraArguments;
 };
 
 struct ResolvedLaunch
@@ -83,7 +85,7 @@ public:
     // unchanged) while another process is active. Validation failures move the state to
     // Failed synchronously and emit processFinished.
     LaunchResult launch(const LaunchRequest &request);
-    LaunchResult launch(const shared::EmulatorConfig &config) { return launch(LaunchRequest{config, {}, {}, {}}); }
+    LaunchResult launch(const shared::EmulatorConfig &config) { return launch(LaunchRequest{config, {}, {}, {}, {}}); }
 
     // Validates |request| and computes the exact program, arguments and working directory.
     // Performs filesystem checks but starts nothing.
@@ -102,8 +104,10 @@ public:
     qint64 activePid() const { return m_pid; }
     QDateTime startedAt() const { return m_startedAt; }
 
-    // Kills any active process and waits (bounded) for it. Use only at application exit.
+    // Application exit: SIGTERM to the process group, SIGKILL if it is still running after
+    // min(stop timeout, ShutdownGraceLimit). Blocks (bounded); emits nothing.
     void shutdown();
+    static constexpr std::chrono::milliseconds ShutdownGraceLimit{3000};
 
     ProcessState state() const { return m_state; }
     bool isActive() const { return emulator::isActive(m_state); }

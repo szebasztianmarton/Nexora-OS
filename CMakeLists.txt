@@ -49,7 +49,7 @@ if(NOT NEXORA_BUILD_ID)
 endif()
 
 set(NEXORA_QT_MIN_VERSION 6.4)
-set(NEXORA_QT_COMPONENTS Core Gui Qml Quick QuickControls2 Sql)
+set(NEXORA_QT_COMPONENTS Core Gui Network Qml Quick QuickControls2 Sql)
 if(BUILD_TESTING)
     list(APPEND NEXORA_QT_COMPONENTS Test QuickTest)
 endif()

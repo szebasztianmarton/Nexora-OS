@@ -305,6 +305,69 @@ private slots:
         QVERIFY(!config->pausable);
         QVERIFY(warnings.isEmpty());
     }
+
+    void parsesCapabilities()
+    {
+        QStringList errors;
+        QStringList warnings;
+        const auto config = parse(emu("'capabilities':{'pause':true,'saveState':{'adapter':'control-socket',"
+                                      "'timeoutMs':5000,'launchArguments':['--control-socket','{control-socket}'],"
+                                      "'resumeArguments':['--load-state','{state-file}']}}"),
+                                  &errors, &warnings);
+        QVERIFY2(config.has_value(), qPrintable(errors.join(u'\n')));
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(u'\n')));
+        QVERIFY(config->pausable);
+        QVERIFY(config->saveState.has_value());
+        QCOMPARE(config->saveState->adapter, nexora::shared::SaveStateCapability::Adapter::ControlSocket);
+        QCOMPARE(config->saveState->timeoutMs, 5000);
+        QCOMPARE(config->saveState->resumeArguments,
+                 QStringList({QStringLiteral("--load-state"), QStringLiteral("{state-file}")}));
+
+        const auto retroarch
+            = parse(emu("'capabilities':{'saveState':{'adapter':'retroarch','port':55400}}"), &errors, &warnings);
+        QVERIFY(retroarch.has_value());
+        QCOMPARE(retroarch->saveState->adapter, nexora::shared::SaveStateCapability::Adapter::RetroArch);
+        QCOMPARE(retroarch->saveState->port, 55400);
+        QCOMPARE(retroarch->saveState->timeoutMs, nexora::shared::SaveStateCapability::DefaultTimeoutMs);
+        QVERIFY(!retroarch->pausable);
+    }
+
+    // A broken capability block never makes the emulator unusable: it only loses the capability.
+    void malformedCapabilitiesAreDroppedWithWarning()
+    {
+        const QList<QByteArray> bad{
+            emu("'capabilities':[]"),
+            emu("'capabilities':{'saveState':{'adapter':'magic'}}"),
+            emu("'capabilities':{'saveState':{'adapter':'control-socket','resumeArguments':['{state-file}']}}"),
+            emu("'capabilities':{'saveState':{'adapter':'control-socket','launchArguments':['{control-socket}']}}"),
+            emu("'capabilities':{'saveState':{'adapter':'retroarch','port':80}}"),
+            emu("'capabilities':{'saveState':{'adapter':'retroarch','timeoutMs':10}}"),
+            emu("'capabilities':{'saveState':{'adapter':'control-socket','launchArguments':[1],"
+                "'resumeArguments':['{state-file}']}}"),
+            emu("'capabilities':{'pause':'yes'}"),
+        };
+        for (const QByteArray &json : bad) {
+            QStringList errors;
+            QStringList warnings;
+            const auto config = parse(json, &errors, &warnings);
+            QVERIFY2(config.has_value(), json.constData());
+            QVERIFY2(!config->saveState.has_value(), json.constData());
+            QVERIFY2(!warnings.isEmpty(), json.constData());
+        }
+    }
+
+    void pausableAndCapabilityPauseMustAgree()
+    {
+        QStringList errors;
+        QStringList warnings;
+        const auto config = parse(emu("'pausable':true,'capabilities':{'pause':false}"), &errors, &warnings);
+        QVERIFY(config.has_value());
+        QVERIFY(!config->pausable);
+        QCOMPARE(warnings.size(), 1);
+        const auto same = parse(emu("'pausable':true,'capabilities':{'pause':true,'other':1}"), &errors, &warnings);
+        QVERIFY(same->pausable);
+        QVERIFY(warnings.last().contains(QStringLiteral("other")));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestConfigLoader)

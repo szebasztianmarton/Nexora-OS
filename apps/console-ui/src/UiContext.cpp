@@ -74,9 +74,49 @@ UiContext::UiContext(const Options &options, input::InputController *input, QObj
     // Completed or RecoveryRequired until the user acknowledges it.
     m_updateService->loadPersistedState();
 
+    m_notifications = std::make_unique<NotificationService>(m_layout.stateDir + QStringLiteral("/notifications.json"));
+    wireNotifications();
+
+    GameSessionManager::Dependencies sessionDeps;
+    sessionDeps.app = m_app.get();
+    sessionDeps.settings = &m_settings;
+    sessionDeps.notifications = m_notifications.get();
+    sessionDeps.statesDir = m_layout.statesDir;
+    m_sessions = std::make_unique<GameSessionManager>(sessionDeps);
+    m_libraryController->setSessions(m_sessions.get());
+    m_systemController->setSessions(m_sessions.get());
+
     connect(&m_settings, &shared::Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == shared::Settings::EmulatorDefaultProfiles)
             m_app->setDefaultProfiles(value.toMap());
+        if (key.startsWith(QLatin1String("notifications.")))
+            applyNotificationSettings();
+    });
+}
+
+void UiContext::applyNotificationSettings()
+{
+    m_notifications->setQuiet(m_settings.boolValue(shared::Settings::NotificationsQuiet));
+    m_notifications->setHiddenCategories(m_settings.stringListValue(shared::Settings::NotificationsHiddenCategories));
+    m_notifications->setDurationMs(m_settings.intValue(shared::Settings::NotificationsDurationMs));
+}
+
+void UiContext::wireNotifications()
+{
+    using Category = NotificationService::Category;
+    using Severity = NotificationService::Severity;
+    applyNotificationSettings();
+    if (m_input) {
+        connect(m_input, &input::InputController::deviceConnected, this, [this](const QString &name) {
+            m_notifications->post(Category::Controller, Severity::Info, tr("Controller connected: %1").arg(name));
+        });
+        connect(m_input, &input::InputController::deviceDisconnected, this, [this](const QString &name) {
+            m_notifications->post(Category::Controller, Severity::Warning, tr("Controller disconnected: %1").arg(name));
+        });
+    }
+    connect(m_app.get(), &AppController::statusMessageChanged, this, [this] {
+        if (m_app->statusIsError())
+            m_notifications->post(Category::Game, Severity::Warning, m_app->statusMessage());
     });
 }
 
@@ -100,6 +140,8 @@ void UiContext::start()
             qCWarning(lcApp).noquote() << "Could not create the update state directory" << m_updateStateDir;
     }
     m_settingsController->applyAll();
+    m_notifications->loadHistory();
+    m_sessions->load();
     if (!m_library.open(m_databasePath))
         qCCritical(lcLibrary).noquote() << "Game library disabled:" << m_library.lastError();
     // Only rescans when directories/extensions changed since the last completed scan.
@@ -108,6 +150,8 @@ void UiContext::start()
 
 void UiContext::shutdown()
 {
+    if (m_sessions)
+        m_sessions->shutdown();
     if (m_app)
         m_app->manager()->shutdown();
     m_library.cancelScan(); // do not walk a large/slow library while quitting

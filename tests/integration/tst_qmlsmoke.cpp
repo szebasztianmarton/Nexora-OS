@@ -19,7 +19,9 @@
 //   gameDetails, gameDetailsTitle, detailsLaunch, detailsFavorite, detailsEmulator,
 //   detailsOptions, detailsEdit, detailsSystem, detailsRemove, confirmRemoveGame (details)
 //   quickMenu, quickReturn, quickPause, quickVolume, quickMute, quickDisplay,
-//   quickSystemInfo, quickExit, confirmExitGame                                  (quick menu)
+//   quickSystemInfo, quickExit, confirmExitGame, quickSuspend, quickMenuState   (quick menu)
+//   quickResumeRow, quickResumeList, quickResumeCard_<n>, confirmRemoveQuickResume,
+//   resumeFailedDialog                                                           (Quick Resume)
 //   updatePanel, updateState, updateMessage, updateUnsupported, updateAcknowledge,
 //   updateClose, statusValue_updates                                            (updates)
 //   systemActions, systemUpdateButton, exportDiagnosticsButton, systemDetails     (System)
@@ -724,8 +726,8 @@ private slots:
         auto *options = find(ui, "gameOptionsList");
         QTRY_VERIFY2_WITH_TIMEOUT(options->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(find(ui, "gameOptionsTitle")->property("text").toString(), QStringLiteral("Alpha Quest"));
-        // Play, Emulator: automatic, Emu one, Emu two, favorite, close.
-        QCOMPARE(options->property("count").toInt(), 6);
+        // Play, Emulator: automatic, Emu one, Emu two, favorite, Quick Resume, close.
+        QCOMPARE(options->property("count").toInt(), 7);
         shot(ui, "game-options");
         // Tab switching keys do not leak through the modal dialog.
         key(ui, Qt::Key_PageDown);
@@ -738,7 +740,7 @@ private slots:
         key(ui, Qt::Key_Return);
         QCOMPARE(library->gameDetails(alpha).value(QStringLiteral("emulatorId")).toString(), QStringLiteral("two"));
         QVERIFY(dialog->isVisible());
-        QTRY_COMPARE(options->property("count").toInt(), 8); // + "Play with Fast", "emulator defaults"
+        QTRY_COMPARE(options->property("count").toInt(), 9); // + "Play with Fast", "emulator defaults"
         shot(ui, "game-options-emulator-chosen");
 
         // Back closes it and focus returns to the game.
@@ -1228,6 +1230,86 @@ private slots:
         QTRY_VERIFY(!menu->isVisible());
         QTRY_VERIFY2_WITH_TIMEOUT(ui.window->activeFocusItem() && !find(ui, "runningOverlay")->isVisible(),
                                   qPrintable(focusName(ui)), Timeout);
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // Quick Resume end to end through the UI: Quick Menu › Suspend and go Home saves the game
+    // (control-socket adapter, fake emulator), Home shows it in the Quick Resume row, Accept
+    // resumes from the state, a state that cannot be resumed explains why, Select / O removes it.
+    void quickResumeFromQuickMenuAndHome_data() { addWindowSizeRows(); }
+    void quickResumeFromQuickMenuAndHome()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        QTemporaryDir games;
+        writeConfig(config, QStringLiteral("qr"), QStringLiteral("\"--sleep-ms\",\"30000\""),
+                    QStringLiteral("\"extensions\":[\".sfc\"],\"capabilities\":{\"saveState\":{\"adapter\":"
+                                   "\"control-socket\",\"timeoutMs\":3000,\"launchArguments\":[\"--control-socket\","
+                                   "\"{control-socket}\"],\"resumeArguments\":[\"--load-state\",\"{state-file}\"]}}"));
+        touch(games, QStringLiteral("Zelda.sfc"));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        addGames(ui, games);
+        auto *sessions = ui.context->sessions();
+        auto *row = find(ui, "quickResumeRow");
+        QVERIFY(row);
+        QVERIFY(!row->isVisible());
+
+        QVERIFY(ui.context->library()->launch(ui.context->library()->games()->gameIdAt(0)));
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        QTRY_VERIFY_WITH_TIMEOUT(sessions->canSuspend(), Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_F1);
+        auto *menu = find(ui, "quickMenu");
+        QTRY_VERIFY(menu->isVisible());
+        auto *suspendRow = find(ui, "quickSuspend");
+        QVERIFY(suspendRow->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "quickReturn")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        for (int i = 0; i < 6 && !suspendRow->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Down);
+        QVERIFY2(suspendRow->hasActiveFocus(), qPrintable(focusName(ui)));
+        shot(ui, "quick-menu-suspend");
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QTRY_VERIFY(!menu->isVisible());
+        QCOMPARE(sessions->records().size(), 1);
+        QTRY_VERIFY(row->isVisible());
+        shot(ui, "home-quick-resume");
+
+        // Accept on the card resumes from the saved state.
+        auto *list = find(ui, "quickResumeList");
+        list->forceActiveFocus();
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            ui.app->manager()->capturedStdout().contains(QStringLiteral("loaded-state: fake-state 1")), Timeout);
+        QVERIFY(!row->isVisible() || sessions->suspended().isEmpty()); // the running game is not offered
+        ui.app->stop();
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QTRY_VERIFY(row->isVisible());
+
+        // A state whose game file is gone cannot be resumed: the dialog says why, keeps it.
+        QVERIFY(QFile::remove(games.filePath(QStringLiteral("Zelda.sfc"))));
+        list->forceActiveFocus();
+        key(ui, Qt::Key_Return);
+        auto *failed = find(ui, "resumeFailedDialog");
+        QTRY_VERIFY(failed->isVisible());
+        QVERIFY(failed->property("title").toString().startsWith(QStringLiteral("Can't resume")));
+        shot(ui, "quick-resume-failed");
+        key(ui, Qt::Key_Return); // default focus is "Not now"
+        QTRY_VERIFY(!failed->isVisible());
+        QCOMPARE(sessions->records().size(), 1);
+
+        // Select / O asks before removing the state.
+        list->forceActiveFocus();
+        key(ui, Qt::Key_O);
+        auto *confirm = find(ui, "confirmRemoveQuickResume");
+        QTRY_VERIFY(confirm->isVisible());
+        key(ui, Qt::Key_Right);
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY(sessions->records().isEmpty());
+        QTRY_VERIFY(!row->isVisible());
 
         CHECK_NO_WARNINGS();
     }

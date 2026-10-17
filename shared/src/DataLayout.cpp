@@ -21,6 +21,7 @@ DataLayout build(const QString &config, const QString &data, const QString &cach
     l.configDir = config;
     l.dataDir = data;
     l.savesDir = data + QStringLiteral("/saves");
+    l.statesDir = data + QStringLiteral("/states");
     l.emulatorConfigDir = data + QStringLiteral("/emulators");
     l.cacheDir = cache;
     l.stateDir = state;
@@ -51,8 +52,8 @@ DataLayout DataLayout::underRoot(const QString &root)
 bool DataLayout::ensureDirectories(QString *error) const
 {
     // Parents first, so every directory we own is created and then restricted.
-    const QStringList dirs{configDir, dataDir,  savesDir, emulatorConfigDir, backupDir,
-                           cacheDir,  stateDir, logDir,   diagnosticsDir};
+    const QStringList dirs{configDir, dataDir,  savesDir, statesDir, emulatorConfigDir,
+                           backupDir, cacheDir, stateDir, logDir,    diagnosticsDir};
     const QFileDevice::Permissions ownerOnly = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
     for (const QString &dir : dirs) {
         if (!QDir().mkpath(dir)) {

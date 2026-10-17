@@ -110,6 +110,35 @@ Validator extensions()
     };
 }
 
+// An array of strings, each one of |allowed| (duplicates dropped).
+Validator stringsOneOf(const QStringList &allowed)
+{
+    return [allowed](QVariant &v) {
+        return toStringList(
+            v,
+            [&allowed](QString &s) -> QString {
+                return allowed.contains(s)
+                    ? QString()
+                    : QStringLiteral("entries must be one of: %1").arg(allowed.join(QStringLiteral(", ")));
+            },
+            int(allowed.size()));
+    };
+}
+
+// An array of library game ids, written as decimal strings.
+Validator gameIds()
+{
+    return [](QVariant &v) {
+        static const QRegularExpression re(QStringLiteral("^[1-9][0-9]{0,18}$"));
+        return toStringList(
+            v,
+            [](QString &s) -> QString {
+                return re.match(s).hasMatch() ? QString() : QStringLiteral("entries must be game ids (\"123\")");
+            },
+            10000);
+    };
+}
+
 Validator resolution()
 {
     return [](QVariant &v) -> QString {
@@ -191,6 +220,22 @@ const QList<Settings::Spec> &Settings::specs()
         {AudioMuted, false, QStringLiteral("Mute audio"), boolean()},
         {LogLevel, QStringLiteral("info"), QStringLiteral("Minimum severity written to the log"),
          oneOf({QStringLiteral("error"), QStringLiteral("warning"), QStringLiteral("info"), QStringLiteral("debug")})},
+        {NotificationsQuiet, false, QStringLiteral("Quiet mode: informational notifications only go to the history"),
+         boolean()},
+        {NotificationsHiddenCategories, QStringList{},
+         QStringLiteral("Notification categories that only go to the history (critical ones always show)"),
+         stringsOneOf({QStringLiteral("controller"), QStringLiteral("game"), QStringLiteral("saveState"),
+                       QStringLiteral("library"), QStringLiteral("storage"), QStringLiteral("update"),
+                       QStringLiteral("system"), QStringLiteral("recovery")})},
+        {NotificationsDurationMs, 3500, QStringLiteral("How long an informational notification stays (ms)"),
+         intRange(2000, 15000)},
+        {SessionsMaxCount, 5, QStringLiteral("Most suspended game sessions kept (Quick Resume)"), intRange(1, 20)},
+        {SessionsMaxMegabytes, 512, QStringLiteral("Most disk space for Quick Resume save states (MiB)"),
+         intRange(64, 16384)},
+        {SessionsMaxAgeDays, 30, QStringLiteral("Suspended sessions older than this are offered for removal (0 = off)"),
+         intRange(0, 365)},
+        {SessionsExcludedGames, QStringList{}, QStringLiteral("Games that always start fresh (no Quick Resume)"),
+         gameIds()},
         {EmulatorDefaultForSystem, QVariantMap{}, QStringLiteral("Default emulator per game system id"),
          stringMap(systemId, id, QStringLiteral("expected system id -> emulator id"))},
     };

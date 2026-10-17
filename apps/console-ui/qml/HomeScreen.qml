@@ -2,7 +2,8 @@ import QtQuick
 import Nexora.Console
 
 // Home: quick actions, status cards (controllers, system health, updates), the rows
-// "Continue playing", "Favorites", "Recently added" and "Systems", and a getting-started
+// "Quick Resume" (games saved by suspending them; hidden when empty), "Continue playing",
+// "Favorites", "Recently added" and "Systems", and a getting-started
 // panel while the library is empty. Up/Down move between sections, Left/Right inside one;
 // Accept on a game opens its details.
 FocusScope {
@@ -11,6 +12,7 @@ FocusScope {
     required property AppController app
     required property LibraryController library
     required property UpdateController updates
+    property GameSessionManager sessions: null
 
     signal navigate(string tab)   // "games", "settings", "system"
     signal optionsRequested(real gameId)
@@ -21,7 +23,11 @@ FocusScope {
 
     readonly property bool noDirectories: library.directories.length === 0
     readonly property bool noGames: library.totalCount === 0
-    readonly property var hints: actions.activeFocus || statusCards.activeFocus || systemsRow.activeFocus
+    readonly property var hints: quickResumeRow.activeFocus
+        ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Resume" },
+           { button: "Select / O", action: "Remove" }, { button: "↑ ↓", action: "Sections" },
+           { button: "L1 / R1", action: "Switch tab" }]
+        : actions.activeFocus || statusCards.activeFocus || systemsRow.activeFocus
         ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Open" },
            { button: "↑ ↓", action: "Sections" },
            { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "System" }]
@@ -80,6 +86,7 @@ FocusScope {
     // Focusable sections in visual order (rows without content are skipped).
     function sections() {
         const list = [actions, statusCards]
+        if (quickResumeRow.hasSessions) list.push(quickResumeRow)
         if (recentRow.hasGames) list.push(recentRow)
         if (favoritesRow.hasGames) list.push(favoritesRow)
         if (addedRow.hasGames) list.push(addedRow)
@@ -103,7 +110,9 @@ FocusScope {
         return true
     }
     function focusDefault() {
-        if (recentRow.hasGames) {
+        if (quickResumeRow.hasSessions) {
+            quickResumeRow.focus = true
+        } else if (recentRow.hasGames) {
             recentRow.focus = true
         } else if (favoritesRow.hasGames) {
             favoritesRow.focus = true
@@ -405,6 +414,20 @@ FocusScope {
                 }
             }
 
+            QuickResumeRow {
+                id: quickResumeRow
+                objectName: "quickResumeRow"
+                width: parent.width
+                sessions: screen.sessions
+                onRemoveRequested: (sessionId, title, savedAt) => {
+                    confirmRemoveState.sessionId = sessionId
+                    confirmRemoveState.message = title + ": the Quick Resume state saved " + savedAt
+                        + " is deleted. Save files the game wrote itself are not affected."
+                    confirmRemoveState.open()
+                }
+                onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
+            }
+
             GameRow {
                 id: recentRow
                 objectName: "recentRow"
@@ -523,5 +546,15 @@ FocusScope {
                 }
             }
         }
+    }
+
+    ConfirmDialog {
+        id: confirmRemoveState
+        objectName: "confirmRemoveQuickResume"
+        property string sessionId
+        title: "Remove Quick Resume state?"
+        confirmText: "Remove"
+        dangerous: true
+        onConfirmed: if (screen.sessions) screen.sessions.removeSession(sessionId)
     }
 }

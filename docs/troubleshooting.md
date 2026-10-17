@@ -10,6 +10,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 - [Controllers](#controllers)
 - [Library](#library)
 - [Emulators](#emulators)
+- [Quick Resume](#quick-resume)
 - [Settings and user data](#settings-and-user-data)
 - [Updates](#updates)
 - [Image boot](#image-boot)
@@ -80,8 +81,21 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | Emulator shown as unavailable | executable missing, not a regular file, not executable or not absolute; the Emulators tab shows the reason |
 | "failed during startup (exit N)" | the emulator exited or crashed within 3 s; read its stderr tail on the System tab and its output log |
 | A definition is ignored | it failed validation; see configuration issues on the System tab or `--check-config` |
-| Pause is missing in the quick menu | the definition is not `"pausable": true` |
+| Pause is missing in the quick menu | the definition is not `"pausable": true` (or `capabilities.pause`) |
 | Game launches the wrong emulator | per-game choice in the game details, or Settings › Emulators › default emulator per system (a row exists only for systems with games or a compatible emulator, and only emulators that declare the system can be chosen) |
+
+## Quick Resume
+
+| Symptom | Fix |
+| --- | --- |
+| "Suspend and go Home" is missing | no game session runs (e.g. an emulator started without a game from the Emulators tab) |
+| "This emulator has no save-state support" | the definition has no `capabilities.saveState` ([emulator-integration.md](emulator-integration.md#capabilities)); a malformed block is reported as a warning in `--check-config` and ignored |
+| "has not connected to Nexora's save-state control yet" | the emulator (or its wrapper) did not connect to the socket passed with `{control-socket}`; check `launchArguments` and the emulator output log |
+| "Quick Resume is full" | remove a game from Home › Quick Resume (Select / O), or raise `sessions.maxCount` / `sessions.maxMegabytes` |
+| "Could not save … The game is still running." | the emulator refused or did not answer in time; the game was not stopped. Its answer is in the notification history (System tab) |
+| "Can't resume …" | the state is kept; the reason names the check that failed ([quick-resume.md](quick-resume.md#resume-checks)). "Start fresh" plays without it |
+| "Power request cancelled" | the running game could not be saved before power-off; it keeps running. Save in the game or exit it, then power off again |
+| A session disappeared from Home after a restart | its `meta.json` was unreadable and was moved aside (`meta.json.corrupt-*` in `<data>/states/<id>/`); the state files are still there |
 
 ## Settings and user data
 

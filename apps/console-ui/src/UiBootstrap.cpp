@@ -21,6 +21,8 @@ QQuickWindow *loadMainWindow(QQmlApplicationEngine &engine, UiContext *context)
         {QStringLiteral("system"), QVariant::fromValue(context->system())},
         {QStringLiteral("gameBar"), QVariant::fromValue(context->gameBar())},
         {QStringLiteral("updates"), QVariant::fromValue(context->updates())},
+        {QStringLiteral("notifications"), QVariant::fromValue(context->notifications())},
+        {QStringLiteral("sessions"), QVariant::fromValue(context->sessions())},
     });
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Nexora/Console/Main.qml")));
 

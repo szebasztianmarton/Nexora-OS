@@ -19,18 +19,18 @@ class TestDataLayout : public QObject
 private:
     static QStringList all(const DataLayout &l)
     {
-        return {l.configDir, l.dataDir, l.savesDir,       l.emulatorConfigDir, l.cacheDir,
-                l.stateDir,  l.logDir,  l.diagnosticsDir, l.backupDir};
+        return {l.configDir, l.dataDir,  l.savesDir, l.statesDir,      l.emulatorConfigDir,
+                l.cacheDir,  l.stateDir, l.logDir,   l.diagnosticsDir, l.backupDir};
     }
 
 private slots:
-    void underRootProducesNineAbsoluteDistinctDirs()
+    void underRootProducesTenAbsoluteDistinctDirs()
     {
         QTemporaryDir root;
         const DataLayout l = DataLayout::underRoot(root.path());
         const QStringList dirs = all(l);
-        QCOMPARE(dirs.size(), 9);
-        QCOMPARE(QSet<QString>(dirs.cbegin(), dirs.cend()).size(), 9);
+        QCOMPARE(dirs.size(), 10);
+        QCOMPARE(QSet<QString>(dirs.cbegin(), dirs.cend()).size(), 10);
         for (const QString &d : dirs) {
             QVERIFY2(QDir::isAbsolutePath(d), qPrintable(d));
             QVERIFY2(d.startsWith(root.path()), qPrintable(d));

@@ -8,6 +8,7 @@ FocusScope {
     id: dialog
     objectName: "gameOptions"
     required property LibraryController library
+    property GameSessionManager sessions: null
 
     property real gameId: -1
     property var details: ({})
@@ -51,8 +52,14 @@ FocusScope {
                 if (profiles[i].isDefault)
                     defaultName = profiles[i].name
             }
-            r.push({ kind: "play", id: "", label: "Play",
-                     detail: defaultName.length > 0 ? "Default profile “" + defaultName + "”" : "Emulator defaults" })
+            let saved = null
+            for (const s of (sessions ? sessions.suspended : [])) {
+                if (s.gameId === gameId)
+                    saved = s
+            }
+            r.push({ kind: "play", id: "", label: saved ? "Resume" : "Play",
+                     detail: saved ? "From the Quick Resume state saved " + saved.savedAt
+                           : defaultName.length > 0 ? "Default profile “" + defaultName + "”" : "Emulator defaults" })
             for (let i = 0; i < profiles.length; ++i)
                 r.push({ kind: "profile", id: profiles[i].id, label: "Play with “" + profiles[i].name + "”",
                          detail: profiles[i].isDefault ? "Launch profile (default)" : "Launch profile" })
@@ -72,6 +79,12 @@ FocusScope {
         }
         r.push({ kind: "favorite", id: "", label: details.favorite ? "Remove from favorites" : "Add to favorites",
                  detail: "" })
+        if (sessions) {
+            const enabled = sessions.isQuickResumeEnabled(gameId)
+            r.push({ kind: "quickResume", id: "", label: "Quick Resume: " + (enabled ? "on" : "off"),
+                     detail: enabled ? "Suspend saves a state when the emulator supports it"
+                                     : "This game always starts fresh and is never suspended" })
+        }
         r.push({ kind: "close", id: "", label: "Close", detail: "" })
         rows = r
     }
@@ -91,6 +104,11 @@ FocusScope {
             break
         case "emulator":
             library.setGameEmulator(id, row.id)
+            reload()
+            optionList.currentIndex = Math.min(index, rows.length - 1)
+            break
+        case "quickResume":
+            sessions.setQuickResumeEnabled(id, !sessions.isQuickResumeEnabled(id))
             reload()
             optionList.currentIndex = Math.min(index, rows.length - 1)
             break

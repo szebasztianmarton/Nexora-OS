@@ -1,5 +1,7 @@
 #pragma once
 
+#include "nexora/shared/Settings.h"
+
 #include <QObject>
 #include <QStringList>
 #include <QTimer>
@@ -48,6 +50,9 @@ class SettingsController : public QObject
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY changed)
     Q_PROPERTY(int uiScale READ uiScale WRITE setUiScale NOTIFY changed)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY changed)
+    // Notifications (docs/notifications.md): quiet mode and how long info notices stay (s).
+    Q_PROPERTY(bool notificationsQuiet READ notificationsQuiet WRITE setNotificationsQuiet NOTIFY changed)
+    Q_PROPERTY(int notificationSeconds READ notificationSeconds WRITE setNotificationSeconds NOTIFY changed)
     Q_PROPERTY(QString startScreen READ startScreen WRITE setStartScreen NOTIFY changed)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY changed)
     Q_PROPERTY(QString logLevel READ logLevel WRITE setLogLevel NOTIFY changed)
@@ -96,6 +101,14 @@ public:
     void setUiScale(int percent) { set(QStringLiteral("ui.scale"), qBound(75, percent, 150)); }
     bool reducedMotion() const;
     void setReducedMotion(bool value) { set(QStringLiteral("ui.reducedMotion"), value); }
+    bool notificationsQuiet() const { return m_settings->boolValue(shared::Settings::NotificationsQuiet); }
+    void setNotificationsQuiet(bool value) { set(shared::Settings::NotificationsQuiet, value); }
+    int notificationSeconds() const { return m_settings->intValue(shared::Settings::NotificationsDurationMs) / 1000; }
+    // Bounded to the 2-15 s the setting allows.
+    void setNotificationSeconds(int seconds)
+    {
+        set(shared::Settings::NotificationsDurationMs, qBound(2, seconds, 15) * 1000);
+    }
     QString startScreen() const;
     void setStartScreen(const QString &value) { set(QStringLiteral("ui.startScreen"), value); }
     bool muted() const;

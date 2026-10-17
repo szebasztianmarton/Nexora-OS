@@ -42,6 +42,25 @@ public:
     QList<DeviceInfo> devices() const override { return {{QStringLiteral("fake0"), QStringLiteral("Fake Pad")}}; }
 };
 
+// A backend whose device list a test can change, to simulate plugging pads in and out.
+class SwitchableBackend : public input::InputBackend
+{
+public:
+    using InputBackend::InputBackend;
+    bool start() override { return true; }
+    QString name() const override { return QStringLiteral("fake"); }
+    QString statusText() const override { return QStringLiteral("fake pad"); }
+    QList<DeviceInfo> devices() const override { return m_devices; }
+    void setDevices(QList<DeviceInfo> devices)
+    {
+        m_devices = std::move(devices);
+        emit statusChanged();
+    }
+
+private:
+    QList<DeviceInfo> m_devices;
+};
+
 class TestUiContext : public QObject
 {
     Q_OBJECT
@@ -295,6 +314,47 @@ private slots:
         // Remapping from the UI repairs it.
         QVERIFY(ctx.settings()->remap(QStringLiteral("back"), QStringLiteral("east")));
         QVERIFY(ctx.settings()->issues().isEmpty());
+    }
+
+    // Controller plug/unplug reach the notification service; its settings apply live and
+    // warnings survive a restart.
+    void controllerEventsBecomeNotifications()
+    {
+        input::InputController input;
+        auto backend = std::make_unique<SwitchableBackend>(input.navigator());
+        SwitchableBackend *pads = backend.get();
+        QVERIFY(input.start(std::move(backend)));
+        {
+            ui::UiContext ctx(options(), &input);
+            ctx.start();
+            auto *notifications = ctx.notifications();
+            pads->setDevices({{QStringLiteral("pad0"), QStringLiteral("Test Pad")}});
+            QTRY_COMPARE_WITH_TIMEOUT(notifications->current().value(QStringLiteral("text")).toString(),
+                                      QStringLiteral("Controller connected: Test Pad"), Timeout);
+            notifications->dismiss();
+            pads->setDevices({});
+            QTRY_COMPARE_WITH_TIMEOUT(notifications->current().value(QStringLiteral("text")).toString(),
+                                      QStringLiteral("Controller disconnected: Test Pad"), Timeout);
+            QCOMPARE(notifications->current().value(QStringLiteral("severity")).toString(), QStringLiteral("warning"));
+            notifications->dismiss();
+
+            QVERIFY(ctx.settingsStore().setValue(shared::Settings::NotificationsHiddenCategories,
+                                                 QStringList{QStringLiteral("controller")}));
+            pads->setDevices({{QStringLiteral("pad1"), QStringLiteral("Other Pad")}});
+            QTRY_VERIFY_WITH_TIMEOUT(notifications->history().size() == 3, Timeout);
+            QVERIFY(notifications->current().isEmpty()); // hidden category: history only
+            QVERIFY(ctx.settingsStore().setValue(shared::Settings::NotificationsQuiet, true));
+            QVERIFY(notifications->quiet());
+        }
+        ui::UiContext again(options(), &input);
+        again.start();
+        bool found = false;
+        for (const QVariant &v : again.notifications()->history()) {
+            const QVariantMap n = v.toMap();
+            if (n.value(QStringLiteral("text")).toString() == QStringLiteral("Controller disconnected: Test Pad"))
+                found = n.value(QStringLiteral("fromPreviousRun")).toBool();
+        }
+        QVERIFY(found);
     }
 
     void deadzoneIsAppliedLive()

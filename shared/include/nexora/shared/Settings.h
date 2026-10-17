@@ -51,6 +51,13 @@ public:
     static inline const QString AudioMuted = QStringLiteral("audio.muted");
     static inline const QString LogLevel = QStringLiteral("log.level");
     static inline const QString EmulatorDefaultForSystem = QStringLiteral("emulators.defaultForSystem");
+    static inline const QString NotificationsQuiet = QStringLiteral("notifications.quiet");
+    static inline const QString NotificationsHiddenCategories = QStringLiteral("notifications.hiddenCategories");
+    static inline const QString NotificationsDurationMs = QStringLiteral("notifications.durationMs");
+    static inline const QString SessionsMaxCount = QStringLiteral("sessions.maxCount");
+    static inline const QString SessionsMaxMegabytes = QStringLiteral("sessions.maxMegabytes");
+    static inline const QString SessionsMaxAgeDays = QStringLiteral("sessions.maxAgeDays");
+    static inline const QString SessionsExcludedGames = QStringLiteral("sessions.excludedGames");
 
     struct Paths
     {

@@ -36,6 +36,7 @@ set(NEXORA_QML_FILES
     qml/MetadataEditor.qml
     qml/OnScreenKeyboard.qml
     qml/QuickMenu.qml
+    qml/QuickResumeRow.qml
     qml/UpdatePanel.qml
     qml/Backdrop.qml
     qml/GlassSheen.qml
@@ -75,6 +76,8 @@ qt_add_qml_module(nexora_ui
         src/SystemController.h src/SystemController.cpp
         src/SystemListModel.h src/SystemListModel.cpp
         src/UpdateController.h src/UpdateController.cpp
+        src/NotificationService.h src/NotificationService.cpp
+        src/GameSessionManager.h src/GameSessionManager.cpp
         src/UiContext.h src/UiContext.cpp
 )
 
@@ -89,7 +92,8 @@ target_compile_definitions(nexora_ui PRIVATE
 # Warnings only for hand-written sources; qmlcachegen output is not -Wshadow clean.
 nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/GameBarController.cpp src/UiBootstrap.cpp
     src/GameListModel.cpp src/LibraryController.cpp src/SettingsController.cpp src/SystemController.cpp
-    src/SystemListModel.cpp src/UpdateController.cpp src/UiContext.cpp)
+    src/SystemListModel.cpp src/UpdateController.cpp src/UiContext.cpp src/NotificationService.cpp
+    src/GameSessionManager.cpp)
 
 # --- Application ---------------------------------------------------------------------------
 qt_add_executable(nexora-console-ui src/main.cpp)

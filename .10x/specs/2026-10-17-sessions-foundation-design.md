@@ -1,0 +1,68 @@
+# Sub-project 1 — Notifications, emulator capabilities, game sessions (Quick Resume)
+
+Approved by the user on 2026-10-17 (plan steps 1-3 of docs/console-experience.md). One PR.
+
+## Goals
+
+1. A central notification service replacing the single overwriting Toast.
+2. An emulator capability model with save-state adapters, proven end to end with the fake emulator.
+3. A game session manager that gives Nexora a real Quick Resume based on persistent save states, and that never silently kills a running game at shutdown.
+
+Non-goals: packaging RetroArch, several live emulator processes at once, collections, a customisable Home, per-game profiles beyond the Quick Resume exclusion.
+
+## 1. NotificationService
+
+- C++ `nexora::ui::NotificationService` (console-ui), exposed to QML as `notifications`.
+- A notification: id, category (`controller`, `game`, `saveState`, `library`, `storage`, `update`, `system`, `recovery`), severity (`info`, `warning`, `critical`), title/text, dedup key, count, timestamps.
+- Queue: one visible notification at a time; `critical` jumps the queue (a shown info/warning goes back to the front of the queue); each auto-hides after `notifications.durationMs` (info), twice that (warning) or three times that (critical) and stays in the history. (Changed during implementation: a critical that never hides would block the toast for every later event; the history keeps it.)
+- Dedup: an identical key within 10 s increments `count` of the visible/queued entry instead of adding one.
+- History: newest 100 in memory; warnings and criticals are also persisted (newest 50) in `<state>/notifications.json` (atomic, versioned) and reloaded at start.
+- Settings: `notifications.quiet` (bool; info notifications go to history only), `notifications.hiddenCategories` (array; hidden categories go to history only, criticals are never hidden), `notifications.durationMs` (2000-15000, default 3500).
+- Sources in this PR: controller connected/disconnected, game started/exited/failed, save-state saved/failed, session restore failed, library notices, settings notices. Toast.qml becomes the view of the service.
+
+## 2. Emulator capabilities and adapters
+
+Emulator definition gains an optional `capabilities` object; `pausable` stays valid (equivalent to `capabilities.pause = true`).
+
+```json
+"capabilities": {
+  "pause": true,
+  "saveState": {
+    "adapter": "control-socket" | "retroarch",
+    "timeoutMs": 10000,
+    "launchArguments": ["--control-socket", "{control-socket}"],
+    "resumeArguments": ["--load-state", "{state-file}"],
+    "port": 55355
+  }
+}
+```
+
+- `control-socket` (Nexora's own line protocol): Nexora listens on a per-session Unix socket and passes its path through the `{control-socket}` placeholder; the emulator connects and answers `SAVE <dir>` with `OK <file>` / `ERR <message>` and `QUIT` with `OK`. Resume passes `resumeArguments` with `{state-file}`. Implemented by the fake emulator; usable by wrapper scripts.
+- `retroarch` (unverified until RetroArch is integrated): `--appendconfig <session.cfg>` with `savestate_directory` set to the session directory and network commands enabled on `port`; save = UDP `SAVE_STATE` then wait for the state file to change; quit = UDP `QUIT`; resume = `--entryslot 0` with the same config.
+- Interface `SaveStateAdapter`: `prepareLaunch({session dir, resume file, game path}) -> extra arguments`, `save(dir)` (timeout from the capability), `requestQuit()`, `close()`; asynchronous with `saveFinished(ok, file, error)` / `quitFinished(ok, error)`; one request at a time.
+- Unknown adapters or malformed blocks are reported as configuration warnings and the capability is dropped (the emulator stays usable without it). (Implementation: `launchArguments` added so `{control-socket}` is only passed when a session uses save states; the RetroArch adapter copies each state out of its slot directory because RetroArch overwrites slot files in place.) Arguments never pass through a shell.
+
+## 3. GameSessionManager
+
+- Owns the lifecycle on top of `EmulatorManager` (still one process at a time).
+- Session record: id (UUID), gameId, gameTitle, gamePath, gameSize, gameModified, emulatorId, emulatorVersion, profileId, pid, startedAt, lastActiveAt, strategy (`none` | `memory` | `state`), state, error, stateFile, stateBytes, stateSha256, savedAt.
+- States: Starting, Running, Suspending (SIGSTOP pending), SuspendedInMemory (paused in the Quick Menu), SavingState, SuspendedPersistently, Resuming, Closing, Completed, Failed, RecoveryRequired.
+  - Implemented: the running session uses Starting, Resuming, Running, SuspendedInMemory, SavingState, Closing, Failed. SIGSTOP is synchronous, so there is no Suspending state; SuspendedPersistently is "a saved record" (meta.json), and RecoveryRequired is computed per record by the resume checks (Home shows the problem, a resume shows the "Can't resume" dialog) instead of being stored. Completed sessions keep no record unless they have a state.
+- Suspend to Home (only with a saveState capability and when the game is not excluded): SavingState → adapter save → verify file exists, non-empty, compute SHA-256 → write meta → Closing (adapter quit, then SIGTERM after timeout) → SuspendedPersistently. Any failure: the game keeps running (or the session becomes Failed if the process died) and a notification explains it; the previous valid state of the game is never removed by a failed save.
+- Resume: Resuming → validate (game file exists with same size/mtime or user confirms, emulator configured and available, emulator version equal to the recorded one, state file present with matching SHA-256) → launch with resume arguments → Running. Validation failure → RecoveryRequired with the reason; UI offers "Start fresh" (keeps the state) or "Remove saved state".
+- Persistence: `<data>/states/<session id>/` holds the state files and `meta.json` (version 1, atomic, strict). (Changed during implementation: no separate `<state>/sessions.json` index, so the index and the files can never disagree and a damaged file affects one session only. One session per game; each keeps its newest two verified states.)
+- Library launches: a plain Play resumes a saved state; Play with an explicit profile starts fresh (the state is kept). A game that had a state and was played without being suspended keeps its state with a note ("Played after this state was saved").
+- Limits (settings): `sessions.maxCount` (1-20, default 5), `sessions.maxMegabytes` (64-16384 MiB, default 512), `sessions.maxAgeDays` (0 = off, default 30). Exceeding any limit when suspending: the suspend is refused, nothing is deleted, the UI lists sessions that could be removed (oldest, failed and RecoveryRequired first).
+- Per-game exclusion: `sessions.excludedGames` (array of game ids); excluded games show "Quick Resume off" and only Close.
+- Shutdown: UI power-off/restart first suspends the running game when possible (else asks Close vs Cancel), then requests power. (Implemented: the existing power confirmation dialogs say a game without Quick Resume will be closed; a failed save drops the power request and keeps the game running.) App exit by signal: graceful stop (adapter quit, SIGTERM, stop timeout) instead of immediate SIGKILL; a failed save is recorded and shown as a notification at next start.
+- Unexpected process exit while Running: session Completed (exit 0) or Failed (crash), no state written.
+
+## UI in this PR
+
+- Home: "Suspended" row (data-driven, hidden when empty) with Resume / Close; RecoveryRequired entries show the reason.
+- Quick Menu: "Suspend and go Home" (when supported), existing Pause renamed to show the in-memory state.
+- Resume failure dialog (ConfirmDialog based).
+
+## Tests
+
+Unit: notification dedup/queue/history/quiet; capability parsing; session state machine transitions; meta validation (missing, corrupt, wrong version, wrong sha). Integration with the fake emulator: suspend → state file written → process exited → resume with load argument → fake reports the loaded state; save failure keeps the game running; limits refuse without deleting; excluded game cannot suspend; crash → Failed; shutdown saves. QML: Home suspended row, Quick Menu entry, resume failure dialog.
