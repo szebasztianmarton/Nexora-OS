@@ -337,6 +337,17 @@ FocusScope {
                 onAccepted: screen.settings.reducedMotion = !screen.settings.reducedMotion
             }
             SettingRow {
+                objectName: "settingReduceTransparency"
+                label: "Reduce transparency"
+                description: "Makes glass panels solid and turns off background blur"
+                value: screen.settings.reduceTransparency ? "On" : "Off"
+                valueColor: screen.settings.reduceTransparency ? Theme.success : Theme.textMuted
+                adjustable: true
+                onDecrement: screen.settings.reduceTransparency = !screen.settings.reduceTransparency
+                onIncrement: screen.settings.reduceTransparency = !screen.settings.reduceTransparency
+                onAccepted: screen.settings.reduceTransparency = !screen.settings.reduceTransparency
+            }
+            SettingRow {
                 objectName: "settingHints"
                 label: "Show control hints"
                 description: "The bar at the bottom listing the buttons you can press"

@@ -248,6 +248,7 @@ private slots:
         QCOMPARE(s.stringValue(Settings::UiTheme), QStringLiteral("glass"));
         QCOMPARE(s.intValue(Settings::UiScale), 100);
         QCOMPARE(s.boolValue(Settings::UiReducedMotion), false);
+        QCOMPARE(s.boolValue(Settings::UiReduceTransparency), false);
         QCOMPARE(s.stringValue(Settings::UiStartScreen), QStringLiteral("home"));
         QCOMPARE(s.intValue(Settings::InputDeadzone), 25);
         QCOMPARE(s.boolValue(Settings::AudioMuted), false);
@@ -266,6 +267,8 @@ private slots:
         QVERIFY(!s.setValue(Settings::UiScale, 74, &error));
         QVERIFY(!s.setValue(Settings::UiScale, 151, &error));
         QVERIFY(!s.setValue(Settings::UiReducedMotion, 1, &error));
+        QVERIFY(!s.setValue(Settings::UiReduceTransparency, QStringLiteral("on"), &error));
+        QVERIFY(s.setValue(Settings::UiReduceTransparency, true));
         QVERIFY(!s.setValue(Settings::UiStartScreen, QStringLiteral("settings"), &error));
         QVERIFY(!s.setValue(Settings::InputDeadzone, 4, &error));
         QVERIFY(!s.setValue(Settings::InputDeadzone, 61, &error));

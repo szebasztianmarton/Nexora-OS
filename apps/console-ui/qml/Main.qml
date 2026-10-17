@@ -568,7 +568,8 @@ ApplicationWindow {
 
     Component.onCompleted: {
         // Every screen reads these back off Theme; binding them once here keeps the
-        // look and accessibility settings (theme, UI scale, reduced motion) wired to the
+        // look, accessibility settings (theme, UI scale, reduced motion, reduce transparency) and
+        // the glass-blur inputs (GPU capability, emulator session) wired to the
         // whole interface without each screen having to know about SettingsController.
         Theme.userScale = Qt.binding(() => window.settings.uiScale / 100)
         // The layout is designed for 1280x720; larger windows scale up (never down).
@@ -576,6 +577,9 @@ ApplicationWindow {
         Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
         Theme.glass = Qt.binding(() => window.settings.theme === "glass")
         Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
+        Theme.reduceTransparency = Qt.binding(() => window.settings.reduceTransparency)
+        Theme.gpuEffects = Qt.binding(() => UiCapabilities.gpuEffects)
+        Theme.sessionActive = Qt.binding(() => ["starting", "running", "stopping"].indexOf(window.app.state) >= 0)
         // Settings › General › Start screen.
         if (window.settings.startScreen === "games")
             currentTab = tabIndex("games")

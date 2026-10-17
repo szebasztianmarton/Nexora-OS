@@ -76,6 +76,7 @@ qt_add_qml_module(nexora_ui
         src/SystemListModel.h src/SystemListModel.cpp
         src/UpdateController.h src/UpdateController.cpp
         src/UiContext.h src/UiContext.cpp
+        src/UiCapabilities.h src/UiCapabilities.cpp
 )
 
 # qmltyperegistrar includes the QML_ELEMENT headers by bare name.
@@ -89,7 +90,8 @@ target_compile_definitions(nexora_ui PRIVATE
 # Warnings only for hand-written sources; qmlcachegen output is not -Wshadow clean.
 nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/GameBarController.cpp src/UiBootstrap.cpp
     src/GameListModel.cpp src/LibraryController.cpp src/SettingsController.cpp src/SystemController.cpp
-    src/SystemListModel.cpp src/UpdateController.cpp src/UiContext.cpp)
+    src/SystemListModel.cpp src/UpdateController.cpp src/UiContext.cpp
+    src/UiCapabilities.cpp)
 
 # --- Application ---------------------------------------------------------------------------
 qt_add_executable(nexora-console-ui src/main.cpp)

@@ -48,6 +48,7 @@ class SettingsController : public QObject
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY changed)
     Q_PROPERTY(int uiScale READ uiScale WRITE setUiScale NOTIFY changed)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY changed)
+    Q_PROPERTY(bool reduceTransparency READ reduceTransparency WRITE setReduceTransparency NOTIFY changed)
     Q_PROPERTY(QString startScreen READ startScreen WRITE setStartScreen NOTIFY changed)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY changed)
     Q_PROPERTY(QString logLevel READ logLevel WRITE setLogLevel NOTIFY changed)
@@ -96,6 +97,8 @@ public:
     void setUiScale(int percent) { set(QStringLiteral("ui.scale"), qBound(75, percent, 150)); }
     bool reducedMotion() const;
     void setReducedMotion(bool value) { set(QStringLiteral("ui.reducedMotion"), value); }
+    bool reduceTransparency() const;
+    void setReduceTransparency(bool value) { set(QStringLiteral("ui.reduceTransparency"), value); }
     QString startScreen() const;
     void setStartScreen(const QString &value) { set(QStringLiteral("ui.startScreen"), value); }
     bool muted() const;
