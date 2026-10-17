@@ -27,6 +27,8 @@ struct GameEntry
     int playCount = 0;
     QDateTime lastPlayed; // invalid = never launched
     QDateTime addedAt;
+    qint64 playSeconds = 0; // emulator run time without Nexora's pauses
+    int pinned = 0; // 0 = not pinned to Home; otherwise the pin order (ascending)
 
     QString displayTitle() const { return titleOverride.isEmpty() ? title : titleOverride; }
 

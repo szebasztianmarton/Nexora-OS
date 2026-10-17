@@ -79,11 +79,20 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
     connect(m_app->manager(), &emulator::EmulatorManager::stateChanged, this, [this](emulator::ProcessState state) {
         if (m_pendingLaunch == 0)
             return;
-        if (state == emulator::ProcessState::Running)
+        if (state == emulator::ProcessState::Running) {
+            m_runningGame = m_pendingLaunch;
             m_library->recordLaunch(std::exchange(m_pendingLaunch, 0));
-        else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
+        } else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
             m_pendingLaunch = 0;
     });
+    // Play time: run time without Nexora's pauses, for the game whose launch was counted.
+    connect(m_app->manager(), &emulator::EmulatorManager::processFinished, this,
+            [this](const QString &, const emulator::ProcessOutcome &outcome) {
+                const qint64 gameId = std::exchange(m_runningGame, 0);
+                const qint64 seconds = outcome.activeMs() / 1000;
+                if (gameId > 0 && seconds >= 1 && !m_library->addPlayTime(gameId, seconds))
+                    qCWarning(lcLibrary).noquote() << "Could not record play time:" << m_library->lastError();
+            });
     connect(m_app, &AppController::configChanged, this, [this] {
         rebuildEmulatorInfo();
         updateScanOptions();

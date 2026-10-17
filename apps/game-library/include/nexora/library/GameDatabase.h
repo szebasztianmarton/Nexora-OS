@@ -3,6 +3,7 @@
 #include "nexora/library/GameEntry.h"
 #include "nexora/library/LibraryScanner.h"
 
+#include <QDateTime>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -21,13 +22,26 @@ struct ApplyStats
 // SQLite store for game metadata (QtSql "QSQLITE" driver). Keeps user data (favorites,
 // play history, emulator choice) across rescans; files that disappear are marked
 // not-present rather than deleted, so a temporarily unmounted drive loses nothing.
-// Schema v2 adds systems, user metadata (title, notes, system) and hidden entries; a v1
-// database is copied to "<path>.v1-backup-<timestamp>" before it is migrated.
+// Schema v2 adds systems, user metadata (title, notes, system) and hidden entries; v3 adds
+// play time, pinned games and collections. An older database is copied to
+// "<path>.v<N>-backup-<timestamp>" before it is migrated (v1 -> v3 in one transaction).
 // Not thread-safe: use from the thread that called open().
 class GameDatabase
 {
 public:
-    static constexpr int SchemaVersion = 2;
+    static constexpr int SchemaVersion = 3;
+    static constexpr int MaxPinned = 24;
+    static constexpr int MaxCollections = 100;
+    static constexpr int MaxGamesPerCollection = 5000;
+    static constexpr int MaxCollectionNameLength = 60;
+
+    struct Collection
+    {
+        qint64 id = 0;
+        QString name;
+        QDateTime createdAt; // UTC
+        int count = 0; // present, not hidden games
+    };
 
     GameDatabase();
     ~GameDatabase();
@@ -71,9 +85,26 @@ public:
     bool setHidden(qint64 id, bool hidden);
     // Unhides every entry; returns how many were hidden.
     int restoreHidden();
-    // Removes entries that are not present (explicit user action).
+    // Removes entries that are not present (explicit user action), with their collection
+    // memberships.
     int purgeMissing();
     int missingCount() const;
+
+    // Adds |seconds| (> 0) of play time.
+    bool addPlayTime(qint64 id, qint64 seconds);
+    // Pinned games get the next pin order; at most MaxPinned. Unpinning clears it.
+    bool setPinned(qint64 id, bool pinned);
+
+    // Collections: names 1-60 characters, unique ignoring case, no control characters; at most
+    // MaxCollections, each with at most MaxGamesPerCollection games. Deleting a collection
+    // or removing a game from it never touches the game itself.
+    QList<Collection> collections() const;
+    std::optional<qint64> createCollection(const QString &name);
+    bool renameCollection(qint64 id, const QString &name);
+    bool deleteCollection(qint64 id);
+    bool setInCollection(qint64 collectionId, qint64 gameId, bool member);
+    QList<qint64> collectionGameIds(qint64 collectionId) const; // in the order they were added
+    QList<qint64> collectionsOf(qint64 gameId) const;
 
     QString meta(const QString &key) const;
     bool setMeta(const QString &key, const QString &value);
@@ -88,7 +119,8 @@ private:
     bool migrate();
     bool createSchema();
     bool backupBeforeMigration(int fromVersion);
-    bool migrateV1ToV2();
+    bool migrateFrom(int version);
+    bool checkCollectionName(const QString &name, qint64 exceptId);
 
     QString m_connection;
     QString m_path;

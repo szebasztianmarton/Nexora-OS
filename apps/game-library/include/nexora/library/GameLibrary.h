@@ -78,6 +78,18 @@ public:
     bool restoreHidden();
     QList<GameEntry> hiddenEntries() const;
 
+    // Play time, pinning and collections (schema v3; see GameDatabase). Collection changes
+    // emit collectionsChanged(); pinning and play time update the cached entry.
+    bool addPlayTime(qint64 id, qint64 seconds);
+    bool setPinned(qint64 id, bool pinned);
+    QList<GameDatabase::Collection> collections() const { return m_db.collections(); }
+    std::optional<qint64> createCollection(const QString &name);
+    bool renameCollection(qint64 id, const QString &name);
+    bool deleteCollection(qint64 id);
+    bool setInCollection(qint64 collectionId, qint64 gameId, bool member);
+    QList<qint64> collectionGameIds(qint64 collectionId) const { return m_db.collectionGameIds(collectionId); }
+    QList<qint64> collectionsOf(qint64 gameId) const { return m_db.collectionsOf(gameId); }
+
     const ScanResult &lastScan() const { return m_lastScan; }
     ApplyStats lastStats() const { return m_lastStats; }
     QStringList databaseIssues() const { return m_db.issues(); }
@@ -92,6 +104,7 @@ signals:
     // Queued from the scan thread: game files found so far and the directory being scanned.
     void scanProgress(int filesSeen, const QString &currentRoot);
     void entriesChanged();
+    void collectionsChanged();
     void scanFinished(const nexora::library::ApplyStats &stats, int issueCount);
     // The scan ran but its results could not be stored.
     void scanFailed(const QString &error);

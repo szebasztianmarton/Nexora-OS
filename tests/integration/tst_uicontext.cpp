@@ -412,6 +412,28 @@ private slots:
         QCOMPARE(input.mapping().buttonFor(input::NavAction::Accept), std::optional(input::GamepadButton::West));
     }
 
+    // Play time: run time without Nexora's pauses, added to the launched game.
+    void playTimeExcludesPauses()
+    {
+        writeEmulator(",\"pausable\":true");
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+        QVERIFY(ctx.library()->launchWithProfile(id, QStringLiteral("long")));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("running"), Timeout);
+        QTest::qWait(1200);
+        QVERIFY(ctx.app()->pause());
+        QTest::qWait(2000);
+        QVERIFY(ctx.app()->resume());
+        QVERIFY(ctx.app()->stop());
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("exited"), Timeout);
+        const qint64 played = ctx.gameLibrary().entry(id)->playSeconds;
+        QVERIFY2(played >= 1 && played <= 2, qPrintable(QString::number(played))); // 3+ if pauses counted
+        QVERIFY(ctx.app()->manager()->lastOutcome().pausedMs >= 1900);
+    }
+
     void launchGameFromLibrary()
     {
         ui::UiContext ctx(options());

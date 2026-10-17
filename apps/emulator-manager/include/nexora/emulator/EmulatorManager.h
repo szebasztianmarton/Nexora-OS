@@ -12,6 +12,7 @@
 #include <QStringDecoder>
 #include <QTimer>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -33,6 +34,14 @@ struct ProcessOutcome
     qint64 pid = 0; // 0 if the process never started
     QDateTime startedAt; // UTC; invalid if the process never started
     QDateTime endedAt; // UTC
+    qint64 pausedMs = 0; // time the process spent paused (SIGSTOP) by pause()
+
+    // Run time without pauses; 0 if the process never started.
+    qint64 activeMs() const
+    {
+        return startedAt.isValid() && endedAt.isValid() ? std::max<qint64>(0, startedAt.msecsTo(endedAt) - pausedMs)
+                                                        : 0;
+    }
 };
 
 // What to start: an emulator, optionally one of its launch profiles and a game file.
@@ -183,6 +192,8 @@ private:
     qint64 m_pid = 0;
     QDateTime m_startedAt;
     QElapsedTimer m_runClock;
+    QElapsedTimer m_pauseClock; // valid while paused
+    qint64 m_pausedTotalMs = 0;
     std::chrono::milliseconds m_startupGrace{3000};
     ProcessOutcome m_lastOutcome;
     QString m_stdout;

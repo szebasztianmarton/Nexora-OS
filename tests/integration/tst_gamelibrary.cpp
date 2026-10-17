@@ -401,6 +401,81 @@ private slots:
         QVERIFY(again.hiddenEntries().isEmpty());
     }
 
+    // Schema v3: collections never own games; names are unique ignoring case; limits hold.
+    void collectionsGroupGamesWithoutOwningThem()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        touch(games() + QStringLiteral("/Beta.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        const qint64 alpha = byTitle(library, QStringLiteral("Alpha"))->id;
+        const qint64 beta = byTitle(library, QStringLiteral("Beta"))->id;
+        QSignalSpy changed(&library, &GameLibrary::collectionsChanged);
+
+        const auto rpg = library.createCollection(QStringLiteral("  RPG  "));
+        QVERIFY2(rpg, qPrintable(library.lastError()));
+        QVERIFY(!library.createCollection(QStringLiteral("rpg"))); // unique ignoring case
+        QVERIFY(library.lastError().contains(QStringLiteral("already exists")));
+        QVERIFY(!library.createCollection(QString()));
+        QVERIFY(!library.createCollection(QString(61, u'x')));
+        QVERIFY(!library.createCollection(QStringLiteral("tab\there")));
+        QVERIFY(library.setInCollection(*rpg, beta, true));
+        QVERIFY(library.setInCollection(*rpg, alpha, true));
+        QVERIFY(library.setInCollection(*rpg, alpha, true)); // already a member: no-op
+        QCOMPARE(library.collectionGameIds(*rpg), (QList<qint64>{beta, alpha})); // order added
+        QCOMPARE(library.collectionsOf(alpha), QList<qint64>{*rpg});
+        QCOMPARE(library.collections().first().name, QStringLiteral("RPG"));
+        QCOMPARE(library.collections().first().count, 2);
+        QVERIFY(!library.setInCollection(*rpg, 999999, true));
+
+        QVERIFY(library.renameCollection(*rpg, QStringLiteral("Role-playing")));
+        QVERIFY(library.setInCollection(*rpg, beta, false));
+        QCOMPARE(library.collectionGameIds(*rpg), QList<qint64>{alpha});
+        QVERIFY(library.deleteCollection(*rpg));
+        QVERIFY(library.collections().isEmpty());
+        QCOMPARE(library.entries().size(), 2); // games untouched
+        QVERIFY(changed.size() >= 6);
+
+        // Purging a missing game drops its memberships too.
+        const auto keep = library.createCollection(QStringLiteral("Keep"));
+        QVERIFY(library.setInCollection(*keep, alpha, true));
+        QVERIFY(library.setInCollection(*keep, beta, true));
+        QVERIFY(QFile::remove(games() + QStringLiteral("/Beta.sfc")));
+        scan(library);
+        QCOMPARE(library.purgeMissing(), 1);
+        QCOMPARE(library.collectionGameIds(*keep), QList<qint64>{alpha});
+    }
+
+    void pinningAndPlayTime()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        touch(games() + QStringLiteral("/Beta.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        const qint64 alpha = byTitle(library, QStringLiteral("Alpha"))->id;
+        const qint64 beta = byTitle(library, QStringLiteral("Beta"))->id;
+        QVERIFY(library.setPinned(beta, true));
+        QVERIFY(library.setPinned(alpha, true));
+        QVERIFY(library.setPinned(alpha, true)); // keeps its place
+        QCOMPARE(library.entry(beta)->pinned, 1);
+        QCOMPARE(library.entry(alpha)->pinned, 2);
+        QVERIFY(library.setPinned(beta, false));
+        QCOMPARE(library.entry(beta)->pinned, 0);
+
+        QVERIFY(library.addPlayTime(alpha, 125));
+        QVERIFY(library.addPlayTime(alpha, 5));
+        QVERIFY(!library.addPlayTime(alpha, 0));
+        QCOMPARE(byTitle(library, QStringLiteral("Alpha"))->playSeconds, qint64(130)); // cache
+        library.close();
+        QVERIFY(library.open(db()));
+        QCOMPARE(library.entry(alpha)->playSeconds, qint64(130)); // persisted
+        QCOMPARE(library.entry(alpha)->pinned, 2);
+    }
+
     void purgeMissingKeepsHiddenEntries()
     {
         touch(games() + QStringLiteral("/Alpha.sfc"));
@@ -491,6 +566,10 @@ private slots:
                                         QStringLiteral("ALTER TABLE games DROP COLUMN title_override"),
                                         QStringLiteral("ALTER TABLE games DROP COLUMN notes"),
                                         QStringLiteral("ALTER TABLE games DROP COLUMN hidden"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN play_seconds"),
+                                        QStringLiteral("ALTER TABLE games DROP COLUMN pinned"),
+                                        QStringLiteral("DROP TABLE collection_games"),
+                                        QStringLiteral("DROP TABLE collections"),
                                         QStringLiteral("PRAGMA user_version = 1")};
             for (const QString &s : downgrade)
                 QVERIFY2(QSqlQuery(raw).exec(s), qPrintable(s));

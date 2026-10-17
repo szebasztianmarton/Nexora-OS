@@ -167,6 +167,7 @@ private:
     QTimer m_searchDebounce;
     QHash<QString, std::pair<QString, QString>> m_emulatorInfo; // id -> (name, unavailable reason)
     qint64 m_pendingLaunch = 0; // recorded as played once its process is running
+    qint64 m_runningGame = 0; // gets the play time when its process ends
     int m_scanFilesSeen = 0;
     QString m_scanCurrentRoot;
 };
