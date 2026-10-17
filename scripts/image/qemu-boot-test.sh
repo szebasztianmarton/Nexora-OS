@@ -2,13 +2,21 @@
 # Boot a Nexora OS disk image in QEMU (UEFI via OVMF) and check that the
 # console UI session starts.
 #
-# The serial console is captured to a log. The test passes when the init
-# script reports "Starting nexora: OK" within the timeout; the VM is then
-# asked to power off through the QEMU monitor (system_powerdown).
+# The serial console is captured to a log. The init script must report
+# "Starting nexora: OK" within the timeout, and then the console UI must
+# stay up: the log is watched for NEXORA_QEMU_SETTLE more seconds, and the
+# test fails if nexora-session gives up ("nexora-session: giving up") or
+# restarts the UI NEXORA_QEMU_MAX_RESTARTS times or more ("... exited with
+# status ...; restarting"; nexora-session writes both to the kernel log,
+# which reaches the serial console). The VM is then asked to power off
+# through the QEMU monitor (system_powerdown).
 #
 # Usage: scripts/image/qemu-boot-test.sh [disk.img]
 #   NEXORA_QEMU_TIMEOUT  seconds to wait for the marker (default 300;
 #                        without KVM a boot can take several minutes)
+#   NEXORA_QEMU_SETTLE   seconds to keep watching after the marker
+#                        (default 60)
+#   NEXORA_QEMU_MAX_RESTARTS  UI restarts that fail the test (default 2)
 #   NEXORA_QEMU_LOG      serial log path (default: ./qemu-serial.log)
 #   OVMF_CODE / OVMF_VARS  firmware files (default: Ubuntu's ovmf package)
 #
@@ -22,7 +30,11 @@ TIMEOUT="${NEXORA_QEMU_TIMEOUT:-300}"
 LOG="${NEXORA_QEMU_LOG:-$(pwd)/qemu-serial.log}"
 OVMF_CODE="${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
 OVMF_VARS="${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}"
+SETTLE="${NEXORA_QEMU_SETTLE:-60}"
+MAX_RESTARTS="${NEXORA_QEMU_MAX_RESTARTS:-2}"
 MARKER='Starting nexora: OK'
+GIVE_UP='nexora-session: giving up'
+RESTART='nexora-session: nexora-console-ui exited with status .*; restarting'
 
 for f in "${IMAGE}" "${OVMF_CODE}" "${OVMF_VARS}"; do
 	if [ ! -f "${f}" ]; then
@@ -57,6 +69,7 @@ QEMU_PID=$!
 
 START=$(date +%s)
 RESULT=FAIL
+REASON="no '${MARKER}' within ${TIMEOUT}s"
 while kill -0 "${QEMU_PID}" 2>/dev/null; do
 	if grep -q "${MARKER}" "${LOG}" 2>/dev/null; then
 		RESULT=PASS
@@ -67,6 +80,40 @@ while kill -0 "${QEMU_PID}" 2>/dev/null; do
 	fi
 	sleep 2
 done
+
+# session_failed: sets REASON and succeeds if the session gave up or the
+# UI was restarted too often.
+session_failed() {
+	if grep -q "${GIVE_UP}" "${LOG}" 2>/dev/null; then
+		REASON="nexora-session gave up (UI crash loop)"
+		return 0
+	fi
+	restarts=$(grep -c "${RESTART}" "${LOG}" 2>/dev/null || true)
+	if [ "${restarts:-0}" -ge "${MAX_RESTARTS}" ]; then
+		REASON="console UI restarted ${restarts} times"
+		return 0
+	fi
+	return 1
+}
+
+if [ "${RESULT}" = PASS ]; then
+	SETTLE_START=$(date +%s)
+	while [ $(($(date +%s) - SETTLE_START)) -lt "${SETTLE}" ]; do
+		if ! kill -0 "${QEMU_PID}" 2>/dev/null; then
+			RESULT=FAIL
+			REASON="QEMU exited while watching the session"
+			break
+		fi
+		if session_failed; then
+			RESULT=FAIL
+			break
+		fi
+		sleep 2
+	done
+	if [ "${RESULT}" = PASS ] && session_failed; then
+		RESULT=FAIL
+	fi
+fi
 ELAPSED=$(($(date +%s) - START))
 
 if [ -S "${WORK}/monitor.sock" ] && command -v socat >/dev/null 2>&1; then
@@ -79,5 +126,9 @@ if [ -S "${WORK}/monitor.sock" ] && command -v socat >/dev/null 2>&1; then
 	done
 fi
 
-echo "qemu-boot-test.sh: ${RESULT} after ${ELAPSED}s (accel=${ACCEL}, serial log: ${LOG})"
+if [ "${RESULT}" = PASS ]; then
+	echo "qemu-boot-test.sh: PASS after ${ELAPSED}s, UI stayed up for ${SETTLE}s (accel=${ACCEL}, serial log: ${LOG})"
+else
+	echo "qemu-boot-test.sh: FAIL after ${ELAPSED}s: ${REASON} (accel=${ACCEL}, serial log: ${LOG})"
+fi
 [ "${RESULT}" = PASS ]
