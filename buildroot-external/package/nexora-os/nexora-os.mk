@@ -18,9 +18,9 @@ NEXORA_OS_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 	--exclude '/build-*' \
 	--exclude /buildroot-external
 
-# The project has no license yet (licensing decision pending), so
-# there is no license file to point to.
-NEXORA_OS_LICENSE = Unknown (licensing decision pending)
+# SPDX identifier; make legal-info copies LICENSE.
+NEXORA_OS_LICENSE = GPL-3.0-or-later
+NEXORA_OS_LICENSE_FILES = LICENSE
 
 # The top-level CMakeLists.txt refuses in-source builds.
 NEXORA_OS_SUPPORTS_IN_SOURCE_BUILD = NO

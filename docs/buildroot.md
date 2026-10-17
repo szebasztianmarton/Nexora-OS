@@ -72,7 +72,7 @@ buildroot-external/
 - Selects Qt6 `qt6base` GUI + SQL + SQLite plugin (the game library uses `Qt6::Sql`/`QSQLITE`) and `qt6declarative` Quick (which also provides QuickControls2). Depends on `BR2_PACKAGE_QT6` and GCC ≥ 10 (C++20).
 - Depends on OpenSSL (Ed25519/SHA-256 for updates). The build id is taken from the source tree with `git describe --always --dirty` and passed as `-DNEXORA_BUILD_ID` (the rsynced copy has no `.git`).
 - Installs what the CMake install rules install: `/usr/bin/nexora-console-ui`, `/usr/bin/nexora-update-tool`, `/usr/share/nexora/emulators/example.json` (the default config directory resolved from `<bindir>/../share/nexora/emulators`), `/usr/share/nexora/systems.json` and `/usr/share/nexora/build-info` (version, build id, board, used by `post-build.sh` for `/etc/nexora-release`). A post-install hook copies every `board/nexora-x86_64/update-keys/*.pem` to `/usr/share/nexora/update-keys/`; with no key the image refuses all updates.
-- License: `NEXORA_OS_LICENSE = Unknown (licensing decision pending)`; there is no license file yet, so `make legal-info` will warn for this package.
+- License: `NEXORA_OS_LICENSE = GPL-3.0-or-later`, `NEXORA_OS_LICENSE_FILES = LICENSE`, so `make legal-info` collects the license text together with the other packages'.
 
 ## Building
 

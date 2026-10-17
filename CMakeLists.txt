@@ -97,6 +97,8 @@ if((NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING) AND CMAKE_SYSTEM_NAME STREQUAL 
     endif()
 endif()
 
+install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/nexora)
+
 configure_file(config/emulators/example.json ${NEXORA_BUILD_CONFIG_DIR}/example.json COPYONLY)
 install(FILES config/emulators/example.json
         DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)
