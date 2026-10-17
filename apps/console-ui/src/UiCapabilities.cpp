@@ -1,6 +1,7 @@
 #include "UiCapabilities.h"
 
 #include <QJSEngine>
+#include <QLibraryInfo>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
 #include <QQuickWindow>
@@ -28,6 +29,10 @@ UiCapabilities *UiCapabilities::create(QQmlEngine *, QJSEngine *engine)
 
 bool UiCapabilities::decide(QSGRendererInterface::GraphicsApi api, const QString &glRenderer, const QByteArray &disableEnv)
 {
+    // QtQuick.Effects is a QML module loaded at run time, so the installed Qt decides (not the
+    // version we were compiled against): before 6.5 the GPU glass files cannot load at all.
+    if (QLibraryInfo::version() < QVersionNumber(6, 5))
+        return false;
     if (!disableEnv.isEmpty() || api == QSGRendererInterface::Software || api == QSGRendererInterface::Unknown)
         return false;
     const QString renderer = glRenderer.toLower();

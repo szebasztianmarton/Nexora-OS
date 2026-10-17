@@ -14,10 +14,22 @@ Item {
     // A GlassGroup's already blurred backdrop, if any: then this surface only crops it.
     property Item blurredSource: null
 
-    // The surface's rectangle in the backdrop's coordinates.
-    readonly property rect area: {
-        void gpu.x; void gpu.y; void gpu.width; void gpu.height
-        return backdrop ? gpu.mapToItem(backdrop, 0, 0, gpu.width, gpu.height) : Qt.rect(0, 0, 0, 0)
+    // The surface's rectangle in the backdrop's coordinates. Ancestors move, scroll and scale
+    // without any signal on this item, so it is refreshed once per frame (after animations ran)
+    // while this item exists, and only reassigned when it really changed.
+    property rect area: Qt.rect(0, 0, 0, 0)
+    function refreshArea() {
+        const r = backdrop ? gpu.mapToItem(backdrop, 0, 0, gpu.width, gpu.height) : Qt.rect(0, 0, 0, 0)
+        if (r.x !== area.x || r.y !== area.y || r.width !== area.width || r.height !== area.height)
+            area = r
+    }
+    onBackdropChanged: refreshArea()
+    onWidthChanged: refreshArea()
+    onHeightChanged: refreshArea()
+    Component.onCompleted: refreshArea()
+    Connections {
+        target: gpu.Window.window
+        function onAfterAnimating() { gpu.refreshArea() }
     }
 
     ShaderEffectSource {

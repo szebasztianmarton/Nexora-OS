@@ -29,7 +29,7 @@ Item {
     }
     readonly property Item effectiveBackdrop: {
         const b = backdrop ? backdrop : (group ? group.backdrop : null)
-        for (let p = surface.parent; p; p = p.parent) {
+        for (let p = surface; p; p = p.parent) {
             if (p === b)
                 return null
         }
@@ -66,6 +66,7 @@ Item {
         }
     }
     GlassEffectFlat {
+        objectName: "flat"
         anchors.fill: parent
         visible: surface.state === "flat"
         fillColor: surface.fillColor

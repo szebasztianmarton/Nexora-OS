@@ -23,6 +23,8 @@ Item {
         GlassSurface { id: grouped; x: 300; y: 20; width: 200; height: 80 }
     }
     GlassSurface { id: cyclic; anchors.fill: scene; backdrop: root }
+    GlassSurface { id: selfRef; x: 300; y: 120; width: 100; height: 50 }
+    GlassGroup { id: cyclicGroup; x: 420; y: 120; width: 100; height: 50 }
 
     TestCase {
         name: "Glass"
@@ -43,13 +45,37 @@ Item {
             compare(plain.fillColor, Theme.glassFillRegular)
         }
 
+        // QtQuick.Effects exists from Qt 6.5; Qt.version is the runtime version.
+        readonly property bool hasEffects: {
+            const v = Qt.version.split(".")
+            return Number(v[0]) > 6 || (Number(v[0]) === 6 && Number(v[1]) >= 5)
+        }
+
+        // Without QtQuick.Effects every GPU Loader (plain, grouped and the group's shared pass)
+        // logs one engine warning; that is the only thing allowed to be printed.
+        function expectMissingEffectsWarnings(count) {
+            if (hasEffects)
+                return
+            for (let i = 0; i < count; ++i)
+                ignoreWarning(/module "QtQuick\.Effects" is not installed/)
+        }
+
         // Forcing the switch on: with QtQuick.Effects (Qt >= 6.5) the GPU file loads, without it
         // the surface quietly stays flat. Under the software backend MultiEffect cannot render,
         // so only the loader outcome is checked.
         function test_gpuPathLoadsOrFallsBackSilently() {
+            expectMissingEffectsWarnings(3)
             Theme.gpuEffects = true
             compare(Theme.glassBlur, true)
-            tryVerify(() => plain.state === "gpu" || plain.state === "flat", 2000)
+            if (hasEffects) {
+                tryCompare(plain, "state", "gpu")
+                compare(plain.blurred, true)
+            } else {
+                wait(100)
+                compare(plain.state, "flat")
+                compare(plain.blurred, false)
+                compare(findChild(plain, "flat").visible, true)
+            }
             verify(plain.fillColor === Theme.glassFillRegular)
         }
 
@@ -69,9 +95,25 @@ Item {
 
         // A surface must never blur an ancestor of itself (it would sample its own output).
         function test_ancestorBackdropIsRejected() {
+            expectMissingEffectsWarnings(3)
             Theme.gpuEffects = true
             compare(cyclic.effectiveBackdrop, null)
             compare(cyclic.blurred, false)
+        }
+
+        function test_selfBackdropIsRejected() {
+            selfRef.backdrop = selfRef
+            compare(selfRef.effectiveBackdrop, null)
+            selfRef.backdrop = null
+        }
+
+        function test_groupRejectsItselfAsBackdrop() {
+            expectMissingEffectsWarnings(3)
+            cyclicGroup.backdrop = cyclicGroup
+            Theme.gpuEffects = true
+            compare(cyclicGroup.backdropUsable, false)
+            compare(cyclicGroup.blurredSource, null)
+            cyclicGroup.backdrop = null
         }
 
         function test_outsideGlassSurfaceIsHidden() {
