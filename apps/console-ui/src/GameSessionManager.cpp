@@ -672,6 +672,8 @@ void GameSessionManager::onProcessFinished(const emulator::ProcessOutcome &outco
     if (finished.adapter) {
         finished.adapter->disconnect(this); // close() fails a pending request; handled below
         finished.adapter->close();
+        // Deferred: this can run from inside the adapter's own saveFinished emission.
+        finished.adapter.release()->deleteLater();
     }
     const QString title = finished.record.gameTitle;
 
