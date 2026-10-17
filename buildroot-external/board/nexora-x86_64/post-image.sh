@@ -24,6 +24,8 @@ if [ "$(wc -c < "${GRUBENV}")" -ne 1024 ]; then
 	echo "post-image.sh: grubenv is not 1024 bytes" >&2
 	exit 1
 fi
+# Fallback copy read by grub.cfg when grubenv is damaged.
+cp -f "${GRUBENV}" "${GRUBENV}.bak"
 
 # Empty ext4 data filesystem; /home/nexora is created on first boot by
 # /etc/init.d/S01nexora-data. Resizing it to fill a larger disk is not

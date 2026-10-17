@@ -112,7 +112,8 @@ fi'; then
 	pause
 }
 
-collect_diagnostics() {
+# Boot and slot state only (no logs, no user data); still masked.
+collect_system_state() {
 	echo "Nexora OS recovery diagnostics, $(date '+%Y-%m-%dT%H:%M:%S')"
 	echo
 	echo "== /etc/nexora-release"
@@ -123,7 +124,12 @@ collect_diagnostics() {
 	cat /proc/cmdline
 	echo
 	echo "== grubenv"
-	"${NEXORA_GRUB_EDITENV}" "${NEXORA_GRUBENV}" list 2> /dev/null
+	if _src=$(nexora_env_source); then
+		echo "(from ${_src})"
+		"${NEXORA_GRUB_EDITENV}" "${_src}" list 2> /dev/null
+	else
+		echo "grubenv and grubenv.bak are missing or damaged"
+	fi
 	echo
 	echo "== pending update"
 	cat "${NEXORA_PENDING_FILE}" 2> /dev/null
@@ -133,26 +139,72 @@ collect_diagnostics() {
 	echo
 	echo "== disk usage"
 	df -h 2> /dev/null
+}
+
+# Fallback when the console UI cannot export its own (redacted) report:
+# a minimal raw dump of the logs, passed through nexora_mask_secrets.
+collect_raw_logs() {
 	echo
-	echo "== session log (last 100 lines)"
+	echo "== session log (last 100 lines, masked)"
 	tail -n 100 /run/nexora-session/session.log 2> /dev/null
 	echo
-	echo "== console UI log (last 100 lines)"
+	echo "== console UI log (last 100 lines, masked)"
 	tail -n 100 /var/log/nexora/console-ui.log 2> /dev/null
 	echo
-	echo "== kernel log (last 200 lines)"
+	echo "== kernel log (last 200 lines, masked)"
 	dmesg 2> /dev/null | tail -n 200
 }
 
 export_diagnostics() {
 	echo
 	echo "Writing diagnostics to /home/nexora ..."
+	# Preferred: the console UI's own report, which redacts secrets and
+	# personal paths (runs as the user, headless).
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	if su -s /bin/sh "${APP_USER}" -c 'QT_QPA_PLATFORM=offscreen nexora-console-ui --export-diagnostics'; then
+		echo "(console UI report above; boot state below)"
+		raw=0
+	else
+		echo "The console UI could not export its report; writing a minimal masked dump instead."
+		raw=1
+	fi
 	# The file is created by the user itself, so a planted symlink in the
 	# user's home cannot redirect a root-owned write.
 	# shellcheck disable=SC2016 # expanded by the user's shell
-	collect_diagnostics | su -s /bin/sh "${APP_USER}" -c 'umask 077
+	{
+		collect_system_state
+		[ "${raw}" = "0" ] || collect_raw_logs
+	} | nexora_mask_secrets | su -s /bin/sh "${APP_USER}" -c 'umask 077
 f=/home/nexora/recovery-diagnostics-$(date +%Y%m%d-%H%M%S).txt
 cat > "$f" && echo "Written: $f"' || echo "Export failed."
+	pause
+}
+
+repair_boot_environment() {
+	echo
+	if [ -z "${running}" ]; then
+		echo "The running slot is unknown; cannot repair the boot environment."
+		pause
+		return
+	fi
+	if _src=$(nexora_env_source); then
+		echo "Current boot environment (${_src}):"
+		"${NEXORA_GRUB_EDITENV}" "${_src}" list 2> /dev/null
+	else
+		echo "grubenv and grubenv.bak are missing or damaged."
+	fi
+	echo
+	echo "This recreates ${NEXORA_GRUBENV} (and grubenv.bak) from defaults:"
+	echo "slot ${running} (the running slot) becomes the confirmed slot and any"
+	echo "pending trial boot is cancelled."
+	confirm "Repair the boot environment?" || return
+	if nexora_env_recreate "${running}"; then
+		rm -f "${NEXORA_PENDING_FILE}"
+		sync
+		echo "Boot environment recreated: nexora_slot=${running}."
+	else
+		echo "Cannot write ${NEXORA_GRUBENV} (is the ESP mounted on ${NEXORA_ESP_MOUNT}?)."
+	fi
 	pause
 }
 
@@ -184,8 +236,9 @@ while :; do
 	echo "  3) Reset UI preferences"
 	echo "  4) Export diagnostics to /home/nexora"
 	echo "  5) Restore the latest backup"
-	echo "  6) Reboot"
-	echo "  7) Shell login"
+	echo "  6) Repair boot environment"
+	echo "  7) Reboot"
+	echo "  8) Shell login"
 	echo
 	printf 'Choice: '
 	if ! read -r choice; then
@@ -198,12 +251,13 @@ while :; do
 	3) reset_preferences ;;
 	4) export_diagnostics ;;
 	5) restore_backup ;;
-	6)
+	6) repair_boot_environment ;;
+	7)
 		sync
 		reboot
 		sleep 30
 		;;
-	7) login ;;
+	8) login ;;
 	*) echo "Unknown choice." ;;
 	esac
 done
