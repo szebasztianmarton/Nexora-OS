@@ -19,6 +19,7 @@ ApplicationWindow {
     required property SystemController system
     required property GameBarController gameBar
     required property UpdateController updates
+    required property NotificationService notifications
 
     width: 1280
     height: 720
@@ -316,7 +317,7 @@ ApplicationWindow {
                 system: window.system
                 updates: window.updates
                 onOpenUpdatePanel: window.openUpdatePanel()
-                onNotice: (message, isError) => toast.show(message, isError)
+                onNotice: (message, isError) => window.notifications.postMessage("system", message, isError)
             }
             DiagnosticsScreen {
                 id: systemScreen
@@ -327,6 +328,7 @@ ApplicationWindow {
                 settings: window.settings
                 system: window.system
                 updates: window.updates
+                notifications: window.notifications
                 onUpdatesRequested: window.openUpdatePanel()
             }
 
@@ -399,6 +401,7 @@ ApplicationWindow {
     }
     Toast {
         id: toast
+        service: window.notifications
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.spacing * 1.5
@@ -409,16 +412,10 @@ ApplicationWindow {
         function onNotice(message, isError) {
             // The automatic scan at start-up is not worth a notice unless it failed.
             if (isError || !startupQuiet.running)
-                toast.show(message, isError)
+                window.notifications.postMessage("library", message, isError)
         }
     }
-    Connections {
-        target: window.app
-        function onStatusMessageChanged() {
-            if (window.app.statusIsError)
-                toast.show(window.app.statusMessage, true)
-        }
-    }
+    // Launch errors (app.statusMessage) reach the notification service in C++ (UiContext).
 
     GameOptionsDialog {
         id: gameOptions

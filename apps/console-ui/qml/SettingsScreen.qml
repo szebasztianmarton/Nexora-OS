@@ -337,6 +337,26 @@ FocusScope {
                 onAccepted: screen.settings.reducedMotion = !screen.settings.reducedMotion
             }
             SettingRow {
+                objectName: "settingNotificationsQuiet"
+                label: "Quiet notifications"
+                description: "Only warnings pop up; everything else goes to the history on the System tab"
+                value: screen.settings.notificationsQuiet ? "On" : "Off"
+                valueColor: screen.settings.notificationsQuiet ? Theme.success : Theme.textMuted
+                adjustable: true
+                onDecrement: screen.settings.notificationsQuiet = !screen.settings.notificationsQuiet
+                onIncrement: screen.settings.notificationsQuiet = !screen.settings.notificationsQuiet
+                onAccepted: screen.settings.notificationsQuiet = !screen.settings.notificationsQuiet
+            }
+            SettingRow {
+                objectName: "settingNotificationTime"
+                label: "Notification time"
+                description: "How long a notice stays on screen (warnings twice as long)"
+                value: screen.settings.notificationSeconds + " s"
+                adjustable: true
+                onDecrement: screen.settings.notificationSeconds = Math.max(2, screen.settings.notificationSeconds - 1)
+                onIncrement: screen.settings.notificationSeconds = Math.min(15, screen.settings.notificationSeconds + 1)
+            }
+            SettingRow {
                 objectName: "settingHints"
                 label: "Show control hints"
                 description: "The bar at the bottom listing the buttons you can press"

@@ -3,6 +3,7 @@
 #include "AppController.h"
 #include "GameBarController.h"
 #include "LibraryController.h"
+#include "NotificationService.h"
 #include "SettingsController.h"
 #include "SystemController.h"
 #include "UpdateController.h"
@@ -62,6 +63,7 @@ public:
     SystemController *system() { return m_systemController.get(); }
     GameBarController *gameBar() { return m_gameBarController.get(); }
     UpdateController *updates() { return m_updateController.get(); }
+    NotificationService *notifications() { return m_notifications.get(); }
 
     // Startup: create the data directories (incl. the update state directory), load
     // settings, open the library, apply preferences, scan if needed.
@@ -71,6 +73,9 @@ public:
     void shutdown();
 
 private:
+    void wireNotifications();
+    void applyNotificationSettings();
+
     shared::DataLayout m_layout;
     shared::Settings m_settings;
     shared::SystemCatalog m_catalog;
@@ -85,6 +90,7 @@ private:
     std::unique_ptr<SystemController> m_systemController;
     std::unique_ptr<GameBarController> m_gameBarController;
     std::unique_ptr<UpdateController> m_updateController;
+    std::unique_ptr<NotificationService> m_notifications;
     input::InputController *m_input;
     QString m_databasePath;
     QString m_updateStateDir;

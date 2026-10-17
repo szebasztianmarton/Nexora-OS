@@ -36,10 +36,6 @@ void AppController::setInputController(input::InputController *input)
     if (m_input) {
         connect(m_input, &input::InputController::statusChanged, this, &AppController::inputChanged);
         connect(m_input, &input::InputController::returnToLauncherRequested, this, &AppController::returnToLauncher);
-        connect(m_input, &input::InputController::deviceDisconnected, this, [this](const QString &name) {
-            if (isBusy())
-                setStatusMessage(QStringLiteral("Controller disconnected: %1").arg(name), true);
-        });
     }
     updateInputSuspension();
     emit inputChanged();

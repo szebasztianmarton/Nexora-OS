@@ -2,7 +2,7 @@
 
 Nexora is meant to be used with a game controller only. This page describes how gamepad input reaches the UI, which controllers are expected to work, how buttons are mapped and remapped, and how to test with real hardware.
 
-**Test status (MVP 4, 0.4.0):** no physical controller has been tested with either backend, on a desktop or on the image. Hotplug and the button layouts of the evdev backend are tested with virtual uinput controllers that reproduce the main driver families (`tst_evdevhotplug`, [Testing without a controller](#testing-without-a-controller)). Everything below is implemented and covered by unit and UI tests on the mapping and navigation logic (`tst_gamepadnavigator`, `tst_buttonmapping`, `tst_inputcontroller`, plus `tst_appcontroller`/`tst_uicontext` for the chord, disconnect notice and remapping, and the QML tests `tst_navigation.qml`, `tst_quickmenu.qml` for controller-only operation with synthesized keys), but the device handling of the evdev and SDL3 backends has only been exercised without devices. The SDL3 backend is compiled and its tests run in the `build-sdl3` CI job. Use the [manual test checklist](#manual-test-checklist) when testing real pads.
+**Test status (MVP 4, 0.4.0):** no physical controller has been tested with either backend, on a desktop or on the image. Hotplug and the button layouts of the evdev backend are tested with virtual uinput controllers that reproduce the main driver families (`tst_evdevhotplug`, [Testing without a controller](#testing-without-a-controller)). Everything below is implemented and covered by unit and UI tests on the mapping and navigation logic (`tst_gamepadnavigator`, `tst_buttonmapping`, `tst_inputcontroller`, plus `tst_appcontroller`/`tst_uicontext` for the chord, connect/disconnect notifications and remapping, and the QML tests `tst_navigation.qml`, `tst_quickmenu.qml` for controller-only operation with synthesized keys), but the device handling of the evdev and SDL3 backends has only been exercised without devices. The SDL3 backend is compiled and its tests run in the `build-sdl3` CI job. Use the [manual test checklist](#manual-test-checklist) when testing real pads.
 
 Code: `apps/console-ui/src/input/`.
 
@@ -208,7 +208,7 @@ On the image the emulator owns the display (EGLFS/KMS), so the quick menu become
 ## Devices and test input
 
 - **Device list:** `InputController.devices` lists each connected pad as `{id, name, backend, connectedAt}`; shown in Settings › Controllers, on the System tab and as a count on Home.
-- **Disconnect notice:** a pad that disappears while an emulator runs produces the notice "Controller disconnected: <name>"; the emulator is not stopped (`tst_appcontroller`). Connect/disconnect events are also logged in `nexora.input`.
+- **Connect/disconnect notices:** every connect and disconnect, on any screen and whether or not a game runs, becomes a notification ("Controller connected: <name>", info; "Controller disconnected: <name>", warning) through the [notification service](notifications.md) (`tst_uicontext`). Repeats within 10 s are counted instead of shown again. A disconnect never stops the emulator (`tst_appcontroller`). Connect/disconnect events are also logged in `nexora.input`.
 - **Test input:** Settings › Controllers › "Test input" opens `InputTestPanel`. In test mode every button and axis event is shown as text (`south pressed`, `LeftX -0.82`) and **not** turned into navigation; holding the button currently mapped to Back (east by default; the panel names it) for 2 s leaves test mode (`tst_inputcontroller`), and Escape closes it from the keyboard. Every other key stays inside the panel (L1/R1, Menu and Search included), and if the panel is hidden from outside it closes and leaves test mode.
 
 ## Keyboard
@@ -253,7 +253,7 @@ Editing a game's title and notes works with the controller through the on-screen
 - The most recent direction press, from any pad, is the one that repeats.
 - The chord counts only when Select and Start are held on the **same** pad.
 - All pads drive the same UI; there are no player slots.
-- On disconnect (evdev read error, SDL `GAMEPAD_REMOVED`) that device's held buttons, directions and chord are dropped immediately, so nothing stays "stuck"; the device list updates and, while a game runs, a notice is shown. Reconnecting is picked up by hotplug.
+- On disconnect (evdev read error, SDL `GAMEPAD_REMOVED`) that device's held buttons, directions and chord are dropped immediately, so nothing stays "stuck"; the device list updates and a "Controller disconnected" notification is posted. Reconnecting is picked up by hotplug.
 
 ## Known limitations
 

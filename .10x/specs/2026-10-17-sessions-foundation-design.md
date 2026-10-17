@@ -14,7 +14,7 @@ Non-goals: packaging RetroArch, several live emulator processes at once, collect
 
 - C++ `nexora::ui::NotificationService` (console-ui), exposed to QML as `notifications`.
 - A notification: id, category (`controller`, `game`, `saveState`, `library`, `storage`, `update`, `system`, `recovery`), severity (`info`, `warning`, `critical`), title/text, dedup key, count, timestamps.
-- Queue: one visible notification at a time; `critical` jumps the queue and stays until dismissed; others auto-hide after `notifications.durationMs` (info) or twice that (warning).
+- Queue: one visible notification at a time; `critical` jumps the queue (a shown info/warning goes back to the front of the queue); each auto-hides after `notifications.durationMs` (info), twice that (warning) or three times that (critical) and stays in the history. (Changed during implementation: a critical that never hides would block the toast for every later event; the history keeps it.)
 - Dedup: an identical key within 10 s increments `count` of the visible/queued entry instead of adding one.
 - History: newest 100 in memory; warnings and criticals are also persisted (newest 50) in `<state>/notifications.json` (atomic, versioned) and reloaded at start.
 - Settings: `notifications.quiet` (bool; info notifications go to history only), `notifications.hiddenCategories` (array; hidden categories go to history only, criticals are never hidden), `notifications.durationMs` (2000-15000, default 3500).

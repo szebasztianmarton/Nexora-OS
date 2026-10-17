@@ -244,7 +244,9 @@ private slots:
         QCOMPARE(app.inputBackend(), QStringLiteral("none"));
     }
 
-    void controllerDisconnectNoticeWhileRunning()
+    // The disconnect notice itself comes from the NotificationService (tst_uicontext); the
+    // running game is not touched.
+    void controllerDisconnectKeepsTheGameRunning()
     {
         QTemporaryDir dir;
         writeConfig(dir, QStringLiteral("long"), QStringLiteral(NEXORA_FAKE_EMULATOR),
@@ -259,12 +261,11 @@ private slots:
 
         QVERIFY(app.launch(QStringLiteral("long")));
         QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("running"), Timeout);
-        QSignalSpy statusSpy(&app, &AppController::statusMessageChanged);
+        QSignalSpy disconnectSpy(&input, &nexora::input::InputController::deviceDisconnected);
         rawBackend->setDevices({}); // simulate the pad going away mid-run
-        QTRY_VERIFY_WITH_TIMEOUT(statusSpy.size() > 0, Timeout);
-        QVERIFY(app.statusMessage().contains(QStringLiteral("Controller disconnected")));
-        QVERIFY(app.statusMessage().contains(QStringLiteral("Test Pad")));
-        QVERIFY(app.statusIsError());
+        QTRY_COMPARE_WITH_TIMEOUT(disconnectSpy.size(), 1, Timeout);
+        QCOMPARE(app.state(), QStringLiteral("running"));
+        QVERIFY(!app.statusIsError());
 
         QVERIFY(app.stop());
         QTRY_COMPARE_WITH_TIMEOUT(app.state(), QStringLiteral("exited"), Timeout);

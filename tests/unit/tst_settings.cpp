@@ -273,6 +273,35 @@ private slots:
         QVERIFY(!s.setValue(Settings::LogLevel, QStringLiteral("trace"), &error));
     }
 
+    void notificationAndSessionKeysValidate()
+    {
+        QTemporaryDir dir;
+        Settings s({{}, dir.filePath(QStringLiteral("user/settings.json"))});
+        QVERIFY(s.load());
+        QCOMPARE(s.boolValue(Settings::NotificationsQuiet), false);
+        QCOMPARE(s.intValue(Settings::NotificationsDurationMs), 3500);
+        QVERIFY(s.stringListValue(Settings::NotificationsHiddenCategories).isEmpty());
+        QCOMPARE(s.intValue(Settings::SessionsMaxCount), 5);
+        QCOMPARE(s.intValue(Settings::SessionsMaxMegabytes), 512);
+        QCOMPARE(s.intValue(Settings::SessionsMaxAgeDays), 30);
+        QVERIFY(s.stringListValue(Settings::SessionsExcludedGames).isEmpty());
+
+        QString error;
+        QVERIFY(s.setValue(Settings::NotificationsHiddenCategories,
+                           QStringList{QStringLiteral("controller"), QStringLiteral("saveState")}, &error));
+        QVERIFY(!s.setValue(Settings::NotificationsHiddenCategories, QStringList{QStringLiteral("ads")}, &error));
+        QVERIFY(s.setValue(Settings::NotificationsDurationMs, 2000));
+        QVERIFY(!s.setValue(Settings::NotificationsDurationMs, 1999, &error));
+        QVERIFY(!s.setValue(Settings::NotificationsDurationMs, 15001, &error));
+        QVERIFY(s.setValue(Settings::SessionsMaxCount, 20));
+        QVERIFY(!s.setValue(Settings::SessionsMaxCount, 0, &error));
+        QVERIFY(!s.setValue(Settings::SessionsMaxMegabytes, 63, &error));
+        QVERIFY(s.setValue(Settings::SessionsMaxAgeDays, 0));
+        QVERIFY(s.setValue(Settings::SessionsExcludedGames, QStringList{QStringLiteral("12")}, &error));
+        QVERIFY(!s.setValue(Settings::SessionsExcludedGames, QStringList{QStringLiteral("012")}, &error));
+        QVERIFY(!s.setValue(Settings::SessionsExcludedGames, QStringList{QStringLiteral("abc")}, &error));
+    }
+
     void defaultForSystemValidatesKeysAndValues()
     {
         QTemporaryDir dir;

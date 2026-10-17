@@ -14,6 +14,8 @@ FocusScope {
     required property SettingsController settings
     required property SystemController system
     required property UpdateController updates
+    // Optional: the notification history section is empty without it (QML tests).
+    property NotificationService notifications
 
     signal updatesRequested()
 
@@ -81,6 +83,21 @@ FocusScope {
                        + (r.exitCode !== undefined && r.exitCode !== null ? " (exit " + r.exitCode + ")" : "")
                        + (r.startupFailure ? " · failed to start" : "")
                        + (r.error ? " · " + r.error : ""))
+        }
+        return lines.join("\n")
+    }
+    // Newest first; earlier runs are marked, repeats show their count.
+    function notificationText() {
+        const items = notifications ? notifications.history : []
+        if (items.length === 0)
+            return "No notifications yet."
+        const lines = []
+        for (let i = 0; i < Math.min(items.length, 15); ++i) {
+            const n = items[i]
+            const when = n.updatedAt ? new Date(n.updatedAt).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""
+            lines.push(when + "  " + n.text + (n.count > 1 ? "  ×" + n.count : "")
+                       + (n.severity !== "info" ? " · " + n.severity : "")
+                       + (n.fromPreviousRun ? " · before the last restart" : ""))
         }
         return lines.join("\n")
     }
@@ -262,6 +279,11 @@ FocusScope {
                     objectName: "systemLaunchHistory"
                     heading: "Launch history"
                     body: screen.historyText()
+                }
+                Section {
+                    objectName: "systemNotifications"
+                    heading: "Notifications"
+                    body: screen.notificationText()
                 }
                 Section {
                     heading: "Diagnostics export"

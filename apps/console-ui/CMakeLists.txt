@@ -75,6 +75,7 @@ qt_add_qml_module(nexora_ui
         src/SystemController.h src/SystemController.cpp
         src/SystemListModel.h src/SystemListModel.cpp
         src/UpdateController.h src/UpdateController.cpp
+        src/NotificationService.h src/NotificationService.cpp
         src/UiContext.h src/UiContext.cpp
 )
 
