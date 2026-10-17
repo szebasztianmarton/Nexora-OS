@@ -141,8 +141,9 @@ collect_system_state() {
 	df -h 2> /dev/null
 }
 
-# Fallback when the console UI cannot export its own (redacted) report:
-# a minimal raw dump of the logs, passed through nexora_mask_secrets.
+# The logs of the failed UI session, passed through nexora_mask_secrets. Always
+# included: the console UI's own export runs in a fresh process and only
+# carries that process's log, not the session that failed.
 collect_raw_logs() {
 	echo
 	echo "== session log (last 100 lines, masked)"
@@ -162,18 +163,16 @@ export_diagnostics() {
 	# personal paths (runs as the user, headless).
 	# shellcheck disable=SC2016 # expanded by the user's shell
 	if su -s /bin/sh "${APP_USER}" -c 'QT_QPA_PLATFORM=offscreen nexora-console-ui --export-diagnostics'; then
-		echo "(console UI report above; boot state below)"
-		raw=0
+		echo "(console UI report above; boot state and masked session logs below)"
 	else
-		echo "The console UI could not export its report; writing a minimal masked dump instead."
-		raw=1
+		echo "The console UI could not export its report; writing boot state and masked logs only."
 	fi
 	# The file is created by the user itself, so a planted symlink in the
 	# user's home cannot redirect a root-owned write.
 	# shellcheck disable=SC2016 # expanded by the user's shell
 	{
 		collect_system_state
-		[ "${raw}" = "0" ] || collect_raw_logs
+		collect_raw_logs
 	} | nexora_mask_secrets | su -s /bin/sh "${APP_USER}" -c 'umask 077
 f=/home/nexora/recovery-diagnostics-$(date +%Y%m%d-%H%M%S).txt
 cat > "$f" && echo "Written: $f"' || echo "Export failed."

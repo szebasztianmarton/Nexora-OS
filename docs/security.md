@@ -131,7 +131,7 @@ A flood of bad requests is throttled (1 s pause after each invalid request in bo
   - the whole value of `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` header lines, and `Bearer <token>` anywhere, become `***`.
 
   This is pattern-based: a secret in a form it does not recognise (for example a bare token with no key name) is not masked. Reports are capped at 512 KiB, written 0600, newest 10 kept (`apps/system/src/DiagnosticReport.cpp`). Tested: `tst_redaction` (incl. the extended key names, command-line flags and headers), `tst_diagnosticreport` (both `security`).
-- The recovery menu's diagnostics export runs the application's redacting export first; its own boot-state file (and the raw-log fallback when the application cannot run) goes through `nexora_mask_secrets` (`nexora-functions`), a `sed` filter for password/token/secret/key/auth/cookie/session-like `k=v`/`k: v` values, URL credentials and bearer tokens, plus `/home/nexora` → `~` ([recovery.md](recovery.md#recovery-menu)). It is coarser than `shared::redact()`.
+- The recovery menu's diagnostics export runs the application's redacting export first; its own boot-state file and the appended tail of the session and UI logs go through `nexora_mask_secrets` (`nexora-functions`), a `sed` filter for password/token/secret/key/auth/cookie/session-like `k=v`/`k: v` values, URL credentials and bearer tokens, plus `/home/nexora` → `~` ([recovery.md](recovery.md#recovery-menu)). It is coarser than `shared::redact()`.
 - `gameDetails()` returns the game path redacted (`apps/console-ui/src/LibraryController.cpp`, tested in `tst_uicontext`).
 
 ### Root helper hardening

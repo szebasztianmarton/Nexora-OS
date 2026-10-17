@@ -185,11 +185,10 @@ public:
 
     // Reads stagingDir/last-update.json, written by nexora-bootok after a trial boot
     // ({"format","result","previousBuildId","newBuildId","previousVersion","newVersion",
-    // "slot"}). If its newBuildId matches the running build, moves to Completed and removes
-    // the file, so this is reported only once. If the helper reported result "rolled-back",
-    // moves to RecoveryRequired with a message and leaves the file in place until
-    // acknowledgeLastResult(). A no-op otherwise (including a missing file). Only has an
-    // effect while Idle. UiContext calls it once at startup.
+    // "slot"}). If its newBuildId matches the running build, moves to Completed; if the helper
+    // reported result "rolled-back", moves to RecoveryRequired with a message. Either way the
+    // file stays in place until acknowledgeLastResult(), so a restart does not lose it. A no-op otherwise (including a
+    // missing file). Only has an effect while Idle. UiContext calls it once at startup.
     void loadPersistedState();
 
     // Completed/RecoveryRequired -> Idle: the user has seen the result. Removes
