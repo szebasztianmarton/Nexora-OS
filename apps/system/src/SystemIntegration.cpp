@@ -172,9 +172,15 @@ UpdateInfo SystemIntegration::updateInfo() const
     UpdateInfo info;
     info.installedVersion = keyValue(m_env.nexoraReleaseFile, QStringLiteral("NEXORA_VERSION"));
     info.channel = keyValue(m_env.nexoraReleaseFile, QStringLiteral("NEXORA_UPDATE_CHANNEL"));
-    info.message = platform() == Platform::Embedded
-        ? QStringLiteral("In-place system updates are not implemented yet; write a newer image to update")
-        : QStringLiteral("Updates are managed by the host system (rebuild or reinstall Nexora)");
+    if (platform() == Platform::Embedded) {
+        info.supported = true;
+        info.message = supports(Capability::Update)
+            ? QStringLiteral("Signed update bundles from a USB drive are installed to the inactive system slot "
+                             "(Settings > Software update)")
+            : QStringLiteral("Signed update bundles are installed by the update helper, which is not running");
+    } else {
+        info.message = QStringLiteral("Updates are managed by the host system (rebuild or reinstall Nexora)");
+    }
     return info;
 }
 
@@ -214,7 +220,13 @@ bool EmbeddedSystemIntegration::supports(Capability capability) const
         return fifo.exists() && fifo.isWritable();
     }
     case Capability::Volume: return QFileInfo(m_env.mixerProgram).isExecutable();
-    case Capability::Update: return false; // no update mechanism yet (see updateInfo())
+    case Capability::Update: {
+        // The root-run nexora-updated helper owns this FIFO (mode 0620, group nexora).
+        struct ::stat st
+        { };
+        return ::stat(QFile::encodeName(m_env.updateRequestFifo).constData(), &st) == 0 && S_ISFIFO(st.st_mode)
+            && QFileInfo(m_env.updateRequestFifo).isWritable();
+    }
     }
     return false;
 }

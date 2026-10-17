@@ -11,6 +11,8 @@
 //   --exit-code N          exit with status N (default 0)
 //   --print-cwd            print "cwd: <dir>" after "ready"
 //   --echo-args            print "arg: <value>" for every argument after "ready"
+//   --spawn-child          fork a child (a "grandchild" of the launcher) that inherits the
+//                          signal setup and sleeps for --sleep-ms; prints "child: <pid>"
 // Arguments that are not options (e.g. a game file path) are accepted and ignored.
 // Unknown options (anything else starting with "--") exit with status 64.
 
@@ -76,6 +78,7 @@ int main(int argc, char **argv)
     bool ignoreSigterm = false;
     bool printCwd = false;
     bool echoArgs = false;
+    bool spawnChild = false;
     std::string crashMode;
     std::vector<std::string> stdoutLines;
     std::vector<std::string> stderrLines;
@@ -103,6 +106,8 @@ int main(int argc, char **argv)
             printCwd = true;
         else if (arg == "--echo-args")
             echoArgs = true;
+        else if (arg == "--spawn-child")
+            spawnChild = true;
         else if (arg == "--crash") {
             crashMode = value();
             if (crashMode != "segv" && crashMode != "abort")
@@ -126,6 +131,16 @@ int main(int argc, char **argv)
             std::fprintf(stdout, "arg: %s\n", argv[i]);
     }
     std::fflush(stdout);
+    if (spawnChild) {
+        const pid_t child = ::fork();
+        if (child == 0) {
+            sleepMs(sleepForMs);
+            std::_Exit(0);
+        }
+        if (child > 0)
+            std::fprintf(stdout, "child: %ld\n", long(child));
+        std::fflush(stdout);
+    }
 
     for (const auto &line : stdoutLines)
         std::fprintf(stdout, "%s\n", line.c_str());

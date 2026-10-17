@@ -64,6 +64,7 @@ Rectangle {
         Text {
             width: parent.width
             text: row.label
+            textFormat: Text.PlainText // labels can carry untrusted text (paths, update bundles)
             color: row.labelColor
             font.pixelSize: Theme.fontBody
             font.bold: row.activeFocus
@@ -73,6 +74,7 @@ Rectangle {
             width: parent.width
             visible: text.length > 0
             text: row.armed ? row.confirmText : row.description
+            textFormat: Text.PlainText
             color: row.armed ? Theme.danger : Theme.textMuted
             font.pixelSize: Theme.fontSmall
             wrapMode: Text.Wrap
@@ -102,6 +104,7 @@ Rectangle {
             Text {
                 objectName: "value"
                 text: row.actionText.length > 0 ? row.actionText : row.value
+                textFormat: Text.PlainText
                 color: row.actionText.length > 0 ? (row.activeFocus ? Theme.accent : Theme.textMuted) : row.valueColor
                 font.pixelSize: Theme.fontBody
                 font.bold: row.actionText.length === 0
