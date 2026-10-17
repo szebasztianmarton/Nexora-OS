@@ -12,6 +12,7 @@
 //   homeSystemsRow, homeEmptyState                                                (Home)
 //   searchField, filterChips, filter_all|favorites|recent|missing, viewToggle, systemChips,
 //   systemChip_<id>, scanProgress, cancelScanButton, sortSelector, gameGrid,
+//   gameTileTitle (every GameTile's title text, Home rows and grids alike),
 //   gamesLoading, gamesEmpty, gamesEmptyAction, scanSummary, resultCount         (Games)
 //   systemGrid, systemCard_<id>, systemsEmpty, systemsEmptyAction                (Systems)
 //   favoritesScreenGrid, favoritesScreenEmpty, recentScreenGrid, recentScreenEmpty
@@ -1776,6 +1777,58 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(tabBar->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "settingTheme")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        CHECK_NO_WARNINGS();
+    }
+    // A file name that looks like HTML is shown literally everywhere its title appears
+    // (tiles on Home and in the Games grid, the details heading), never styled or with an
+    // image loaded. "/" cannot be part of a file name, so the markup has no closing tags.
+    void markupInFileNameIsShownLiterally_data() { addWindowSizeRows(); }
+    void markupInFileNameIsShownLiterally()
+    {
+        QFETCH(QSize, windowSize);
+        const QString title = QStringLiteral("<b>Bold <font color=red size=40>Red <img src=cover.png>");
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        touch(games, title + QStringLiteral(".rom"));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+
+        const auto checkTiles = [&ui, &title] {
+            QList<QQuickItem *> titles;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                !(titles = visibleWithPrefix(ui.window->contentItem(), QStringLiteral("gameTileTitle"))).isEmpty(),
+                Timeout);
+            for (QQuickItem *text : std::as_const(titles)) {
+                QCOMPARE(text->property("text").toString(), title);
+                QCOMPARE(text->property("textFormat").toInt(), int(Qt::PlainText));
+            }
+        };
+        QCOMPARE(currentTab(ui), int(Home));
+        checkTiles();
+        if (QTest::currentTestFailed())
+            return;
+        goTo(ui, Games);
+        auto *grid = find(ui, "gameGrid");
+        QTRY_COMPARE_WITH_TIMEOUT(grid->property("count").toInt(), 1, Timeout);
+        checkTiles();
+        if (QTest::currentTestFailed())
+            return;
+
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY_WITH_TIMEOUT(find(ui, "gameDetails")->isVisible(), Timeout);
+        auto *heading = find(ui, "gameDetailsTitle");
+        QCOMPARE(heading->property("text").toString(), title);
+        QCOMPARE(heading->property("textFormat").toInt(), int(Qt::PlainText));
+        shot(ui, "markup-title");
 
         CHECK_NO_WARNINGS();
     }

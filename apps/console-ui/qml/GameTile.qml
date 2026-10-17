@@ -168,6 +168,7 @@ Item {
             spacing: 2
 
             Text {
+                objectName: "gameTileTitle"
                 textFormat: Text.PlainText
                 width: parent.width
                 text: tile.title

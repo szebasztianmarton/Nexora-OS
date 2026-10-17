@@ -55,7 +55,7 @@ File names are attacker-controlled text: titles are derived from them, and they 
 - Paths are stored canonicalised; the game path is passed to the emulator as one `QProcess` argument (`apps/emulator-manager/src/EmulatorManager.cpp`), never through a shell.
 - User-edited metadata (title ≤ 200 characters, notes ≤ 2000, no control characters except newline in notes) is validated in `GameDatabase::setMetadata()` (`apps/game-library/src/GameDatabase.cpp`).
 - The launch history stores the game **title** only, never its path (`apps/emulator-manager/src/LaunchHistory.cpp`; tested by `tst_launchhistory`).
-- Every QML `Text` item renders plain text (`textFormat: Text.PlainText`), so a file name, edited title, note, release note or update version that looks like HTML is shown literally, never as styled text or a link (fixed during the MVP 4 verification pass; tested for game titles and notes in `tst_gamedetails.qml::test_markupInTitleIsShownLiterally` and for settings rows in `tst_settings_ui.qml`).
+- Every QML `Text` item renders plain text (`textFormat: Text.PlainText`), so a file name, edited title, note, release note or update version that looks like HTML is shown literally, never as styled text or a link (fixed during the MVP 4 verification pass; tested for a scanned file name with HTML tags on the Home and Games tiles and the details heading in `tst_qmlsmoke::markupInFileNameIsShownLiterally`, for edited titles and notes in `tst_gamedetails.qml::test_markupInTitleIsShownLiterally` and for settings rows in `tst_settings_ui.qml`).
 
 ### 3. Malicious emulator definition file
 
