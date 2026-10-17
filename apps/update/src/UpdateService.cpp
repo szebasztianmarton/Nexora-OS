@@ -463,7 +463,8 @@ void UpdateService::loadPersistedState()
     if (!newBuildId.isEmpty() && newBuildId == m_env.currentBuildId) {
         setState(UpdateState::Completed, UpdateError::None,
                  QStringLiteral("updated from %1 to %2").arg(previousName, newName));
-        QFile::remove(path); // reported once
+        // The record stays until acknowledgeLastResult(), so a restart before the
+        // user has seen the message does not lose it.
     }
 }
 

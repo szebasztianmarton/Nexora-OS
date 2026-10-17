@@ -555,7 +555,13 @@ private slots:
         UpdateService service(env);
         service.loadPersistedState();
         QCOMPARE(service.state(), UpdateState::Completed);
-        QVERIFY(!QFileInfo::exists(path)); // reported once
+        // Kept until the user acknowledges it, so a restart before then does not lose it.
+        QVERIFY(QFileInfo::exists(path));
+        UpdateService afterRestart(env);
+        afterRestart.loadPersistedState();
+        QCOMPARE(afterRestart.state(), UpdateState::Completed);
+        QVERIFY(afterRestart.acknowledgeLastResult());
+        QVERIFY(!QFileInfo::exists(path));
     }
 
     void loadPersistedStateDetectsRollback()
