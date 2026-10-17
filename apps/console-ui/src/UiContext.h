@@ -63,7 +63,8 @@ public:
     GameBarController *gameBar() { return m_gameBarController.get(); }
     UpdateController *updates() { return m_updateController.get(); }
 
-    // Startup: load settings, open the library, apply preferences, scan if needed.
+    // Startup: create the data directories (incl. the update state directory), load
+    // settings, open the library, apply preferences, scan if needed.
     void start();
     // Shutdown: stop the emulator and wait for a running scan. Settings need no flush: every
     // change is saved when it is made.
@@ -86,6 +87,7 @@ private:
     std::unique_ptr<UpdateController> m_updateController;
     input::InputController *m_input;
     QString m_databasePath;
+    QString m_updateStateDir;
 };
 
 } // namespace nexora::ui

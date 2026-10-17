@@ -11,20 +11,34 @@
 # The line must match ^install (/[A-Za-z0-9._/ -]{1,255})$ and must not
 # contain "..". Everything else is rejected. The requester is not trusted:
 #
+#  0. nothing is installed while a trial boot is pending (nexora_try set,
+#     or an update record exists and the running slot is not the
+#     confirmed one): the running slot is then unconfirmed and the other
+#     slot is the only known-good one;
 #  1. manifest.json and manifest.json.sig are copied into a root-only work
 #     directory (size-limited), so the manifest cannot change after it has
 #     been verified;
-#  2. that copy is verified with nexora-update-tool against the public keys
-#     in /usr/share/nexora/update-keys (signature, product, board, version
-#     is newer, minimum version, image size and SHA-256);
+#  2. the image is opened ONCE (file descriptor 4, after checking that it
+#     is a regular file and not a symlink, and that the open descriptor is
+#     a regular file); the verifier and the copy read it through
+#     /proc/self/fd/4, so later renames or swaps in the user's directory
+#     do not matter. The manifest copy and the image are verified with
+#     nexora-update-tool against the public keys in
+#     /usr/share/nexora/update-keys (signature, product, board, version is
+#     newer, minimum version, image size and SHA-256);
 #  3. the image is written to the INACTIVE root slot (the slot the system
 #     did not boot from), after disarming any pending trial boot;
 #  4. the bytes that landed on the partition are hashed again and compared
-#     with the signed SHA-256 (this also closes the window between step 2
-#     and the copy in which the bundle could have been swapped);
+#     with the signed SHA-256 (defence in depth against any swap or short
+#     write);
 #  5. only then a GRUB trial boot is armed: nexora_try=<slot>
 #     nexora_tries=3 in grubenv. nexora-bootok confirms the slot after a
 #     healthy boot; otherwise GRUB falls back to the previous slot.
+#
+# Every read of a requester-controlled file is bounded in time (a FIFO or
+# a stalled file system must not block the daemon): the open of the image
+# by OPEN_TIMEOUT, the manifest copies by READ_TIMEOUT, verification,
+# writing and re-hashing by their own limits below.
 #
 # Nothing from the bundle is ever executed, sourced or evaluated.
 # Status for the requester: /run/nexora/update-status (root:nexora 0640)
@@ -58,6 +72,12 @@ SLOT_A_DEV=""
 SLOT_B_DEV=""
 MAX_LINE=300
 MAX_MANIFEST=65536
+# Seconds; see "bounded in time" above.
+OPEN_TIMEOUT=10
+READ_TIMEOUT=10
+VERIFY_TIMEOUT=900
+WRITE_TIMEOUT=1800
+CHECK_TIMEOUT=900
 TEST_MODE=0
 
 if [ "${NEXORA_UPDATED_TEST:-0}" = "1" ]; then
@@ -118,11 +138,20 @@ fail() {
 	return 1
 }
 
-# copy_limited SRC DST MAX: copy a regular file of at most MAX bytes.
+# regular_file PATH: PATH is a regular file and not a symlink.
+regular_file() {
+	[ -f "$1" ] && [ ! -L "$1" ]
+}
+
+# copy_limited SRC DST MAX: copy a regular file of at most MAX bytes. The
+# check and the read are not atomic, so the read is also bounded in time
+# (a FIFO swapped in after the check is killed after READ_TIMEOUT); only
+# the private copy is used afterwards.
 copy_limited() {
-	[ -f "$1" ] || return 1
-	head -c $(($3 + 1)) "$1" > "$2" || return 1
-	[ "$(wc -c < "$2")" -le "$3" ]
+	regular_file "$1" || return 1
+	nexora_run_bounded "${READ_TIMEOUT}" head -c $(($3 + 1)) "$1" > "$2" ||
+		return 1
+	regular_file "$2" && [ "$(wc -c < "$2")" -le "$3" ]
 }
 
 # copy_exact SRC DST SIZE: write the first SIZE bytes of SRC over the start
@@ -132,13 +161,14 @@ copy_exact() {
 	_full=$(($3 / _mib))
 	_rest=$(($3 % _mib))
 	if [ "${_full}" -gt 0 ]; then
-		dd if="$1" of="$2" bs="${_mib}" count="${_full}" \
-			conv=notrunc,fsync 2> /dev/null || return 1
+		nexora_run_bounded "${WRITE_TIMEOUT}" dd if="$1" of="$2" \
+			bs="${_mib}" count="${_full}" conv=notrunc,fsync \
+			2> /dev/null || return 1
 	fi
 	if [ "${_rest}" -gt 0 ]; then
-		dd if="$1" of="$2" bs=1 skip=$((_full * _mib)) \
-			seek=$((_full * _mib)) count="${_rest}" \
-			conv=notrunc,fsync 2> /dev/null || return 1
+		nexora_run_bounded "${WRITE_TIMEOUT}" dd if="$1" of="$2" bs=1 \
+			skip=$((_full * _mib)) seek=$((_full * _mib)) \
+			count="${_rest}" conv=notrunc,fsync 2> /dev/null || return 1
 	fi
 	sync
 }
@@ -170,8 +200,17 @@ install_bundle() {
 	target=$(nexora_other_slot "${running}")
 	write_status "installing ${target}"
 
-	[ -f "${NEXORA_GRUBENV}" ] ||
-		{ fail "boot environment (grubenv) not found"; return 1; }
+	nexora_env_source > /dev/null ||
+		{ fail "boot environment (grubenv) not found or damaged"; return 1; }
+
+	# 0. Never overwrite the only known-good slot during a trial boot.
+	confirmed=$(nexora_env_get nexora_slot)
+	if [ -n "$(nexora_env_get nexora_try)" ] ||
+		{ [ -e "${NEXORA_PENDING_FILE}" ] && [ "${confirmed}" != "${running}" ]; }; then
+		fail "trial boot pending; restart to confirm or roll back first"
+		return 1
+	fi
+
 	[ -d "${bundle}" ] || { fail "bundle directory not found"; return 1; }
 
 	# 1. Private copy of the manifest and its signature.
@@ -184,9 +223,9 @@ install_bundle() {
 		"${WORK_DIR}/manifest.json.sig" 64 ||
 		{ fail "cannot read manifest.json.sig"; return 1; }
 
-	# The image stays in the bundle; the tool reads it through a symlink.
-	# Its name is untrusted until the tool has verified the manifest, so
-	# it is restricted to the manifest's own character set here.
+	# The image stays in the bundle. Its name is untrusted until the tool
+	# has verified the manifest, so it is restricted to the manifest's own
+	# character set here.
 	image_name=$(manifest_field \
 		'"file"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9._-]\{1,128\}\)"')
 	case "${image_name}" in
@@ -195,7 +234,28 @@ install_bundle() {
 		return 1
 		;;
 	esac
-	ln -s "${bundle}/${image_name}" "${WORK_DIR}/${image_name}" ||
+	image="${bundle}/${image_name}"
+	regular_file "${image}" ||
+		{ fail "image is not a regular file"; return 1; }
+	# Open it once. Opening a FIFO swapped in after the check would block,
+	# so a watchdog kills this (sub)shell if the open takes too long
+	# (handle_request reports that).
+	read -r self _ < /proc/self/stat
+	(
+		sleep "${OPEN_TIMEOUT}"
+		kill -TERM "${self}"
+	) > /dev/null 2>&1 &
+	opendog=$!
+	exec 4< "${image}"
+	kill "${opendog}" 2> /dev/null
+	wait "${opendog}" 2> /dev/null
+	# /proc/self/fd/4 resolves to the open file itself.
+	if ! regular_file "${image}" || [ ! -f /proc/self/fd/4 ]; then
+		fail "image is not a regular file"
+		return 1
+	fi
+	# The verifier and dd read the image through the inherited descriptor.
+	ln -s /proc/self/fd/4 "${WORK_DIR}/${image_name}" ||
 		{ fail "cannot reference the image"; return 1; }
 
 	# 2. Verify (as root, with the image's own keys).
@@ -206,7 +266,8 @@ install_bundle() {
 		return 1
 		;;
 	esac
-	result=$("${UPDATE_TOOL}" verify --keys "${KEYS_DIR}" \
+	result=$(nexora_run_bounded "${VERIFY_TIMEOUT}" \
+		"${UPDATE_TOOL}" verify --keys "${KEYS_DIR}" \
 		--bundle "${WORK_DIR}" --current-version "${current_version}" \
 		--board "${BOARD}" 2> /dev/null)
 	status=$?
@@ -248,8 +309,8 @@ install_bundle() {
 	fi
 
 	# Never leave a trial boot pointing at a slot that is being rewritten,
-	# and make the running slot the fallback if it was booted manually.
-	confirmed=$(nexora_env_get nexora_slot)
+	# and make the running slot the fallback if it was booted manually
+	# (no trial pending, checked in step 0).
 	if [ "${confirmed}" != "${running}" ]; then
 		nexora_env_set "nexora_slot=${running}" ||
 			{ fail "cannot update grubenv"; return 1; }
@@ -259,7 +320,7 @@ install_bundle() {
 	rm -f "${NEXORA_PENDING_FILE}"
 
 	log notice "writing ${new_version} (${size} bytes) to slot ${target} (${device})"
-	copy_exact "${WORK_DIR}/${image_name}" "${device}" "${size}" ||
+	copy_exact /proc/self/fd/4 "${device}" "${size}" ||
 		{ fail "writing slot ${target} failed"; return 1; }
 
 	# 4. Re-hash what is on the partition (from the medium, not the page
@@ -267,7 +328,8 @@ install_bundle() {
 	if [ -b "${device}" ]; then
 		echo 3 > /proc/sys/vm/drop_caches
 	fi
-	written=$(head -c "${size}" "${device}" | sha256sum | cut -d ' ' -f 1)
+	written=$(nexora_run_bounded "${CHECK_TIMEOUT}" head -c "${size}" "${device}" |
+		sha256sum | cut -d ' ' -f 1)
 	if [ "${written}" != "${sha256}" ]; then
 		fail "slot ${target} does not match the signed image after writing"
 		return 1
@@ -317,7 +379,18 @@ handle_request() {
 		return 1
 		;;
 	esac
-	install_bundle "${path}"
+	# In a subshell: the image descriptor and the open watchdog stay local
+	# to one request, and the request FIFO (fd 3) is not passed on to the
+	# verifier or dd.
+	(
+		exec 3>&-
+		install_bundle "${path}"
+	)
+	_rc=$?
+	if [ "${_rc}" -gt 128 ]; then
+		fail "the image could not be opened in time"
+	fi
+	[ "${_rc}" -eq 0 ]
 }
 
 mkdir -p "${RUN_DIR}"

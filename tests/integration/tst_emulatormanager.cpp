@@ -4,9 +4,13 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <csignal>
+#include <sys/types.h>
 
 using namespace nexora::emulator;
 using nexora::shared::EmulatorConfig;
@@ -576,6 +580,70 @@ private slots:
         QVERIFY(manager.lastOutcome().stoppedByRequest);
         QVERIFY(!manager.isPaused());
         QCOMPARE(paused.last().at(0).toBool(), false);
+    }
+
+    void stopDuringStartingIsFast()
+    {
+        EmulatorManager manager;
+        manager.setStopTimeout(5000ms);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QCOMPARE(manager.state(), ProcessState::Starting);
+        QElapsedTimer clock;
+        clock.start();
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QVERIFY2(clock.elapsed() < 2500, qPrintable(QString::number(clock.elapsed())));
+        QVERIFY(manager.lastOutcome().stoppedByRequest);
+        QVERIFY(!manager.lastOutcome().killed);
+    }
+
+    void stopTerminatesGrandchildren_data()
+    {
+        QTest::addColumn<bool>("ignoreSigterm");
+        QTest::addColumn<bool>("pauseFirst");
+        QTest::newRow("SIGTERM") << false << false;
+        QTest::newRow("SIGKILL escalation") << true << false;
+        QTest::newRow("while paused") << false << true;
+    }
+
+    void stopTerminatesGrandchildren()
+    {
+        QFETCH(bool, ignoreSigterm);
+        QFETCH(bool, pauseFirst);
+        QStringList args{QStringLiteral("--spawn-child"), QStringLiteral("--sleep-ms"), QStringLiteral("30000")};
+        if (ignoreSigterm)
+            args.prepend(QStringLiteral("--ignore-sigterm"));
+        EmulatorConfig config = fake(args);
+        config.pausable = true;
+        EmulatorManager manager;
+        manager.setStopTimeout(500ms);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QVERIFY(manager.launch(config).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("child: ")), Timeout);
+        const QString out = manager.capturedStdout();
+        const qsizetype at = out.indexOf(QStringLiteral("child: ")) + 7;
+        const qint64 child = out.mid(at, out.indexOf(u'\n', at) - at).toLongLong();
+        QVERIFY(child > 0);
+        auto alive = [child] {
+            const QChar s = procState(child);
+            return !s.isNull() && s != u'Z' && s != u'X';
+        };
+        // Never leak a sleeper into the CI host, even when a check below fails.
+        const auto reap = qScopeGuard([&] {
+            if (alive())
+                ::kill(pid_t(child), SIGKILL);
+        });
+        QVERIFY(alive());
+        if (pauseFirst) {
+            QVERIFY(manager.pause());
+            QTRY_COMPARE_WITH_TIMEOUT(procState(child), u'T', Timeout); // the whole group stops
+        }
+
+        QVERIFY(manager.stop());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+        QCOMPARE(manager.lastOutcome().killed, ignoreSigterm);
+        QTRY_VERIFY_WITH_TIMEOUT(!alive(), 3000);
     }
 
     void duplicateLaunchKeepsPid()

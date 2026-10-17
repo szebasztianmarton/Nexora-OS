@@ -2,7 +2,7 @@
 
 This document describes the `BR2_EXTERNAL` tree in [`buildroot-external/`](../buildroot-external) that turns the Nexora source tree into a bootable x86-64 disk image: Linux + BusyBox init + Mesa + Qt 6 (EGLFS/KMS) + `nexora-console-ui`.
 
-> **Status (2026-10-11):** the configuration is validated (Kconfig symbol survival, kernel fragment, `check-package`), **all package sources download and pass their hash checks** (`make source`), and a full build compiled the first 75 packages (toolchain, host tools, host and target LLVM 21.1.8, eudev, ALSA, fonts, libdrm, linux-firmware, …) without an error before it was stopped by a 2-hour session time limit while building target Clang. Qt 6, Mesa, the kernel, GRUB, the `nexora-os` package and the disk image have **not** been built yet, so **no image exists** and nothing has been booted, in QEMU or on hardware. See [What was validated](#what-was-validated).
+> **Status (MVP 4, 2026-10-16):** the tree now builds an **A/B image**: an EFI system partition with GRUB and a boot-counting `grub.cfg`, two root slots that each carry their own kernel, and a persistent data partition for `/home`, plus the root update helper, boot confirmation and a recovery menu ([update-system.md](update-system.md), [recovery.md](recovery.md)). **This A/B image has not been built or booted yet.** <!-- TASK12-RESULT: replace with the build result (date, duration, disk.img size) and the QEMU boot result from scripts/image/qemu-boot-test.sh --> What has been checked: the shell helpers against scratch files (`test_update_helper`), `grub.cfg` with `grub-script-check`, all image scripts with `shellcheck -s sh`, and (before MVP 4) the configuration checks listed under [What was validated](#what-was-validated). An earlier single-root image (MVP 2/3) was reported built and booted in QEMU in commit `73a4df0`; that does not cover the A/B layout.
 
 ## Contents
 
@@ -41,20 +41,27 @@ buildroot-external/
 │   ├── linux.fragment            kernel options on top of x86_64_defconfig
 │   ├── patches/linux/linux.hash  hash of the custom kernel tarball
 │   ├── users.table               the "nexora" user
-│   ├── grub.cfg                  GRUB2 (x86_64-efi) menu
-│   ├── genimage.cfg              GPT disk image layout
-│   ├── post-build.sh             installs grub.cfg, adds the tty2 recovery getty
-│   ├── post-image.sh             fills in the root UUID, runs genimage
+│   ├── grub.cfg                  GRUB2 (x86_64-efi): A/B slot selection with boot counting
+│   ├── genimage.cfg              GPT layout: ESP, rootA, rootB, data
+│   ├── post-build.sh             installs grub.cfg, fills /etc/nexora-release, adds the tty2 getty
+│   ├── post-image.sh             initial grubenv, empty data.ext4, runs genimage
+│   ├── update-keys/              README + .gitignore only; release public keys (*.pem) go here
 │   └── rootfs-overlay/
-│       ├── etc/init.d/S80nexora-powerd
-│       ├── etc/init.d/S90nexora
-│       ├── etc/default/nexora    optional settings for S90nexora
-│       ├── etc/nexora-release
+│       ├── etc/fstab                         documents the ESP and data mounts (noauto)
+│       ├── etc/init.d/S01nexora-data         mounts ESP (/boot/efi) and data (/home), bounded
+│       ├── etc/init.d/S80nexora-powerd       power-request daemon
+│       ├── etc/init.d/S85nexora-updated      update install daemon
+│       ├── etc/init.d/S90nexora              console UI supervisor or recovery menu
+│       ├── etc/init.d/S99nexora-bootok       trial-boot confirmation
+│       ├── etc/default/nexora                optional settings for the scripts
+│       ├── etc/nexora-release                version, build id, board (filled by post-build.sh)
 │       ├── etc/udev/rules.d/60-nexora.rules
-│       └── usr/libexec/nexora/{nexora-session,nexora-powerd}
-└── scripts/
-    ├── check-defconfig.sh        defconfig symbol-survival check
-    └── check-kernel-fragment.sh  kernel fragment survival check
+│       └── usr/libexec/nexora/{nexora-session,nexora-powerd,nexora-updated,nexora-bootok,
+│                               nexora-recovery,nexora-functions}
+├── scripts/
+│   ├── check-defconfig.sh        defconfig symbol-survival check
+│   └── check-kernel-fragment.sh  kernel fragment survival check
+└── tests/test-update-helper.sh   host test of nexora-updated / nexora-bootok (CTest test_update_helper)
 ```
 
 ### The `nexora-os` package
@@ -63,7 +70,8 @@ buildroot-external/
 - CMake options: `-DBUILD_TESTING=OFF -DNEXORA_BUILD_FAKE_EMULATOR=OFF -DNEXORA_WITH_SDL3=OFF -DNEXORA_WARNINGS_AS_ERRORS=OFF -DQT_HOST_PATH=$(HOST_DIR)`. With testing and the fake emulator off, the top-level `CMakeLists.txt` skips `tests/` and the generated development configurations, and Qt Test is not required.
 - `NEXORA_OS_SUPPORTS_IN_SOURCE_BUILD = NO` because the project rejects in-source builds.
 - Selects Qt6 `qt6base` GUI + SQL + SQLite plugin (the game library uses `Qt6::Sql`/`QSQLITE`) and `qt6declarative` Quick (which also provides QuickControls2). Depends on `BR2_PACKAGE_QT6` and GCC ≥ 10 (C++20).
-- Installs what the CMake install rules install: `/usr/bin/nexora-console-ui` and `/usr/share/nexora/emulators/example.json` (the default config directory resolved from `<bindir>/../share/nexora/emulators`). No extra install hooks.
+- Depends on OpenSSL (Ed25519/SHA-256 for updates). The build id is taken from the source tree with `git describe --always --dirty` and passed as `-DNEXORA_BUILD_ID` (the rsynced copy has no `.git`).
+- Installs what the CMake install rules install: `/usr/bin/nexora-console-ui`, `/usr/bin/nexora-update-tool`, `/usr/share/nexora/emulators/example.json` (the default config directory resolved from `<bindir>/../share/nexora/emulators`), `/usr/share/nexora/systems.json` and `/usr/share/nexora/build-info` (version, build id, board, used by `post-build.sh` for `/etc/nexora-release`). A post-install hook copies every `board/nexora-x86_64/update-keys/*.pem` to `/usr/share/nexora/update-keys/`; with no key the image refuses all updates.
 - License: `NEXORA_OS_LICENSE = Unknown (licensing decision pending)`; there is no license file yet, so `make legal-info` will warn for this package.
 
 ## Building
@@ -87,7 +95,18 @@ make -C ~/br/buildroot BR2_EXTERNAL=$PWD/buildroot-external O=$HOME/br/out nexor
 make -C ~/br/buildroot O=$HOME/br/out
 ```
 
-Result: `~/br/out/images/disk.img` (GPT: 64 MiB EFI system partition with GRUB2 and the kernel, ext4 root of 2 GiB), plus `bzImage`, `rootfs.ext2` and `efi-part/`.
+Or, equivalently, `scripts/image/build-image.sh` (clones the pinned tag into `~/nexora-br/buildroot`, output in `~/nexora-br/out`; extra arguments are passed to `make`, e.g. `nexora-os-rebuild all`).
+
+Result: `images/disk.img`, GPT, about 5.2 GiB:
+
+| # | GPT name | Size | Content |
+| --- | --- | --- | --- |
+| 1 | `nexora-esp` | 64 MiB vfat | `EFI/BOOT/bootx64.efi` (GRUB), `grub.cfg`, `grubenv` (initially `nexora_slot=A`, no trial); **no kernel** |
+| 2 | `nexora-rootA` | 2048 MiB ext4 | root filesystem, kernel at `/boot/bzImage` |
+| 3 | `nexora-rootB` | 2048 MiB ext4 | the same root filesystem image (genimage writes `rootfs.ext4` twice) |
+| 4 | `nexora-data` | 1024 MiB ext4 | empty, label `nexora-data`, fixed filesystem UUID; mounted on `/home` |
+
+Partition UUIDs are fixed constants in `genimage.cfg`; `grub.cfg` passes `root=PARTUUID=<slot UUID>`. The data filesystem is not resized to fill a larger disk. Also produced: `bzImage`, `rootfs.ext4` (the update-bundle image), `efi-part/`, `data.ext4`.
 
 After changing the application sources, rebuild only the package and the image:
 
@@ -117,6 +136,10 @@ buildroot-external/scripts/check-kernel-fragment.sh ~/br/out
 
 The image boots through UEFI only, so QEMU needs OVMF firmware (Ubuntu/Debian package `ovmf`; file names differ between distributions).
 
+Automated check: `scripts/image/qemu-boot-test.sh [disk.img]` boots a temporary copy headless (`virtio-vga`, no network, KVM when available), captures the serial console to `qemu-serial.log` and prints PASS when `Starting nexora: OK` appears within `NEXORA_QEMU_TIMEOUT` seconds (default 300), then powers the VM off through the QEMU monitor (`socat` needed for that step). It checks only that the UI session was started by init, not that the UI rendered. Result for the A/B image: **not yet run** <!-- TASK12-RESULT -->.
+
+Interactive runs:
+
 With virgl (3D acceleration through the host GPU; needs a host OpenGL display such as GTK or SDL):
 
 ```sh
@@ -132,7 +155,7 @@ qemu-system-x86_64 \
     -serial mon:stdio
 ```
 
-Without host GL (Mesa then renders with llvmpipe on top of the KMS device): replace `-device virtio-vga-gl -display gtk,gl=on` with `-device virtio-vga -display gtk` (virtio-gpu 2D) or `-vga std` (bochs-drm). Without KVM, drop `accel=kvm` and `-cpu host` (very slow). Use `-audiodev alsa,...` or `-audiodev none,...` if PulseAudio/PipeWire-Pulse is not available.
+Without host GL (Mesa then renders with llvmpipe on top of the KMS device): replace `-device virtio-vga-gl -display gtk,gl=on` with `-device virtio-vga -display gtk` (virtio-gpu 2D) or `-vga std` (bochs-drm). Without KVM, drop `accel=kvm` and replace `-cpu host` with `-cpu qemu64` (very slow; an earlier image rendered incomplete UI elements with llvmpipe under TCG with `-cpu max`, see commit `73a4df0`). Use `-audiodev alsa,...` or `-audiodev none,...` if PulseAudio/PipeWire-Pulse is not available.
 
 A USB game controller can be passed through with `-device usb-host,vendorid=0x045e,productid=0x028e` (example IDs: Xbox 360 pad; needs permissions on the host's `/dev/bus/usb` node).
 
@@ -152,8 +175,9 @@ Requirements: an x86-64 PC booting in **UEFI** mode (legacy BIOS/CSM boot is not
 | --- | --- |
 | Architecture / toolchain | x86-64 (generic `-march=x86-64`), Bootlin external toolchain, glibc, GCC 14 |
 | Kernel | Linux **6.12.91** (6.12 LTS), `x86_64_defconfig` + [`linux.fragment`](../buildroot-external/board/nexora-x86_64/linux.fragment), `bzImage` with EFI stub |
-| Bootloader | GRUB2 `x86_64-efi` as `EFI/BOOT/bootx64.efi` (removable-media path, needs no NVRAM entry); menu entries "Nexora OS" and "Nexora OS (recovery: no console UI)" |
-| Disk image | genimage: GPT, ESP (FAT, 64 MiB, GRUB + `bzImage` + `grub.cfg`) and ext4 root (2 GiB, label `nexora-root`); `root=PARTUUID=<rootfs UUID>` |
+| Bootloader | GRUB2 `x86_64-efi` as `EFI/BOOT/bootx64.efi` (removable-media path, needs no NVRAM entry), built-in modules `boot linux ext2 fat part_gpt part_msdos normal efi_gop search search_label search_fs_uuid echo test loadenv configfile regexp`; GRUB tools (`grub-editenv`) installed in the root filesystem; menu entries "Nexora OS", "Nexora OS (previous slot)", "Nexora OS (recovery menu)", "Nexora OS (maintenance shell: no console UI)" |
+| Disk image | genimage: GPT with ESP, two root slots and a data partition (table above); kernel installed into each root filesystem (`BR2_LINUX_KERNEL_INSTALL_TARGET`) |
+| Filesystem tools | e2fsprogs (`e2fsck` for the data partition) |
 | Init | BusyBox init, `/etc/init.d/S??*` scripts; eudev for `/dev` with module autoloading and hwdb |
 | Graphics | Mesa 26.0.1: EGL, GBM, OpenGL ES; Gallium drivers **iris** (Intel Gen8+), **crocus** (Intel Gen4–7.5), **radeonsi** (AMD GCN and newer), **virgl** (QEMU virtio-gpu 3D), **llvmpipe** (software fallback, also used via kms_swrast on virtio-gpu 2D/bochs). No X11, no Wayland. |
 | Qt | Qt 6.9.1: `qt6base` (GUI, EGLFS, OpenGL ES 2, fontconfig, HarfBuzz, PNG, SQL + SQLite), `qt6declarative` (Quick, QuickControls2), `qt6shadertools`; default QPA `eglfs`, used with the `eglfs_kms` integration |
@@ -168,13 +192,15 @@ GPU drivers are modules on purpose: built-in amdgpu/i915 would request their fir
 
 Boot sequence (BusyBox init → `/etc/init.d/rcS`):
 
-1. `S01syslogd`, `S02klogd`, `S02sysctl`, `S10udevd` (coldplug, module loading, `udevadm settle`), …
-2. **`S80nexora-powerd`** — starts the root power-request daemon (below).
-3. **`S90nexora`** — unless the kernel command line contains `nexora.noui` or `/etc/default/nexora` sets `NEXORA_AUTOSTART=no`:
+1. **`S01nexora-data`** — before udev, finds the partitions by GPT name on the boot disk through sysfs, mounts the ESP on `/boot/efi` (root only) and, after `e2fsck -p`, the data partition on `/home`; never blocks for more than 10 s and never fails the boot (details in [user-data.md](user-data.md#on-the-image)).
+2. `S01syslogd`, `S02klogd`, `S02sysctl`, `S10udevd` (coldplug, module loading, `udevadm settle`), …
+3. **`S80nexora-powerd`** — starts the root power-request daemon (below).
+4. **`S85nexora-updated`** — starts the root update install daemon (FIFO `/run/nexora/update-request`, [update-system.md](update-system.md#the-root-helper-nexora-updated)).
+5. **`S90nexora`** — with `nexora.recovery` on the kernel command line it starts the text recovery menu on tty1 instead ([recovery.md](recovery.md#recovery-menu)); otherwise, unless the kernel command line contains `nexora.noui` or `/etc/default/nexora` sets `NEXORA_AUTOSTART=no`:
    - creates `/var/log/nexora` (owner `nexora`, mode 0750; refuses if it is a symlink) and `XDG_RUNTIME_DIR=/run/user/1000` (owner `nexora`, mode 0700);
    - waits up to 10 s for a DRM device;
    - starts the supervisor `/usr/libexec/nexora/nexora-session` (root) with `start-stop-daemon` (pidfile `/var/run/nexora.pid`).
-4. The supervisor runs, in a loop:
+6. The supervisor runs, in a loop:
 
    ```
    /usr/bin/nexora-console-ui --log-file /var/log/nexora/console-ui.log [$NEXORA_CONSOLE_UI_ARGS]   (window mode comes from the display.mode setting, default fullscreen)
@@ -183,6 +209,7 @@ Boot sequence (BusyBox init → `/etc/init.d/rcS`):
    as user **`nexora`** (via `start-stop-daemon --chuid nexora`, which also sets the supplementary groups), in a new session whose controlling terminal is **tty1** (owned by `nexora` while the UI runs, so Qt can switch it to graphics mode and mute the console keyboard), with the environment `QT_QPA_PLATFORM=eglfs`, `QT_QPA_EGLFS_INTEGRATION=eglfs_kms`, `XDG_RUNTIME_DIR=/run/user/1000`, `NEXORA_PLATFORM=embedded`, `HOME=/home/nexora`.
    - Whenever the UI exits (crash, `Ctrl+Q`, …) it is restarted after a delay of 1, 2, 4, … up to 30 s.
    - A run of at least 15 s resets the backoff. After **5 consecutive runs shorter than 15 s** the supervisor gives up, logs it and switches to tty2 (`chvt 2`), so a broken UI cannot lock up the machine. Limits are configurable in `/etc/default/nexora`.
+7. **`S99nexora-bootok`** — in the background: if the running slot is on trial after an update, confirms it in `grubenv` once the UI has run for 45 s, or records a rollback ([update-system.md](update-system.md#boot-confirmation-and-rollback-record)).
 
 Logs:
 
@@ -190,7 +217,9 @@ Logs:
 | --- | --- | --- |
 | `/var/log/nexora/console-ui.log` | the UI (`--log-file`) | application log |
 | `/run/nexora-session/session.log` | supervisor (root-owned dir) | start/exit/backoff messages and the UI's stdout/stderr — **early Qt errors** (e.g. EGLFS/KMS initialisation, missing QML modules) appear only here |
-| `/var/log/messages` | syslogd | `nexora-session` and `nexora-powerd` messages |
+| `/var/log/messages` | syslogd | `nexora-session`, `nexora-powerd`, `nexora-updated`, `nexora-bootok` and `nexora-data` messages |
+
+The dependency graph is drawn in [recovery.md](recovery.md#boot-and-service-dependencies).
 
 `/var/log` is a symlink to `/tmp` (tmpfs) in Buildroot's default skeleton, so these logs do not survive a reboot. The UI rotates its own log file; the supervisor rotates `session.log` once (`.1`) when it exceeds 1 MiB at a (re)start.
 
@@ -200,7 +229,9 @@ Login prompts are never disabled:
 
 - **Serial console `ttyS0`** (115200 baud; `BR2_TARGET_GENERIC_GETTY_PORT`) — QEMU `-serial mon:stdio`, or a real serial port/adapter.
 - **`tty2`** — added to `/etc/inittab` by `post-build.sh`. Reachable with `Ctrl+Alt+F2` when the UI is not running (and automatically after the supervisor gives up). Whether `Ctrl+Alt+F2` works *while* the Qt EGLFS UI runs depends on Qt's evdev keyboard handler and has not been tested.
-- **GRUB entry "Nexora OS (recovery: no console UI)"** — boots with `nexora.noui`, so tty1 shows the normal console and the logins above are available. Press any arrow key during the 3 s GRUB timeout to select it.
+- **GRUB entry "Nexora OS (maintenance shell: no console UI)"** — boots with `nexora.noui`, so tty1 shows the normal console and the logins above are available. Press any arrow key during the 3 s GRUB timeout to select it.
+- **GRUB entry "Nexora OS (recovery menu)"** — boots with `nexora.recovery`: a keyboard-driven text menu (slots and versions, boot the previous slot, reset preferences, export diagnostics, restore the latest backup, reboot, shell). See [recovery.md](recovery.md).
+- **GRUB entry "Nexora OS (previous slot)"** — boots the other root slot once.
 - From a root shell: `/etc/init.d/S90nexora stop|start|restart`; set `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to disable autostart persistently.
 
 **Root password:** this is a development image — `BR2_TARGET_GENERIC_ROOT_PASSWD` is empty, so **root logs in without a password** on ttyS0/tty2. There are no network services (no SSH, no telnet), so access requires physical/serial access. Before distributing an image, set a password with `make menuconfig` → *System configuration* → *Root password* (or add `BR2_TARGET_GENERIC_ROOT_PASSWD="..."` to a local copy of the defconfig), or run `passwd` on the device (the root filesystem is writable ext4). The `nexora` user cannot log in (password field `*`).
@@ -257,13 +288,23 @@ nexora 1000 nexora 1000 * /home/nexora /bin/sh input,video,render,audio Nexora O
 | `video` | KMS/DRM display | `/dev/dri/card*` → `root:video 0660` |
 | `render` | GPU render nodes (Mesa) | `/dev/dri/renderD*` → `root:render 0660` |
 | `audio` | ALSA for emulators | `/dev/snd/*` → `root:audio 0660` |
-| `nexora` (primary) | power-request FIFO | `/run/nexora/power-request` → `root:nexora 0620` |
+| `nexora` (primary) | power-request and update-request FIFOs | `/run/nexora/power-request`, `/run/nexora/update-request` → `root:nexora 0620`; `/run/nexora/update-status` → `root:nexora 0640` |
 
-UID/GID 1000 is fixed so that `XDG_RUNTIME_DIR=/run/user/1000` is stable. `/home/nexora` (on the writable ext4 root) holds the user's settings. The groups `input` and `render` do not exist in Buildroot's default `/etc/group` and are created by the users table.
+UID/GID 1000 is fixed so that `XDG_RUNTIME_DIR=/run/user/1000` is stable. `/home/nexora` is on the data partition (created by `S01nexora-data` on first boot, mode 0700) and holds all user data ([user-data.md](user-data.md)). The groups `input` and `render` do not exist in Buildroot's default `/etc/group` and are created by the users table.
 
 ## What was validated
 
-Done in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 2026.02.3:
+MVP 4 checks of the A/B tree (2026-10-16, build host only; no image built):
+
+| Check | How | Result |
+| --- | --- | --- |
+| Update helper and boot confirmation | `test_update_helper` (CTest, label `system`): `nexora-updated --once` and `nexora-bootok` in test mode on 16 MiB scratch slot files and a scratch grubenv | pass: installs into B and A, refuses tampered/not-newer/too-large bundles and bad request lines; confirmation, unhealthy UI, rollback and manual-slot cases |
+| GRUB script | `grub-script-check grub.cfg` (CTest `grub_cfg_syntax`) | syntax OK; the logic was **not executed** by GRUB |
+| Shell scripts | `shellcheck -s sh` on all overlay and board scripts (CTest `shellcheck_image_scripts`) | clean |
+| Defconfig / kernel fragment for the new symbols (`BR2_LINUX_KERNEL_INSTALL_TARGET`, `BR2_PACKAGE_E2FSPROGS`, GRUB modules and tools, NLS options) | `check-defconfig.sh`, `check-kernel-fragment.sh` against a Buildroot checkout | <!-- TASK12-RESULT: result of running both checks in Task 12 --> not yet run for the MVP 4 changes |
+| Image build, QEMU boot | `scripts/image/build-image.sh`, `scripts/image/qemu-boot-test.sh` | **not yet built/booted** <!-- TASK12-RESULT --> |
+
+Checks done before MVP 4 (single-root tree), in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 2026.02.3:
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -277,10 +318,12 @@ Done in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 20
 | Partial image build | `make` from a clean output directory, `nexora_x86_64_defconfig`, source tree at commit d4c35b4 | 75 packages built and installed without an error (2026-10-11): the Bootlin x86-64 glibc toolchain 2025.08-1, the host tools (Python 3.14, Meson, Ninja, genimage, e2fsprogs, dosfstools, fakeroot, …), host LLVM 21.1.8 and target LLVM 21.1.8, BusyBox, eudev, util-linux, kmod, elfutils, ALSA lib/utils, fontconfig, freetype, HarfBuzz, DejaVu, libdrm, libpng, PCRE2, double-conversion, linux-firmware. Stopped by the session's 2-hour limit after ≈ 2 h while compiling target Clang; not resumed. |
 | Power daemon logic | `nexora-powerd` under BusyBox `sh` with stubbed `poweroff`/`reboot`/`logger` | rejected `hello world`, `$(touch /tmp/pwn)` (not executed), a 200-byte line, `rebootx`; accepted `poweroff` → `sync` + `poweroff` |
 
+A separate session recorded in commit `73a4df0` (2026-10-10, on `feature/mvp2`) a complete build of the single-root image and a QEMU boot into the UI (TCG, `-cpu qemu64`, virtio-gpu 2D + llvmpipe) with keyboard navigation, an emulator launch and a power-off via `nexora-powerd`; that text was superseded in this document by a later merge. It predates MVP 4 and is not evidence for the A/B image.
+
 **Not validated (yet):**
 
-- The rest of the image build: target Clang, Mesa, host and target Qt 6.9.1 (`qt6base`, `qt6shadertools`, `qt6declarative`), the Linux kernel, GRUB, the `nexora-os` package itself (cross-compiled against Qt 6.9.1) and `genimage`. Whether these build is unproven. The build resumes where it stopped when `make` is run again in the same output directory; on 4 cores the remaining part is expected to take several more hours (an estimate, not measured).
-- Booting the image in QEMU or on any PC; EGLFS/KMS start-up of the UI; GPU drivers; input devices (keyboard, gamepads) under EGLFS; audio; the power-request round trip with the real C++ client; VT switching while the UI runs.
+- Building the MVP 4 A/B image (`nexora-os` 0.4.0 against Qt 6.9.1, OpenSSL, GRUB with the new modules and tools, genimage with four partitions).
+- Booting it in QEMU or on any PC; first-boot data partition creation; the GRUB boot counting and rollback; the update helper on real block devices; the recovery menu; EGLFS/KMS start-up of the 0.4.0 UI; GPU drivers; gamepads under EGLFS; audio; VT switching while the UI runs.
 - The opt-in full-image job of `buildroot.yml` has never been run on GitHub (the `validate` job has passed).
 
 ## Known limitations
@@ -288,12 +331,14 @@ Done in a container (Ubuntu 24.04 host, 4 cores, 15 GB RAM) against Buildroot 20
 - **UEFI only.** No legacy BIOS (CSM) boot. A hybrid BIOS+UEFI image would need GRUB `i386-pc`, a BIOS boot partition and a second `grub.cfg`.
 - **No SDL3.** Buildroot 2026.02.x has no `sdl3` package; the app is built with `-DNEXORA_WITH_SDL3=OFF` (evdev backend only). When moving to a release that has it (2026.08+, or the 2027.02 LTS), add a `BR2_PACKAGE_NEXORA_OS_SDL3` sub-option that selects `BR2_PACKAGE_SDL3` and passes `-DNEXORA_WITH_SDL3=ON`.
 - **Build cost.** iris, radeonsi and llvmpipe require LLVM (and iris additionally Clang/libclc for Mesa's precompiled shaders), so LLVM/Clang are built for host and target. A lighter QEMU-only variant could use virgl + softpipe without LLVM, but would not drive modern Intel/AMD GPUs.
-- **No NVIDIA** support (nouveau is not enabled), no Vulkan, no Wi-Fi/network configuration, no automatic updates.
+- **No NVIDIA** support (nouveau is not enabled), no Vulkan, no Wi-Fi/network configuration. Updates are local signed bundles only ([update-system.md](update-system.md)); GRUB and the ESP are never updated by a bundle.
+- **No automounter:** removable media must be mounted by hand from a root shell.
+- **Fixed partition sizes:** 2 GiB per root slot (the update helper refuses larger images), 1 GiB data partition, not grown to fill the disk.
 - **Development root access:** empty root password (see above).
 - **Volatile logs:** `/var/log` and `/run` are tmpfs.
 - **Single display:** EGLFS shows one full-screen window on the first connected output of the first DRM device; multi-GPU/multi-monitor selection is not configured (`QT_QPA_EGLFS_KMS_CONFIG` can be used if needed).
-- Emulators: none are packaged; the shipped `example.json` runs `/bin/true`.
-- The package version (`NEXORA_OS_VERSION = 0.2.0`, `/etc/nexora-release`) is set independently of `project(... VERSION ...)` in the top-level `CMakeLists.txt`.
+- Emulators: none are packaged; the shipped `example.json` runs `/bin/true`. Emulator definitions live on the root slot.
+- `NEXORA_OS_VERSION` in `nexora-os.mk` (0.4.0) must be kept equal to `project(... VERSION ...)` by hand; `/etc/nexora-release` is filled from the version compiled into the application, so it is always consistent with the binary.
 
 ## Requirements for the application
 
@@ -306,5 +351,5 @@ Checked against the application sources at the time of writing; items marked *op
 5. **Power actions:** the client in `SystemIntegration.cpp` matches the protocol above (`O_WRONLY|O_NONBLOCK|O_CLOEXEC`, single write of `poweroff\n`/`reboot\n`, `ENXIO` reported as "not listening").
 6. **Volume:** `SystemIntegration` runs `/usr/bin/amixer -q sset Master N%`; `alsa-utils` with `amixer` is in the image. Not every card has a `Master` control (USB/HDMI-only audio may not) — *open*: fall back gracefully.
 7. **Exit = restart:** the supervisor restarts the UI on any exit; quitting is not a way to reach a shell on the device.
-8. **Writable state:** `$HOME=/home/nexora` (persistent ext4) — default settings file and the SQLite game library (`QStandardPaths::GenericDataLocation` → `~/.local/share`) live there. `XDG_RUNTIME_DIR` is provided.
-9. **Version:** `project(NexoraOS VERSION ...)` in `CMakeLists.txt` is independent of `NEXORA_OS_VERSION = 0.2.0` / `/etc/nexora-release`; keep them in sync when releasing.
+8. **Writable state:** `$HOME=/home/nexora` on the data partition — settings, library, history, backups and diagnostics ([user-data.md](user-data.md)). `XDG_RUNTIME_DIR` is provided.
+9. **Version:** `/etc/nexora-release` carries the version, build id and board compiled into the application (`share/nexora/build-info`); the update helper reads `NEXORA_VERSION` from it.

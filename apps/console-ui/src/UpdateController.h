@@ -53,6 +53,10 @@ public:
     // ReadyToInstall -> Installing -> RestartRequired/Failed.
     Q_INVOKABLE bool install();
     Q_INVOKABLE void cancel();
+    // Completed/RecoveryRequired -> Idle: the user dismissed the result of the last update
+    // attempt; its record is removed so it is not shown again after a restart. Allowed on
+    // every platform (it only touches the user's own state directory).
+    Q_INVOKABLE bool acknowledgeLastResult();
     // Bundle directories found under removable media / the home directory; see .cpp for the
     // exact glob patterns. Never follows symlinks.
     Q_INVOKABLE QStringList candidateBundles() const;

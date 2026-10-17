@@ -1,6 +1,6 @@
 # Settings
 
-Nexora keeps user preferences (display, audio, controller mapping, game library directories, default launch profiles) in a small, validated JSON file. Emulator definitions are **not** settings: they live in their own directory (`--config-dir`, see [development.md](development.md#adding-an-emulator-configuration)). Favorites, play history and the list of found games live in the [game library database](#game-library-database).
+Nexora keeps user preferences (appearance and accessibility, display, audio, controller mapping and dead zone, game library directories, default launch profiles and default emulators per system, log detail) in a small, validated JSON file. Emulator definitions are **not** settings: they live in their own directory (`--config-dir`, see [emulator-integration.md](emulator-integration.md#emulator-definitions)). Favorites, play history and the list of found games live in the [game library database](#game-library-database).
 
 Implementation: `shared/include/nexora/shared/Settings.h`, `shared/src/Settings.cpp`; UI side effects in `apps/console-ui/src/SettingsController.cpp`.
 
@@ -73,16 +73,24 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | --- | --- | --- | --- | --- | --- |
 | `ui.language` | string | `"en"` | `"en"` | Interface language. Only English exists; there are no translations. | Stored only. |
 | `ui.showHints` | bool | `true` | `true`, `false` | Show the control hint bar. | Immediately: the hint bar at the bottom of the dashboard is shown only while this is `true`. |
+| `ui.theme` | string | `"dark"` | `"dark"`, `"highContrast"` | Colour theme ([design-system.md](design-system.md#accessibility-inputs)). | Immediately. |
+| `ui.scale` | int | `100` | 75–150 (percent) | Interface scale: multiplies spacing, fonts, radii, icons and cards. | Immediately. |
+| `ui.reducedMotion` | bool | `false` | `true`, `false` | Turns animation durations to 0 and stops ambient animations. | Immediately. |
+| `ui.startScreen` | string | `"home"` | `"home"`, `"games"` | Tab shown at start-up. | At the next start. |
 | `ui.tutorialCompleted` | bool | `false` | `true`, `false` | The first-start tutorial has been finished or skipped. While `false`, the dashboard shows the tutorial overlay; finishing or skipping it sets `true`. Settings → "Show tutorial" sets it back to `false`, and so does "Reset preferences". A system defaults file can set it to `true` to never show the tutorial. | Immediately. |
 | `display.mode` | string | `"fullscreen"` | `"fullscreen"`, `"windowed"` | Window mode. | At start-up, and immediately when changed while running. `--fullscreen` / `--windowed` override it for the session; with either flag, changes are not applied until the next start. |
 | `display.resolution` | string | `"auto"` | `"auto"` or `WIDTHxHEIGHT` (each 3–5 digits, no leading zero), e.g. `"1920x1080"`. The settings UI cycles `auto`, `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`. | Initial **window size** only. It does **not** change the display mode/monitor resolution; in full-screen mode the window covers the screen regardless. | At start-up only, and only when neither `--fullscreen` nor `--windowed` is given. |
 | `audio.volume` | int | `80` | integer 0–100 (JSON `40.0` is accepted as 40) | Master volume. | **Embedded platform only**, and only if `/usr/bin/amixer` is executable: runs `amixer -q sset Master <n>%`, falling back to the `PCM` control if `Master` fails; asynchronous; applied at start-up and on every change. On the **desktop** platform the value is stored as a preference only and the desktop mixer is left alone. |
+| `audio.muted` | bool | `false` | `true`, `false` | Mute. | Embedded platform: volume 0 while muted, the stored volume when unmuted (through the same `amixer` path as `audio.volume`); desktop: stored only. |
+| `input.deadzone` | int | `25` | 5–60 (percent) | Analog stick dead zone ([controller-support.md](controller-support.md#directions-dead-zone-and-repeat)). | Immediately. |
 | `input.backend` | string | `"auto"` | `"auto"`, `"evdev"`, `"sdl3"`, `"none"` | Controller backend ([controller-support.md](controller-support.md#backends)). | At the **next start**. `--input-backend` overrides it. |
 | `input.mapping` | object | see below | action → button; actions `accept`, `back`, `menu`, `favorite`, `search`, `prevTab`, `nextTab`, `gameBar`, `options`; buttons `south`, `east`, `west`, `north`, `start`, `select`, `guide`, `l1`, `r1` | Controller button for each action. | Immediately. A second, stricter check happens when it is applied (see below). |
 | `library.directories` | string array | `[]` | absolute paths, max 64 entries; `"/"` refused; paths are cleaned (`/srv/games/` → `/srv/games`) and de-duplicated | Directories scanned for games. | Immediately; triggers a rescan. |
 | `library.extensions` | string array | `[]` | `".ext"` with 1–16 lower-case letters/digits, max 128 entries; normalised to lower case and a missing leading dot is added (`"ZIP"` → `".zip"`) | Extra extensions treated as games in addition to those declared by emulator definitions. Files found only through this list have no emulator. | Immediately; triggers a rescan. |
 | `library.followSymlinks` | bool | `false` | `true`, `false` | Follow symbolic links that stay inside the same library directory ([game-library.md](game-library.md#symbolic-links)). | Immediately; triggers a rescan. |
 | `library.sortOrder` | string | `"title"` | `"title"`, `"recent"`, `"emulator"`, `"added"` | Default sort order of the library list. | Immediately. The setting and the sort selector on the Games tab are kept in sync: changing the setting (Settings tab, "Default game sort") re-sorts the list, and choosing a sort order on the Games tab saves it as the new default. |
+| `emulators.defaultForSystem` | object | `{}` | system id → emulator id (both validated like ids) | Emulator used for games of that system when the game has no per-game override and the emulator declares the file's extension. Set in Settings › Emulators. | Immediately. |
+| `log.level` | string | `"info"` | `"error"`, `"warning"`, `"info"`, `"debug"` | Minimum severity written to the log (all sinks, including the in-memory buffer). Settings › System › "Log detail". | Immediately (`shared::setLogLevel()`). |
 | `emulators.defaultProfiles` | object | `{}` | emulator id → profile id; both must match `^[a-z0-9][a-z0-9_-]{0,63}$` | Launch profile used when an emulator or a game is started without an explicit profile. Set from the Emulators tab's profile picker (Y / F on a profile). | Immediately. A profile that does not exist or is disabled is ignored at launch time (the emulator's own arguments are used). |
 
 Default `input.mapping`:
@@ -172,23 +180,13 @@ The logs contain game paths and whatever the emulator prints; Nexora writes noth
 
 ## Backups
 
-What to back up:
+Settings are part of every Nexora backup (Settings › System › Create backup, or `nexora-console-ui --backup`), together with the library database and the launch history; restoring moves the current file aside first. Procedures, the backup format and what is not included: [user-data.md](user-data.md#backup-and-restore).
 
-| File | Contains | Loss means |
-| --- | --- | --- |
-| `settings.json` | Your preference overrides | Defaults return; directories and mapping must be set again |
-| `library.sqlite` (+ `-wal`) | Favorites, play counts, last played, per-game emulator choice, list of found games | Favorites and history are lost; games are found again by the next scan |
-| Emulator definition directory | Emulators and launch profiles | Emulators must be configured again |
-
-Recommendations:
-
-- Copy files while Nexora is **not running**. For the database, either copy `library.sqlite` together with `library.sqlite-wal` (if present), or use `sqlite3 library.sqlite ".backup library-backup.sqlite"`, which produces a consistent single file.
-- Keep `*.corrupt-*` and `settings.json.bak` files until you have checked them; Nexora never deletes them, so remove old ones by hand.
-- Game files, BIOS files and emulator save data are not managed by Nexora; back them up separately.
+Keep `*.corrupt-*`, `settings.json.bak` and `*.pre-restore-*` files until you have checked them; Nexora never deletes them.
 
 ## Planned
 
-Not implemented in MVP 2:
+Not implemented (as of MVP 4):
 
 - Further languages (`ui.language` accepts only `en`).
 - Applying `display.resolution` as a real display mode (KMS mode setting).

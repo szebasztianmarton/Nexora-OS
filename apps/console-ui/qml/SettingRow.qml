@@ -66,10 +66,10 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 3
         Text {
-            textFormat: Text.PlainText
             objectName: "label"
             width: parent.width
             text: row.label
+            textFormat: Text.PlainText // labels can carry untrusted text (paths, update bundles)
             color: row.labelColor
             font.pixelSize: Theme.fontBody
             font.bold: row.activeFocus
@@ -109,9 +109,9 @@ Rectangle {
                 MouseArea { anchors.fill: parent; anchors.margins: -8; onClicked: { row.forceActiveFocus(); row.decrement() } }
             }
             Text {
-                textFormat: Text.PlainText
                 objectName: "value"
                 text: row.actionText.length > 0 ? row.actionText : row.value
+                textFormat: Text.PlainText
                 color: row.actionText.length > 0 ? (row.activeFocus ? Theme.accent : Theme.textMuted) : row.valueColor
                 font.pixelSize: Theme.fontBody
                 font.bold: row.actionText.length === 0

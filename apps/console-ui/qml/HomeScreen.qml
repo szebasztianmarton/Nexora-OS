@@ -248,13 +248,21 @@ FocusScope {
                                  screen.library.missingCount > 0 ? screen.library.missingCount + " missing game(s)" : ""]
                                 .filter(t => t.length > 0).join(" · "),
                       tone: screen.issueCount === 0 ? Theme.success : Theme.warning },
+                    // The result of the last attempt comes first: a rolled-back update is
+                    // reported as such (the previous version is running), never as "OK".
                     { key: "updates", title: "Updates",
-                      value: !screen.updates.supported ? "Not on this build"
+                      value: screen.updates.state === "recoveryrequired" ? "Update rolled back"
+                             : screen.updates.state === "completed" ? "Update installed"
+                             : !screen.updates.supported ? "Not on this build"
                              : screen.updateAvailable ? "Update " + screen.updates.availableVersion + " available"
                              : screen.updates.state === "idle" ? "No update selected"
                              : Theme.capitalize(screen.updates.state),
-                      detail: "Installed " + screen.updates.currentVersion,
-                      tone: screen.updateAvailable ? Theme.accent : Theme.textMuted }
+                      detail: screen.updates.state === "recoveryrequired"
+                              ? "Still running " + screen.updates.currentVersion + " · open for details"
+                              : "Installed " + screen.updates.currentVersion,
+                      tone: screen.updates.state === "recoveryrequired" ? Theme.danger
+                            : screen.updates.state === "completed" ? Theme.success
+                            : screen.updateAvailable ? Theme.accent : Theme.textMuted }
                 ]
                 function activate(i) {
                     const key = cards[i].key
@@ -308,11 +316,11 @@ FocusScope {
                                     font.pixelSize: Theme.fontSmall
                                 }
                                 Text {
-                                    textFormat: Text.PlainText
                                     objectName: "statusValue_" + card.modelData.key
                                     width: parent.width
                                     elide: Text.ElideRight
                                     text: card.modelData.value
+                                    textFormat: Text.PlainText // may carry an update bundle's version
                                     color: Theme.text
                                     font.pixelSize: Theme.fontLarge
                                     font.bold: true

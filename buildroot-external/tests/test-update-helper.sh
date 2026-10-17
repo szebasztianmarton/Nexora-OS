@@ -72,11 +72,13 @@ reset() {
 # Sets rc (exit status) and status (content of the status file).
 request() {
     local line=$1 pid _
-    NEXORA_UPDATED_TEST=1 \
+    # Bounded: a helper that blocks (e.g. reading a FIFO) fails the case
+    # instead of hanging the test.
+    timeout 60 env NEXORA_UPDATED_TEST=1 \
         NEXORA_TEST_RUN_DIR="$tmp/run" \
         NEXORA_TEST_WORK_DIR="$tmp/work" \
         NEXORA_TEST_KEYS_DIR="$NEXORA_TEST_KEYS_DIR" \
-        NEXORA_TEST_UPDATE_TOOL="$NEXORA_UPDATE_TOOL" \
+        NEXORA_TEST_UPDATE_TOOL="${REQUEST_TOOL:-$NEXORA_UPDATE_TOOL}" \
         NEXORA_TEST_SLOT_A="$tmp/rootA.img" \
         NEXORA_TEST_SLOT_B="$tmp/rootB.img" \
         NEXORA_TEST_GRUBENV="$tmp/grubenv" \
@@ -99,6 +101,7 @@ request() {
     printf '%s\n' "$line" > "$tmp/run/update-request"
     rc=0
     wait "$pid" || rc=$?
+    [ "$rc" -ne 124 ] || echo "  (nexora-updated timed out)"
     status=$(cat "$tmp/run/update-status" 2> /dev/null || echo "(no status)")
     echo "  request: $line -> exit $rc, status: $status"
 }
@@ -181,6 +184,94 @@ for line in \
 done
 [ ! -e "$tmp/pwned" ] || fail "request text was executed"
 
+echo "== symlinked image or manifest in the bundle -> rejected"
+for what in rootfs.ext4 manifest.json; do
+    reset
+    rm -rf "$tmp/linked"
+    cp -r "$tmp/good" "$tmp/linked"
+    mv "$tmp/linked/$what" "$tmp/linked-$what"
+    ln -s "$tmp/linked-$what" "$tmp/linked/$what"
+    request "install $tmp/linked"
+    [ "$rc" -ne 0 ] || fail "symlinked $what: exit status 0"
+    case "$status" in "error "*) ;; *) fail "symlinked $what: status '$status'" ;; esac
+    expect_untouched "symlinked $what"
+done
+
+# A verifier wrapper that swaps the image for something else right after the
+# (real) verification: the helper must keep reading the inode it verified.
+cat > "$tmp/swap-tool" <<EOF
+#!/usr/bin/env bash
+out=\$("$NEXORA_UPDATE_TOOL" "\$@"); rc=\$?
+img="$tmp/swap/rootfs.ext4"
+mv "\$img" "\$img.orig"
+case "\${SWAP_TO:-fifo}" in
+fifo) mkfifo "\$img" ;;
+file) head -c "$image_size" /dev/zero > "\$img" ;;
+esac
+printf '%s\n' "\$out"
+exit \$rc
+EOF
+chmod +x "$tmp/swap-tool"
+for to in fifo file; do
+    echo "== image swapped for a $to after verification -> the verified image is written"
+    reset
+    rm -rf "$tmp/swap"
+    cp -r "$tmp/good" "$tmp/swap"
+    SWAP_TO=$to REQUEST_TOOL="$tmp/swap-tool" request "install $tmp/swap"
+    # Unblock and reap anything still waiting on the FIFO.
+    [ ! -p "$tmp/swap/rootfs.ext4" ] || timeout 2 bash -c ": > '$tmp/swap/rootfs.ext4'" || true
+    [ "$rc" -eq 0 ] || fail "swap to $to: exit status $rc"
+    [ "$status" = "ok 0.4.1" ] || fail "swap to $to: status '$status'"
+    [ "$(head -c "$image_size" "$tmp/rootB.img" | sha256sum | cut -d ' ' -f 1)" = "$(hash_of "$image")" ] ||
+        fail "swap to $to: rootB does not hold the verified image"
+done
+
+echo "== install while a trial boot is pending -> refused"
+for variant in try-set try-cleared; do
+    reset
+    request "install $tmp/good"
+    printf 'BOOT_IMAGE=/boot/bzImage nexora.slot=B\n' > "$tmp/cmdline" # trial boot of B
+    [ "$variant" = try-set ] || grub-editenv "$tmp/grubenv" set nexora_try= nexora_tries=0
+    hashA=$(hash_of "$tmp/rootA.img")
+    request "install $tmp/good"
+    [ "$rc" -ne 0 ] || fail "trial pending ($variant): exit status 0"
+    [ "$status" = "error trial boot pending; restart to confirm or roll back first" ] ||
+        fail "trial pending ($variant): status '$status'"
+    [ "$(env_get nexora_slot)" = "A" ] || fail "trial pending ($variant): nexora_slot='$(env_get nexora_slot)'"
+    [ "$(hash_of "$tmp/rootA.img")" = "$hashA" ] || fail "trial pending ($variant): rootA (known good) was modified"
+    [ -e "$tmp/esp/nexora/update-pending" ] || fail "trial pending ($variant): pending record removed"
+done
+
+echo "== grubenv is replaced via a validated copy and backed up"
+reset
+request "install $tmp/good"
+cmp -s "$tmp/grubenv" "$tmp/grubenv.bak" || fail "grubenv backup: grubenv.bak missing or stale"
+[ ! -e "$tmp/grubenv.new" ] || fail "grubenv backup: temporary copy left behind"
+reset
+cp "$tmp/grubenv" "$tmp/grubenv.bak"
+head -c 300 "$tmp/grubenv.bak" > "$tmp/grubenv" # torn write on vfat
+request "install $tmp/good"
+[ "$status" = "ok 0.4.1" ] || fail "torn grubenv: status '$status'"
+[ "$(wc -c < "$tmp/grubenv")" -eq 1024 ] || fail "torn grubenv: not repaired to 1024 bytes"
+[ "$(env_get nexora_try)" = "B" ] || fail "torn grubenv: nexora_try='$(env_get nexora_try)'"
+[ "$(env_get nexora_slot)" = "A" ] || fail "torn grubenv: nexora_slot='$(env_get nexora_slot)'"
+
+echo "== shared helpers: boot environment repair and diagnostics masking"
+# shellcheck disable=SC2016 # expanded by the helper shell
+fn_out=$(NEXORA_FUNCTIONS="$(dirname "$NEXORA_UPDATED")/nexora-functions" TMPENV="$tmp/repair-env" \
+    "${HELPER_SHELL[@]}" -c '. "$NEXORA_FUNCTIONS"; NEXORA_GRUBENV=$TMPENV
+printf garbage > "$NEXORA_GRUBENV"
+nexora_env_recreate B && echo "slot=$(nexora_env_get nexora_slot) try=$(nexora_env_get nexora_try) tries=$(nexora_env_get nexora_tries)"
+printf "%s\n" "password=hunter2 x" "Authorization: Bearer abc.def" "api_key: 1234" "cookie=sid42" \
+    "token=t0k secret: s3cr3t" "open /home/nexora/Games/a.iso" "https://bob:pw@example.org/x" | nexora_mask_secrets' 2>&1) || true
+while IFS= read -r fn_line; do echo "  | $fn_line"; done <<< "$fn_out"
+grep -qx 'slot=B try= tries=0' <<< "$fn_out" || fail "nexora_env_recreate did not write a fresh grubenv"
+for secret in hunter2 abc.def 1234 sid42 t0k s3cr3t /home/nexora bob:pw; do
+    ! grep -qF "$secret" <<< "$fn_out" || fail "nexora_mask_secrets leaked '$secret'"
+done
+# shellcheck disable=SC2088 # a literal ~ is expected
+grep -qF '~/Games/a.iso' <<< "$fn_out" || fail "nexora_mask_secrets: home path not replaced by ~"
+
 # ---- nexora-bootok: the other half of the trial-boot protocol ----------------
 # (GRUB itself is not executed here; its decrement/rollback is simulated with
 # grub-editenv the way grub.cfg performs it.)
@@ -191,11 +282,16 @@ boot_as() {
     printf 'NAME="Nexora OS"\nNEXORA_VERSION="%s"\nNEXORA_BUILD_ID="%s"\n' "$2" "$3" > "$tmp/nexora-release"
 }
 
-# bootok HEALTHY: runs nexora-bootok in test mode; sets rc.
+# bootok HEALTHY: runs nexora-bootok in test mode; sets rc. The simulated
+# supervisor has started the UI once (ui-starts=1) unless the case changes it.
 bootok() {
     rm -rf "$tmp/state"
+    mkdir -p "$tmp/session"
+    [ -e "$tmp/session/ui-starts" ] || echo 1 > "$tmp/session/ui-starts"
     rc=0
     NEXORA_BOOTOK_TEST=1 \
+        NEXORA_TEST_SESSION_DIR="$tmp/session" \
+        NEXORA_TEST_BOOTOK_DELAY="${BOOTOK_DELAY:-0}" \
         NEXORA_TEST_RUN_DIR="$tmp/run" \
         NEXORA_TEST_STATE_DIR="$tmp/state" \
         NEXORA_TEST_GRUBENV="$tmp/grubenv" \
@@ -215,7 +311,7 @@ request "install $tmp/good"
 grub-editenv "$tmp/grubenv" set nexora_tries=2 # GRUB consumed one try
 boot_as B 0.4.1 v0.4.1-0-gabcdef0
 rm -f "$tmp/run/update-status" # /run is empty after the reboot
-bootok 1
+BOOTOK_DELAY=2 bootok 1 # watched for 2 s, no restart
 [ "$rc" -eq 0 ] || fail "confirm: exit $rc"
 [ "$(env_get nexora_slot)" = "B" ] || fail "confirm: nexora_slot not B"
 [ -z "$(env_get nexora_try)" ] || fail "confirm: nexora_try not cleared"
@@ -237,6 +333,23 @@ bootok 0
 [ "$(env_get nexora_try)" = "B" ] || fail "unhealthy: trial cancelled"
 [ -e "$tmp/esp/nexora/update-pending" ] || fail "unhealthy: pending record removed"
 [ ! -e "$tmp/state/last-update.json" ] || fail "unhealthy: result recorded"
+
+echo "== bootok: UI restarted during the confirmation window -> not confirmed"
+reset
+request "install $tmp/good"
+grub-editenv "$tmp/grubenv" set nexora_tries=2
+boot_as B 0.4.1 v0.4.1-0-gabcdef0
+rm -rf "$tmp/session"
+mkdir -p "$tmp/session"
+echo 1 > "$tmp/session/ui-starts"
+(sleep 1; echo 2 > "$tmp/session/ui-starts") & # nexora-session restarted the UI
+BOOTOK_DELAY=3 bootok 1
+wait
+[ "$rc" -ne 0 ] || fail "restart in window: exit 0"
+[ "$(env_get nexora_slot)" = "A" ] || fail "restart in window: nexora_slot changed"
+[ "$(env_get nexora_try)" = "B" ] || fail "restart in window: trial cancelled"
+[ ! -e "$tmp/state/last-update.json" ] || fail "restart in window: result recorded"
+rm -rf "$tmp/session"
 
 echo "== bootok: GRUB used up the tries and booted the old slot -> rolled back"
 reset

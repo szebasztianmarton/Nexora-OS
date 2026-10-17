@@ -166,6 +166,32 @@ expect_fail "check-docs detects an empty required document" "$check_docs" "$docs
 echo "# recovery" > "$docs_root/docs/recovery.md"
 expect_ok "check-docs passes again after the fixes" "$check_docs" "$docs_root"
 
+# --- the rootfs image must carry the release version -------------------------------------
+check_image="$repo/scripts/release/check-image-version.sh"
+mkfs_ext4="$(PATH="$PATH:/sbin:/usr/sbin" command -v mkfs.ext4 || true)"
+debugfs_bin="$(PATH="$PATH:/sbin:/usr/sbin" command -v debugfs || true)"
+if [[ -n "$mkfs_ext4" && -n "$debugfs_bin" ]]; then
+    mkdir -p "$tmp/rootfs/etc"
+    printf 'NAME="Nexora OS"\nNEXORA_VERSION="0.4.1"\nNEXORA_BUILD_ID="v0.4.1-0-gtest"\n' \
+        > "$tmp/rootfs/etc/nexora-release"
+    "$mkfs_ext4" -q -F -d "$tmp/rootfs" "$tmp/rootfs.ext4" 4M > /dev/null 2>&1
+    expect_ok "check-image-version accepts the matching version" "$check_image" "$tmp/rootfs.ext4" 0.4.1
+    expect_fail "check-image-version refuses a stale image" "$check_image" "$tmp/rootfs.ext4" 0.4.2
+    rm "$tmp/rootfs/etc/nexora-release"
+    "$mkfs_ext4" -q -F -d "$tmp/rootfs" "$tmp/rootfs-norelease.ext4" 4M > /dev/null 2>&1
+    expect_fail "check-image-version refuses an image without /etc/nexora-release" \
+        "$check_image" "$tmp/rootfs-norelease.ext4" 0.4.1
+    expect_fail "check-image-version refuses a file that is not ext4" "$check_image" "$bundle/rootfs.ext4" 0.4.1
+else
+    echo "SKIP: mkfs.ext4/debugfs not found; check-image-version not exercised"
+fi
+# shellcheck disable=SC2016 # literal text of make-release.sh
+if grep -qF 'check-image-version.sh" "$br_images/rootfs.ext4" "$version"' "$repo/scripts/release/make-release.sh"; then
+    pass "make-release checks the image version before packaging it"
+else
+    failed "make-release does not run check-image-version.sh on rootfs.ext4"
+fi
+
 echo
 if [[ $failures -ne 0 ]]; then
     echo "test_release_scripts.sh: $failures check(s) failed" >&2

@@ -12,6 +12,9 @@
 #   nexora-os-VERSION-x86_64-disk.img.xz    full disk image
 #   nexora-update-VERSION/                  update bundle: rootfs.ext4 + manifest.json
 #                                           (unsigned; sign offline with sign-update.sh)
+# The Buildroot rootfs.ext4 must contain /etc/nexora-release with NEXORA_VERSION=VERSION
+# (checked with check-image-version.sh, needs debugfs from e2fsprogs); otherwise the run
+# fails instead of shipping a stale image under the new version.
 #
 # Determinism: every timestamp comes from SOURCE_DATE_EPOCH (default: committer time of
 # HEAD), the archive is written with sorted names, numeric owner 0:0, normalised modes and
@@ -137,6 +140,9 @@ produced+=("$archive")
 # --- optional Buildroot image + update bundle ------------------------------------------
 if [[ -f "$br_images/rootfs.ext4" ]]; then
     echo "make-release: including Buildroot images from $br_images"
+    # Never package a stale image under this version: its /etc/nexora-release must match.
+    "$root/scripts/release/check-image-version.sh" "$br_images/rootfs.ext4" "$version" ||
+        die "the Buildroot image in $br_images is not version $version; rebuild it first"
     disk="nexora-os-$version-x86_64-disk.img.xz"
     if [[ -f "$br_images/disk.img.xz" ]]; then
         cp -f "$br_images/disk.img.xz" "$dist/$disk"
