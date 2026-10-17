@@ -19,7 +19,8 @@
 //   detailsOptions, detailsEdit, detailsSystem, detailsRemove, confirmRemoveGame (details)
 //   quickMenu, quickReturn, quickPause, quickVolume, quickMute, quickDisplay,
 //   quickSystemInfo, quickExit, confirmExitGame                                  (quick menu)
-//   updatePanel, updateState, updateUnsupported, updateClose                     (updates)
+//   updatePanel, updateState, updateMessage, updateUnsupported, updateAcknowledge,
+//   updateClose, statusValue_updates                                            (updates)
 //   systemActions, systemUpdateButton, exportDiagnosticsButton, systemDetails     (System)
 //   emulatorList, emptyState, statusLine, profilePicker, profileList             (Emulators)
 //   settingLanguage, settingTheme, settingUiScale, settingReducedMotion, settingHints,
@@ -48,6 +49,7 @@
 #include "UiBootstrap.h"
 #include "UiContext.h"
 
+#include <QDir>
 #include <QFile>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
@@ -108,7 +110,10 @@ private:
     // breaks at a different physical resolution (responsive layout, column counts, ...).
     // |firstStart| keeps ui.tutorialCompleted unset so the tutorial overlay is shown; the
     // other tests start with it already finished.
-    static void load(Ui &ui, const QString &configDir, const QSize &windowSize = {1280, 720}, bool firstStart = false)
+    // |lastUpdateRecord|: contents of stateDir/update/last-update.json (as written by
+    // nexora-bootok) before the UI starts; empty = no record.
+    static void load(Ui &ui, const QString &configDir, const QSize &windowSize = {1280, 720}, bool firstStart = false,
+                     const QByteArray &lastUpdateRecord = {})
     {
         ui.state = std::make_unique<QTemporaryDir>();
         nexora::ui::UiContext::Options options;
@@ -118,6 +123,14 @@ private:
         options.layout = nexora::shared::DataLayout::underRoot(ui.state->filePath(QStringLiteral("data")));
         options.databasePath = ui.state->filePath(QStringLiteral("library.sqlite"));
         options.platformOverride = QStringLiteral("desktop");
+        options.update.stagingDir = options.layout.stateDir + QStringLiteral("/update");
+        options.update.currentBuildId = QStringLiteral("v0.4.0-0-gcafebabe");
+        if (!lastUpdateRecord.isEmpty()) {
+            QVERIFY(QDir().mkpath(options.update.stagingDir));
+            QFile record(options.update.stagingDir + QStringLiteral("/last-update.json"));
+            QVERIFY(record.open(QIODevice::WriteOnly));
+            record.write(lastUpdateRecord);
+        }
         ui.context = std::make_unique<nexora::ui::UiContext>(options);
         ui.context->start();
         if (!firstStart)
@@ -994,6 +1007,45 @@ private slots:
     // High contrast + reduced motion at both TV resolutions: every section, the game details,
     // the update panel (honest "not on this build" on desktop) and the in-game quick menu with
     // its Exit confirmation render without a single QML warning.
+    void rolledBackUpdateIsReportedAndDismissed_data() { addWindowSizeRows(); }
+    void rolledBackUpdateIsReportedAndDismissed()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir dir;
+        writeConfig(dir, QStringLiteral("fake"));
+        Ui ui;
+        load(ui, dir.path(), windowSize, false,
+             R"({"format": 1, "result": "rolled-back", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+             R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1", "slot": "a"})");
+
+        // Home says so honestly instead of "Not on this build" / "No update selected".
+        // The cards are a JS array model whose delegates are recreated when it changes, so the
+        // text item is looked up again every time.
+        auto updatesValue = [&ui] {
+            QQuickItem *value = find(ui, "statusValue_updates");
+            return value ? value->property("text").toString() : QString();
+        };
+        QTRY_COMPARE(updatesValue(), QStringLiteral("Update rolled back"));
+
+        // The panel explains it and offers a dismiss action; afterwards it is gone for good.
+        QMetaObject::invokeMethod(ui.window, "openUpdatePanel");
+        auto *panel = find(ui, "updatePanel");
+        QTRY_VERIFY(panel->isVisible());
+        QCOMPARE(find(ui, "updateState")->property("text").toString(),
+                 QStringLiteral("The last update was rolled back"));
+        QVERIFY(find(ui, "updateMessage")->property("text").toString().contains(QStringLiteral("0.4.1")));
+        auto *ack = find(ui, "updateAcknowledge");
+        QVERIFY(ack->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(ack->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        key(ui, Qt::Key_Return);
+        QTRY_COMPARE(ui.context->updates()->state(), QStringLiteral("idle"));
+        QTRY_VERIFY(!ack->isVisible());
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY(!panel->isVisible());
+        QTRY_COMPARE(updatesValue(), QStringLiteral("Not on this build"));
+        CHECK_NO_WARNINGS();
+    }
+
     void accessibilityModes_data() { addWindowSizeRows(); }
     void accessibilityModes()
     {

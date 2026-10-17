@@ -610,6 +610,46 @@ private slots:
     // GameLibrary, system catalog and emulator set) rather than SystemListModel in
     // isolation: the "Other" row (unrecognised systemId) must appear exactly when there is
     // at least one such game, and disappear again once there is none.
+    void updateRecordFromBootIsShownAtStartup()
+    {
+        // nexora-bootok records a rolled-back trial boot in stateDir/update/last-update.json;
+        // the UI must report it from the moment it starts.
+        ui::UiContext::Options o = options();
+        o.update.stagingDir = o.layout.stateDir + QStringLiteral("/update");
+        o.update.currentBuildId = QStringLiteral("v0.4.0-0-gcafebabe");
+        const QString record = o.update.stagingDir + QStringLiteral("/last-update.json");
+        write(record,
+              R"({"format": 1, "result": "rolled-back", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+              R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1", )"
+              R"("slot": "a"})");
+        {
+            ui::UiContext ctx(o);
+            ctx.start();
+            QCOMPARE(ctx.updates()->state(), QStringLiteral("recoveryrequired"));
+            QVERIFY(ctx.updates()->message().contains(QStringLiteral("0.4.1")));
+        }
+        {
+            // A completed update (the running build is the new one) is reported too.
+            write(record,
+                  R"({"format": 1, "result": "ok", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+                  R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1"})");
+            o.update.currentBuildId = QStringLiteral("v0.4.1-0-gabcdef0");
+            ui::UiContext ctx(o);
+            ctx.start();
+            QCOMPARE(ctx.updates()->state(), QStringLiteral("completed"));
+        }
+    }
+
+    void startCreatesTheUpdateStateDirectory()
+    {
+        ui::UiContext::Options o = options();
+        o.update.stagingDir = o.layout.stateDir + QStringLiteral("/update");
+        QVERIFY(!QFileInfo::exists(o.update.stagingDir));
+        ui::UiContext ctx(o);
+        ctx.start();
+        QVERIFY(QFileInfo(o.update.stagingDir).isDir());
+    }
+
     void systemsModelShowsOtherBucketOnlyWhenUnrecognizedGamesExist()
     {
         // .sfc is uniquely "snes" in the built-in catalog; .rom is not in the catalog at

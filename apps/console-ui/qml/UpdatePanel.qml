@@ -6,7 +6,10 @@ import Nexora.Console
 // removable media / in the home directory, checks one (signature + version), verifies the
 // image hashes with progress, and installs after a confirmation. Every state is stated
 // plainly; on the desktop build updates are not supported and the panel says exactly that
-// instead of offering buttons that cannot work.
+// instead of offering buttons that cannot work. The result of the last update attempt
+// (installed, or rolled back by the boot check) stays on screen until it is dismissed.
+// Everything that comes from a bundle (version, notes, paths) is untrusted and shown as
+// plain text only.
 FocusScope {
     id: panel
     objectName: "updatePanel"
@@ -55,7 +58,7 @@ FocusScope {
         case "restartrequired": return "Installed — restart to finish the update"
         case "completed": return "The update was installed successfully"
         case "failed": return "The update failed"
-        case "recoveryrequired": return "Recovery required"
+        case "recoveryrequired": return "The last update was rolled back"
         default: return Theme.capitalize(updateState)
         }
     }
@@ -98,6 +101,7 @@ FocusScope {
 
                 Text {
                     text: "Software update"
+                    textFormat: Text.PlainText
                     color: Theme.text
                     font.pixelSize: Theme.fontTitle
                     font.bold: true
@@ -108,6 +112,7 @@ FocusScope {
                     wrapMode: Text.Wrap
                     text: "Installed: Nexora OS " + panel.updates.currentVersion
                           + (panel.updates.currentBuildId.length > 0 ? " (build " + panel.updates.currentBuildId + ")" : "")
+                    textFormat: Text.PlainText
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontBody
                 }
@@ -116,6 +121,7 @@ FocusScope {
                     width: parent.width
                     wrapMode: Text.Wrap
                     text: panel.stateText()
+                    textFormat: Text.PlainText
                     color: panel.updateState === "failed" || panel.updateState === "recoveryrequired" ? Theme.danger
                          : panel.updateState === "readytoinstall" || panel.updateState === "completed" ? Theme.success
                          : Theme.text
@@ -128,6 +134,7 @@ FocusScope {
                     visible: text.length > 0
                     wrapMode: Text.Wrap
                     text: (panel.updates.error.length > 0 ? panel.updates.error + ": " : "") + panel.updates.message
+                    textFormat: Text.PlainText
                     color: panel.updates.error.length > 0 ? Theme.danger : Theme.textMuted
                     font.pixelSize: Theme.fontSmall
                 }
@@ -139,6 +146,7 @@ FocusScope {
                     text: "This copy of Nexora runs on a desktop system, where the operating system is managed "
                           + "by your distribution. Signed Nexora OS update bundles can only be installed on the "
                           + "Nexora OS console image."
+                    textFormat: Text.PlainText
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontBody
                 }
@@ -158,6 +166,7 @@ FocusScope {
                         anchors.margins: Theme.space4
                         wrapMode: Text.Wrap
                         text: panel.updates.notes
+                        textFormat: Text.PlainText // release notes are untrusted bundle content
                         color: Theme.text
                         font.pixelSize: Theme.fontSmall
                     }
@@ -192,6 +201,7 @@ FocusScope {
                         wrapMode: Text.Wrap
                         text: "No update bundles found. Copy a nexora-update-<version> folder to a USB drive "
                               + "(or your home folder), connect it and select Search again."
+                        textFormat: Text.PlainText
                         color: Theme.textMuted
                         font.pixelSize: Theme.fontSmall
                     }
@@ -222,6 +232,14 @@ FocusScope {
                         description: "Writes the update to the inactive system slot"
                         actionText: "Install"
                         onAccepted: confirmInstall.open()
+                    }
+                    SettingRow {
+                        objectName: "updateAcknowledge"
+                        visible: panel.updateState === "completed" || panel.updateState === "recoveryrequired"
+                        label: panel.updateState === "completed" ? "Got it" : "OK, keep the current version"
+                        description: "Dismisses this message; it is not shown again"
+                        actionText: "OK"
+                        onAccepted: panel.updates.acknowledgeLastResult()
                     }
                     SettingRow {
                         objectName: "updateRestart"
@@ -262,7 +280,8 @@ FocusScope {
         id: confirmInstall
         objectName: "confirmInstallUpdate"
         title: "Install update " + panel.updates.availableVersion + "?"
-        message: "Do not power off the console while the update installs. Nexora restarts into the new version afterwards."
+        message: "Do not power off the console while the update installs. When it has finished, choose "
+                 + "Restart now to start the new version; until then the current version keeps running."
         confirmText: "Install"
         onConfirmed: panel.updates.install()
     }

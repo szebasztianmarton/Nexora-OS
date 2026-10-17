@@ -16,6 +16,7 @@
 #include <cstring>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace nexora::update {
@@ -24,7 +25,6 @@ namespace {
 constexpr const char *ExpectedProduct = "nexora-os";
 constexpr qint64 MaxManifestFileBytes = 64 * 1024;
 constexpr qint64 SignatureBytes = 64;
-constexpr qint64 InsufficientStorageHeadroom = qint64(64) * 1024 * 1024;
 constexpr qint64 MaxLastUpdateBytes = 16 * 1024;
 constexpr qint64 MaxInstallStatusBytes = 4 * 1024;
 } // namespace
@@ -41,9 +41,9 @@ bool isValidTransition(UpdateState from, UpdateState to)
     case S::ReadyToInstall: return to == S::Checking || to == S::Installing;
     case S::Installing: return to == S::RestartRequired || to == S::Failed;
     case S::RestartRequired: return false; // terminal: a real install reboots the system
-    case S::Completed: return to == S::Checking;
+    case S::Completed: return to == S::Checking || to == S::Idle;
     case S::Failed: return to == S::Checking;
-    case S::RecoveryRequired: return to == S::Checking;
+    case S::RecoveryRequired: return to == S::Checking || to == S::Idle;
     }
     return false;
 }
@@ -83,6 +83,7 @@ QString nameOf(UpdateError error)
     case UpdateError::InsufficientStorage: return QStringLiteral("InsufficientStorage");
     case UpdateError::InstallRequestFailed: return QStringLiteral("InstallRequestFailed");
     case UpdateError::InstallFailed: return QStringLiteral("InstallFailed");
+    case UpdateError::InstallTimedOut: return QStringLiteral("InstallTimedOut");
     case UpdateError::Cancelled: return QStringLiteral("Cancelled");
     case UpdateError::Busy: return QStringLiteral("Busy");
     }
@@ -111,6 +112,8 @@ QString describe(UpdateError error, const QString &detail)
         return withDetail(QStringLiteral("Not enough free storage to install the update"));
     case UpdateError::InstallRequestFailed: return withDetail(QStringLiteral("Could not reach the install helper"));
     case UpdateError::InstallFailed: return withDetail(QStringLiteral("The install helper reported a failure"));
+    case UpdateError::InstallTimedOut:
+        return withDetail(QStringLiteral("The install helper did not finish in time; the update was not confirmed"));
     case UpdateError::Cancelled: return withDetail(QStringLiteral("Cancelled"));
     case UpdateError::Busy: return withDetail(QStringLiteral("Another update operation is already in progress"));
     }
@@ -242,11 +245,22 @@ bool UpdateService::verify()
     m_progress = 0.0;
     emit progressChanged();
 
-    const qint64 required = m_pending->image.size + InsufficientStorageHeadroom;
+    // Nothing is staged: the helper writes the image straight from the bundle to the
+    // inactive slot. The state directory only has to exist (QStorageInfo reports no space
+    // for a missing path) and hold the small status/record files.
+    if (m_env.stagingDir.isEmpty() || !QDir().mkpath(m_env.stagingDir)) {
+        setState(UpdateState::Failed, UpdateError::InsufficientStorage,
+                 describe(UpdateError::InsufficientStorage,
+                          QStringLiteral("cannot create the update state directory %1").arg(m_env.stagingDir)));
+        return true;
+    }
+    QFile::setPermissions(m_env.stagingDir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     const qint64 available
         = m_env.freeBytes ? m_env.freeBytes(m_env.stagingDir) : QStorageInfo(m_env.stagingDir).bytesAvailable();
-    if (available < required) {
-        setState(UpdateState::Failed, UpdateError::InsufficientStorage, describe(UpdateError::InsufficientStorage));
+    if (available < MinimumStateBytes) {
+        setState(UpdateState::Failed, UpdateError::InsufficientStorage,
+                 describe(UpdateError::InsufficientStorage,
+                          QStringLiteral("the data partition is full (%1 bytes free)").arg(available)));
         return true;
     }
 
@@ -320,7 +334,9 @@ bool UpdateService::install()
     if (!isValidTransition(m_state, UpdateState::Installing) || m_bundleDir.isEmpty())
         return false;
 
-    const int fd = ::open(m_env.installRequestFifo.toLocal8Bit().constData(), O_WRONLY | O_NONBLOCK);
+    // Before the request: whatever is in the status file now is an earlier answer.
+    m_statusBefore = statusSnapshot();
+    const int fd = ::open(m_env.installRequestFifo.toLocal8Bit().constData(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
         setState(UpdateState::Failed, UpdateError::InstallRequestFailed,
                  describe(UpdateError::InstallRequestFailed, QString::fromLocal8Bit(std::strerror(errno))));
@@ -337,34 +353,89 @@ bool UpdateService::install()
 
     setState(UpdateState::Installing, UpdateError::None,
              QStringLiteral("installing %1").arg(m_pending ? m_pending->version.toString() : QString()));
+    m_installDeadline = QDeadlineTimer(m_env.installTimeout);
     m_installPoll.start();
     return true;
 }
 
+UpdateService::StatusSnapshot UpdateService::statusSnapshot() const
+{
+    StatusSnapshot snapshot;
+    struct ::stat st
+    { };
+    if (::stat(QFile::encodeName(m_env.installStatusFile).constData(), &st) != 0)
+        return snapshot;
+    snapshot.exists = true;
+    snapshot.device = quint64(st.st_dev);
+    snapshot.inode = quint64(st.st_ino);
+    snapshot.size = qint64(st.st_size);
+    snapshot.mtimeNs = qint64(st.st_mtim.tv_sec) * 1000000000 + qint64(st.st_mtim.tv_nsec);
+    snapshot.ctimeNs = qint64(st.st_ctim.tv_sec) * 1000000000 + qint64(st.st_ctim.tv_nsec);
+    QString readError;
+    snapshot.content
+        = shared::readFileLimited(m_env.installStatusFile, MaxInstallStatusBytes, &readError).value_or(QByteArray());
+    return snapshot;
+}
+
 void UpdateService::pollInstallStatus()
 {
-    QString readError;
-    const auto content = shared::readFileLimited(m_env.installStatusFile, MaxInstallStatusBytes, &readError);
-    if (!content)
-        return; // not written yet, or transient; keep polling
-    const QString text = QString::fromUtf8(*content).trimmed();
-    if (text.startsWith(QStringLiteral("ok "))) {
+    if (m_state != UpdateState::Installing) {
         m_installPoll.stop();
-        setState(UpdateState::RestartRequired, UpdateError::None,
-                 QStringLiteral("update installed; restart required (%1)").arg(text.mid(3)));
-    } else if (text.startsWith(QStringLiteral("error "))) {
-        m_installPoll.stop();
-        setState(UpdateState::Failed, UpdateError::InstallFailed, describe(UpdateError::InstallFailed, text.mid(6)));
+        return;
     }
-    // anything else: not a recognised status line yet; keep polling
+    // Only a status written after the request answers it (see install()). The helpers
+    // replace the file atomically, so a new answer is a new inode even with the same text.
+    const StatusSnapshot now = statusSnapshot();
+    if (now.exists && !(now == m_statusBefore)) {
+        const QString text = QString::fromUtf8(now.content).trimmed();
+        const QString expected = m_pending ? m_pending->version.toString() : QString();
+        if (text.startsWith(QStringLiteral("installing "))) {
+            const QString message = QStringLiteral("installing %1 to slot %2").arg(expected, text.mid(11).trimmed());
+            if (message != m_message)
+                setState(UpdateState::Installing, UpdateError::None, message);
+        } else if (text.startsWith(QStringLiteral("ok "))) {
+            m_installPoll.stop();
+            const QString reported = text.mid(3).trimmed();
+            const auto reportedVersion = Version::parse(reported);
+            if (m_pending && reportedVersion && *reportedVersion == m_pending->version) {
+                setState(UpdateState::RestartRequired, UpdateError::None,
+                         QStringLiteral("update installed; restart required (%1)").arg(reported));
+            } else {
+                setState(UpdateState::Failed, UpdateError::InstallFailed,
+                         describe(UpdateError::InstallFailed,
+                                  QStringLiteral("it reported version %1, expected %2").arg(reported, expected)));
+            }
+            return;
+        } else if (text.startsWith(QStringLiteral("error "))) {
+            m_installPoll.stop();
+            setState(UpdateState::Failed, UpdateError::InstallFailed,
+                     describe(UpdateError::InstallFailed, text.mid(6)));
+            return;
+        }
+        // anything else: not a recognised status line (yet); keep polling
+    }
+    if (m_installDeadline.hasExpired()) {
+        m_installPoll.stop();
+        const auto minutes = std::chrono::duration_cast<std::chrono::minutes>(m_env.installTimeout).count();
+        setState(UpdateState::Failed, UpdateError::InstallTimedOut,
+                 describe(UpdateError::InstallTimedOut,
+                          minutes > 0
+                              ? QStringLiteral("no result after %1 minutes; restart before trying again").arg(minutes)
+                              : QStringLiteral("no result; restart before trying again")));
+    }
+}
+
+QString UpdateService::lastUpdatePath() const
+{
+    return m_env.stagingDir + QStringLiteral("/last-update.json");
 }
 
 void UpdateService::loadPersistedState()
 {
-    if (m_state != UpdateState::Idle)
+    if (m_state != UpdateState::Idle || m_env.stagingDir.isEmpty())
         return;
 
-    const QString path = m_env.stagingDir + QStringLiteral("/last-update.json");
+    const QString path = lastUpdatePath();
     QString readError;
     const auto bytes = shared::readFileLimited(path, MaxLastUpdateBytes, &readError);
     if (!bytes)
@@ -376,17 +447,36 @@ void UpdateService::loadPersistedState()
     const QString newBuildId = root.value(QStringLiteral("newBuildId")).toString();
     const QString previousBuildId = root.value(QStringLiteral("previousBuildId")).toString();
     const QString result = root.value(QStringLiteral("result")).toString();
+    // Versions are friendlier than build ids; older records only carry the build ids.
+    const QString newVersion = root.value(QStringLiteral("newVersion")).toString();
+    const QString previousVersion = root.value(QStringLiteral("previousVersion")).toString();
+    const QString newName = newVersion.isEmpty() ? newBuildId : newVersion;
+    const QString previousName = previousVersion.isEmpty() ? previousBuildId : previousVersion;
 
     if (result == QStringLiteral("rolled-back")) {
         setState(UpdateState::RecoveryRequired, UpdateError::None,
-                 QStringLiteral("update to %1 failed and was rolled back to %2").arg(newBuildId, previousBuildId));
+                 QStringLiteral("The update to %1 did not start correctly, so Nexora OS went back to %2. "
+                                "Nothing was lost; you can try the update again.")
+                     .arg(newName, previousName));
         return;
     }
     if (!newBuildId.isEmpty() && newBuildId == m_env.currentBuildId) {
         setState(UpdateState::Completed, UpdateError::None,
-                 QStringLiteral("updated from %1 to %2").arg(previousBuildId, newBuildId));
+                 QStringLiteral("updated from %1 to %2").arg(previousName, newName));
         QFile::remove(path); // reported once
     }
+}
+
+bool UpdateService::acknowledgeLastResult()
+{
+    if (m_state != UpdateState::Completed && m_state != UpdateState::RecoveryRequired)
+        return false;
+    const QString path = lastUpdatePath();
+    // unlink() is atomic: the record is either still there (and shown again) or gone.
+    if (!m_env.stagingDir.isEmpty() && QFileInfo::exists(path) && !QFile::remove(path))
+        return false;
+    setState(UpdateState::Idle);
+    return true;
 }
 
 } // namespace nexora::update

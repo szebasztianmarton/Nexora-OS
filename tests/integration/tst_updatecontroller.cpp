@@ -9,6 +9,8 @@
 #include "nexora/update/UpdateService.h"
 
 #include <QDir>
+#include <QFile>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -105,6 +107,31 @@ private slots:
         QCOMPARE(controller.state(), QStringLiteral("readytoinstall"));
         QCOMPARE(controller.error(), QString());
         qunsetenv("NEXORA_UPDATE_TEST");
+    }
+
+    void acknowledgeLastResultDismissesARollback()
+    {
+        // Even on the desktop (updates unsupported) a recorded result can be dismissed.
+        qunsetenv("NEXORA_UPDATE_TEST");
+        QTemporaryDir keyRoot, stageRoot;
+        QFile f(stageRoot.filePath(QStringLiteral("last-update.json")));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(
+            R"({"format": 1, "result": "rolled-back", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+            R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1", "slot": "a"})");
+        f.close();
+
+        UpdateService service(baseEnv(keyRoot.path(), stageRoot.path()));
+        service.loadPersistedState();
+        UpdateController controller(&service, QStringLiteral("0.4.0"), QStringLiteral("v0.4.0-0-gcafebabe"), true);
+        QSignalSpy changed(&controller, &UpdateController::stateChanged);
+        QCOMPARE(controller.state(), QStringLiteral("recoveryrequired"));
+        QVERIFY(controller.message().contains(QStringLiteral("0.4.1")));
+        QVERIFY(controller.acknowledgeLastResult());
+        QCOMPARE(controller.state(), QStringLiteral("idle"));
+        QVERIFY(changed.size() > 0);
+        QVERIFY(!f.exists());
+        QVERIFY(!controller.acknowledgeLastResult()); // nothing left to dismiss
     }
 
     void candidateBundlesFindsHomeDirectoryBundle()

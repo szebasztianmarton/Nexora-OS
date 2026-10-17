@@ -79,6 +79,7 @@ FocusScope {
             Text {
                 width: parent.width
                 text: dialog.title
+                textFormat: Text.PlainText // titles can name untrusted items (update versions, games)
                 color: Theme.text
                 font.pixelSize: Theme.fontTitle
                 font.bold: true
@@ -88,6 +89,7 @@ FocusScope {
                 width: parent.width
                 visible: text.length > 0
                 text: dialog.message
+                textFormat: Text.PlainText
                 color: Theme.textMuted
                 font.pixelSize: Theme.fontBody
                 wrapMode: Text.Wrap
