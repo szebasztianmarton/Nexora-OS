@@ -7,6 +7,11 @@
 # NEXORA_RAPID_SECONDS it gives up and switches to the recovery login on
 # tty2, so that a crashing UI never makes the system unusable.
 #
+# Before every start it increments the counter ${SESSION_DIR}/ui-starts,
+# which nexora-bootok uses to tell a UI that stayed up from one that was
+# restarted. Restarts and giving up are also written to the kernel log
+# (/dev/kmsg), so they appear on the serial console (qemu-boot-test.sh).
+#
 # This script only runs fixed commands; it reads no input from the
 # console UI.
 
@@ -34,6 +39,11 @@ NEXORA_RAPID_SECONDS=15
 log() {
 	logger -t nexora-session -- "$*"
 	echo "$(date '+%Y-%m-%dT%H:%M:%S') nexora-session: $*" >> "${STDERR_LOG}"
+}
+
+# console MESSAGE: one line in the kernel log, printed on every console.
+console() {
+	printf '<4>nexora-session: %s\n' "$*" > /dev/kmsg 2> /dev/null || true
 }
 
 uptime_seconds() {
@@ -81,6 +91,7 @@ export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
 
 failures=0
 delay=1
+starts=0
 
 while [ "${stopping}" -eq 0 ]; do
 	# The UI rotates its own --log-file; only the supervisor log is
@@ -92,6 +103,9 @@ while [ "${stopping}" -eq 0 ]; do
 	chown "${uid}:${gid}" "${NEXORA_TTY}"
 	chmod 0600 "${NEXORA_TTY}"
 
+	starts=$((starts + 1))
+	printf '%s\n' "${starts}" > "${SESSION_DIR}/ui-starts.tmp" &&
+		mv -f "${SESSION_DIR}/ui-starts.tmp" "${SESSION_DIR}/ui-starts"
 	start=$(uptime_seconds)
 	log "starting ${APP} as ${APP_USER} on ${NEXORA_TTY}"
 	# setsid + opening the VT as stdin makes it the controlling terminal
@@ -119,10 +133,12 @@ while [ "${stopping}" -eq 0 ]; do
 	fi
 	if [ "${failures}" -ge "${NEXORA_MAX_RAPID_FAILURES}" ]; then
 		log "giving up after ${failures} rapid failures; see ${LOG_FILE} and ${STDERR_LOG}; recovery login on tty${RECOVERY_VT}"
+		console "giving up after ${failures} rapid failures of nexora-console-ui; recovery login on tty${RECOVERY_VT}"
 		chvt "${RECOVERY_VT}"
 		exit 1
 	fi
 
+	console "nexora-console-ui exited with status ${status} after ${runtime}s; restarting in ${delay}s"
 	sleep "${delay}" &
 	child=$!
 	wait "${child}"

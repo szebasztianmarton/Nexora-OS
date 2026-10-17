@@ -6,8 +6,13 @@
 # Completes the A/B trial-boot protocol started by nexora-updated:
 #
 # - Running slot == nexora_try (a freshly installed slot is on trial):
-#   wait NEXORA_BOOTOK_DELAY seconds, then, if the console UI supervisor
-#   and nexora-console-ui are still running, make the slot permanent
+#   watch the console UI for NEXORA_BOOTOK_DELAY seconds. It must stay up
+#   CONTINUOUSLY for the whole window: the supervisor and
+#   nexora-console-ui are checked every NEXORA_BOOTOK_INTERVAL seconds,
+#   and the supervisor's start counter (ui-starts in
+#   /run/nexora-session, incremented by nexora-session before every start
+#   of the UI) must not change, so a UI that crashes and is restarted
+#   in between is not mistaken for a healthy one. Then make the slot permanent
 #   (grubenv: nexora_slot=<slot> nexora_try= nexora_tries=0), write
 #   "ok <version>" to /run/nexora/update-status and record the result in
 #   the user's state directory (last-update.json, read by the UI). If the
@@ -30,16 +35,20 @@ umask 077
 APP_USER=nexora
 APP=nexora-console-ui
 SESSION_PIDFILE=/var/run/nexora.pid
+SESSION_DIR=/run/nexora-session
 RUN_DIR=/run/nexora
 OWNER=root
 GROUP=nexora
 STATE_DIR=/home/nexora/.local/state/nexora/update
 NEXORA_BOOTOK_DELAY=45
+NEXORA_BOOTOK_INTERVAL=5
 TEST_MODE=0
 
 if [ "${NEXORA_BOOTOK_TEST:-0}" = "1" ]; then
 	# Test mode (buildroot-external/tests/test-update-helper.sh): scratch
-	# paths, no delay, UI health and the state directory are simulated.
+	# paths, a short (default: no) window, UI liveness and the state
+	# directory are simulated; the start counter is read from a scratch
+	# session directory.
 	TEST_MODE=1
 	RUN_DIR=${NEXORA_TEST_RUN_DIR:?}
 	OWNER=$(id -un)
@@ -50,7 +59,9 @@ if [ "${NEXORA_BOOTOK_TEST:-0}" = "1" ]; then
 	NEXORA_RELEASE_FILE=${NEXORA_TEST_RELEASE_FILE:?}
 	NEXORA_CMDLINE_FILE=${NEXORA_TEST_CMDLINE_FILE:?}
 	NEXORA_GRUB_EDITENV=${NEXORA_TEST_GRUB_EDITENV:-grub-editenv}
-	NEXORA_BOOTOK_DELAY=0
+	SESSION_DIR=${NEXORA_TEST_SESSION_DIR:?}
+	NEXORA_BOOTOK_DELAY=${NEXORA_TEST_BOOTOK_DELAY:-0}
+	NEXORA_BOOTOK_INTERVAL=1
 elif [ -r /etc/default/nexora ]; then
 	# shellcheck source=/dev/null
 	. /etc/default/nexora
@@ -65,7 +76,8 @@ log() {
 	fi
 }
 
-ui_healthy() {
+# ui_alive: the supervisor and the console UI are running right now.
+ui_alive() {
 	if [ "${TEST_MODE}" = "1" ]; then
 		[ "${NEXORA_TEST_UI_HEALTHY:-0}" = "1" ]
 		return
@@ -77,6 +89,43 @@ ui_healthy() {
 	esac
 	kill -0 "${_pid}" 2> /dev/null || return 1
 	pidof "${APP}" > /dev/null 2>&1
+}
+
+# ui_starts: how often nexora-session has started the UI (fails if the
+# counter is missing or malformed).
+ui_starts() {
+	_n=$(cat "${SESSION_DIR}/ui-starts" 2> /dev/null) || return 1
+	case "${_n}" in
+	"" | *[!0-9]*) return 1 ;;
+	esac
+	echo "${_n}"
+}
+
+# ui_generation: start counter plus supervisor PID (a restarted
+# supervisor starts counting again, so its PID must not change either).
+ui_generation() {
+	_gen=$(ui_starts) || return 1
+	if [ "${TEST_MODE}" != "1" ]; then
+		_gen="${_gen}:$(cat "${SESSION_PIDFILE}" 2> /dev/null)"
+	fi
+	echo "${_gen}"
+}
+
+# ui_stays_up SECONDS: true if the UI runs for the whole window without
+# being restarted.
+ui_stays_up() {
+	_starts=$(ui_generation) || return 1
+	ui_alive || return 1
+	_left=$1
+	while [ "${_left}" -gt 0 ]; do
+		_step=${NEXORA_BOOTOK_INTERVAL}
+		[ "${_step}" -le "${_left}" ] || _step=${_left}
+		sleep "${_step}"
+		_left=$((_left - _step))
+		ui_alive || return 1
+		[ "$(ui_generation)" = "${_starts}" ] || return 1
+	done
+	[ "$(ui_generation)" = "${_starts}" ]
 }
 
 # pending_value KEY: value from the record written by nexora-updated.
@@ -110,8 +159,8 @@ running=$(nexora_running_slot) || {
 	log info "no nexora.slot= on the kernel command line; nothing to do"
 	exit 0
 }
-if [ ! -f "${NEXORA_GRUBENV}" ]; then
-	log err "${NEXORA_GRUBENV} not found (ESP not mounted?)"
+if ! nexora_env_source > /dev/null; then
+	log err "${NEXORA_GRUBENV} not found or damaged (ESP not mounted?)"
 	exit 1
 fi
 
@@ -123,9 +172,8 @@ pending_target=""
 
 if [ -n "${try}" ] && [ "${try}" = "${running}" ]; then
 	log info "slot ${running} is on trial; confirming in ${NEXORA_BOOTOK_DELAY}s if the UI stays up"
-	sleep "${NEXORA_BOOTOK_DELAY}"
-	if ! ui_healthy; then
-		log warning "console UI not running; slot ${running} NOT confirmed (GRUB will retry or roll back)"
+	if ! ui_stays_up "${NEXORA_BOOTOK_DELAY}"; then
+		log warning "console UI not running or restarted; slot ${running} NOT confirmed (GRUB will retry or roll back)"
 		exit 1
 	fi
 	if ! nexora_env_set "nexora_slot=${running}" nexora_try= nexora_tries=0; then
