@@ -389,6 +389,86 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(games->rowCount(), 2, Timeout);
     }
 
+    // Guide opens the quick menu (not the game bar) while an emulator runs, toggles the bar
+    // otherwise; holding Start opens the menu too; both keep input flowing to the shell.
+    void quickMenuOpensOnlyWhileAnEmulatorRuns()
+    {
+        input::InputController input;
+        QVERIFY(input.start(std::make_unique<FakeBackend>(input.navigator())));
+        input.navigator()->setMenuHoldDuration(std::chrono::milliseconds(50));
+        ui::UiContext ctx(options(), &input);
+        ctx.start();
+        auto *bar = ctx.gameBar();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+
+        // Idle: no quick menu; Guide toggles the bar.
+        QVERIFY(!bar->openQuickMenu());
+        QVERIFY(!bar->isQuickMenuOpen());
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(bar->isOpen());
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(!bar->isOpen());
+
+        QVERIFY(ctx.library()->launchWithProfile(id, QStringLiteral("long")));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("running"), Timeout);
+        QVERIFY(input.isSuspended());
+
+        // Running: Guide opens the quick menu; input resumes; Guide again closes it.
+        QSignalSpy menuChanged(bar, &ui::GameBarController::quickMenuOpenChanged);
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(bar->isQuickMenuOpen());
+        QVERIFY(!bar->isOpen());
+        QVERIFY(!input.isSuspended());
+        input.injectAction(input::NavAction::GameBar);
+        QVERIFY(!bar->isQuickMenuOpen());
+        QVERIFY(input.isSuspended());
+        QCOMPARE(menuChanged.size(), 2);
+
+        // Holding Start (while suspended) opens it as well.
+        input.navigator()->buttonEvent(input::GamepadButton::Start, true);
+        QTRY_VERIFY_WITH_TIMEOUT(bar->isQuickMenuOpen(), Timeout);
+        input.navigator()->buttonEvent(input::GamepadButton::Start, false);
+        QVERIFY(!input.isSuspended());
+
+        // Ctrl+G's toggle() still reaches the bar, which replaces the menu.
+        bar->toggle();
+        QVERIFY(bar->isOpen());
+        bar->close();
+        QVERIFY(bar->openQuickMenu());
+
+        // The menu closes by itself once the emulator is gone.
+        QVERIFY(ctx.app()->stop());
+        QTRY_VERIFY_WITH_TIMEOUT(!ctx.app()->isBusy(), Timeout);
+        QVERIFY(!bar->isQuickMenuOpen());
+    }
+
+    void presentRoleAndSystemNames()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
+        QVERIFY(ctx.library()->games()->index(0).data(ui::GameListModel::PresentRole).toBool());
+        QVERIFY(ctx.library()->games()->roleNames().values().contains("present"));
+
+        QVERIFY(QFile::remove(gamesDir() + QStringLiteral("/Alpha.rom")));
+        QVERIFY(ctx.library()->refresh());
+        waitForScan(ctx);
+        ctx.library()->setFilter(QStringLiteral("missing"));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.library()->games()->rowCount(), 1, Timeout);
+        QVERIFY(!ctx.library()->games()->index(0).data(ui::GameListModel::PresentRole).toBool());
+
+        QCOMPARE(ctx.library()->systemName({}), QString());
+        QCOMPARE(ctx.library()->systemName(QStringLiteral("no-such-system")), QString());
+        QVERIFY(ctx.library()->systems()->rowCount() > 0);
+        const QModelIndex first = ctx.library()->systems()->index(0);
+        QCOMPARE(ctx.library()->systemName(first.data(ui::SystemListModel::SystemIdRole).toString()),
+                 first.data(ui::SystemListModel::NameRole).toString());
+    }
+
     void failedStartIsNotPlayed()
     {
         // Executable bit set but not a program: passes validation, then fails to start.
@@ -530,6 +610,46 @@ private slots:
     // GameLibrary, system catalog and emulator set) rather than SystemListModel in
     // isolation: the "Other" row (unrecognised systemId) must appear exactly when there is
     // at least one such game, and disappear again once there is none.
+    void updateRecordFromBootIsShownAtStartup()
+    {
+        // nexora-bootok records a rolled-back trial boot in stateDir/update/last-update.json;
+        // the UI must report it from the moment it starts.
+        ui::UiContext::Options o = options();
+        o.update.stagingDir = o.layout.stateDir + QStringLiteral("/update");
+        o.update.currentBuildId = QStringLiteral("v0.4.0-0-gcafebabe");
+        const QString record = o.update.stagingDir + QStringLiteral("/last-update.json");
+        write(record,
+              R"({"format": 1, "result": "rolled-back", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+              R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1", )"
+              R"("slot": "a"})");
+        {
+            ui::UiContext ctx(o);
+            ctx.start();
+            QCOMPARE(ctx.updates()->state(), QStringLiteral("recoveryrequired"));
+            QVERIFY(ctx.updates()->message().contains(QStringLiteral("0.4.1")));
+        }
+        {
+            // A completed update (the running build is the new one) is reported too.
+            write(record,
+                  R"({"format": 1, "result": "ok", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+                  R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1"})");
+            o.update.currentBuildId = QStringLiteral("v0.4.1-0-gabcdef0");
+            ui::UiContext ctx(o);
+            ctx.start();
+            QCOMPARE(ctx.updates()->state(), QStringLiteral("completed"));
+        }
+    }
+
+    void startCreatesTheUpdateStateDirectory()
+    {
+        ui::UiContext::Options o = options();
+        o.update.stagingDir = o.layout.stateDir + QStringLiteral("/update");
+        QVERIFY(!QFileInfo::exists(o.update.stagingDir));
+        ui::UiContext ctx(o);
+        ctx.start();
+        QVERIFY(QFileInfo(o.update.stagingDir).isDir());
+    }
+
     void systemsModelShowsOtherBucketOnlyWhenUnrecognizedGamesExist()
     {
         // .sfc is uniquely "snes" in the built-in catalog; .rom is not in the catalog at
@@ -574,6 +694,73 @@ private slots:
         QVERIFY(ctx.library()->removeGame(romId));
         QCOMPARE(rowOf(QString()), -1);
         QVERIFY(rowOf(QStringLiteral("snes")) >= 0); // the recognised bucket is unaffected
+    }
+
+    // Settings › Emulators › Default emulator: only an enabled emulator that declares the
+    // system may become its default; "Other" (no system id) and unknown systems have none.
+    // Invoked by name so the test also documents the QML-facing API.
+    void defaultEmulatorIsValidated()
+    {
+        write(configDir() + QStringLiteral("/snesemu.json"),
+              "{\"id\":\"snesemu\",\"name\":\"Snes Emu\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".sfc\"],\"systems\":[\"snes\"]}");
+        write(configDir() + QStringLiteral("/gbaemu.json"),
+              "{\"id\":\"gbaemu\",\"name\":\"Gba Emu\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".gba\"],\"systems\":[\"gba\"]}");
+        ui::UiContext ctx(options());
+        ctx.start();
+        auto *library = ctx.library();
+        auto set = [library](const QString &systemId, const QString &emulatorId) {
+            bool ok = false;
+            const bool invoked = QMetaObject::invokeMethod(library, "setDefaultEmulator", Q_RETURN_ARG(bool, ok),
+                                                           Q_ARG(QString, systemId), Q_ARG(QString, emulatorId));
+            return invoked && ok;
+        };
+        auto stored
+            = [&ctx](const QString &systemId) { return ctx.settings()->defaultEmulators().value(systemId).toString(); };
+
+        QVERIFY(set(QStringLiteral("snes"), QStringLiteral("snesemu")));
+        QCOMPARE(stored(QStringLiteral("snes")), QStringLiteral("snesemu"));
+        // Incompatible emulator, unknown emulator, "Other" and unknown systems are refused
+        // and leave the stored value alone.
+        QVERIFY(!set(QStringLiteral("snes"), QStringLiteral("gbaemu")));
+        QVERIFY(!set(QStringLiteral("snes"), QStringLiteral("nope")));
+        QVERIFY(!set(QString(), QStringLiteral("snesemu")));
+        QVERIFY(!set(QStringLiteral("no-such-system"), QStringLiteral("snesemu")));
+        QCOMPARE(stored(QStringLiteral("snes")), QStringLiteral("snesemu"));
+        QVERIFY(!ctx.settings()->defaultEmulators().contains(QString()));
+        // "" = back to automatic.
+        QVERIFY(set(QStringLiteral("snes"), QString()));
+        QVERIFY(!ctx.settings()->defaultEmulators().contains(QStringLiteral("snes")));
+
+        // The choices offered for a system: Automatic + compatible emulators only.
+        QVariantList choices;
+        QVERIFY(QMetaObject::invokeMethod(library, "defaultEmulatorChoices", Q_RETURN_ARG(QVariantList, choices),
+                                          Q_ARG(QString, QStringLiteral("snes"))));
+        QCOMPARE(choices.size(), 2);
+        QCOMPARE(choices.at(0).toMap().value(QStringLiteral("id")).toString(), QString());
+        QCOMPARE(choices.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("snesemu"));
+        QVERIFY(QMetaObject::invokeMethod(library, "defaultEmulatorChoices", Q_RETURN_ARG(QVariantList, choices),
+                                          Q_ARG(QString, QString())));
+        QVERIFY(choices.isEmpty());
+    }
+
+    // Edits that fail (unknown/removed game) say so through notice(..., true) instead of
+    // failing silently.
+    void failedEditsEmitNotices()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QSignalSpy notices(ctx.library(), &ui::LibraryController::notice);
+        const qint64 unknown = 987654;
+        QVERIFY(!ctx.library()->setGameMetadata(unknown, QStringLiteral("Title"), QString()));
+        QVERIFY(!ctx.library()->setGameSystem(unknown, QStringLiteral("snes")));
+        QVERIFY(!ctx.library()->removeGame(unknown));
+        QCOMPARE(notices.size(), 3);
+        for (const auto &args : notices) {
+            QVERIFY(args.at(1).toBool()); // isError
+            QVERIFY(!args.at(0).toString().isEmpty());
+        }
     }
 };
 

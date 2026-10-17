@@ -52,8 +52,9 @@ class SettingsController : public QObject
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY changed)
     Q_PROPERTY(QString logLevel READ logLevel WRITE setLogLevel NOTIFY changed)
     // Default emulator id per game system id (only systems with an override are present);
-    // a reactive mirror of setDefaultEmulatorForSystem()/defaultEmulatorForSystem() so QML
-    // can bind to it directly instead of re-invoking the getter by hand.
+    // a reactive mirror of defaultEmulatorForSystem() so QML can bind to it directly. It is
+    // changed through LibraryController::setDefaultEmulator(), which knows the emulators and
+    // the system catalog and refuses incompatible choices.
     Q_PROPERTY(QVariantMap defaultEmulators READ defaultEmulators NOTIFY changed)
 
 public:
@@ -103,8 +104,7 @@ public:
     void setLogLevel(const QString &value) { set(QStringLiteral("log.level"), value); }
     QVariantMap defaultEmulators() const;
 
-    // Default emulator id for a game system id; "" clears the default / means none set.
-    Q_INVOKABLE bool setDefaultEmulatorForSystem(const QString &systemId, const QString &emulatorId);
+    // Default emulator id for a game system id; "" = none set (automatic).
     Q_INVOKABLE QString defaultEmulatorForSystem(const QString &systemId) const;
 
     // Cycles a list-valued option (display mode, resolution, sort, backend) by |step|.

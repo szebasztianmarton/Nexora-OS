@@ -148,7 +148,17 @@ void SystemController::refresh()
     }
     map[QStringLiteral("storage")] = storage;
     m_hardware = map;
+    ++m_refreshCount;
+    m_lastRefresh.start();
     emit hardwareChanged();
+}
+
+bool SystemController::refreshIfStale(int maxAgeMs)
+{
+    if (m_lastRefresh.isValid() && m_lastRefresh.elapsed() < maxAgeMs)
+        return false;
+    refresh();
+    return true;
 }
 
 bool SystemController::powerOff()

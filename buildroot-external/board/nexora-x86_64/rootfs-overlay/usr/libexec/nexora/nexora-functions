@@ -1,0 +1,223 @@
+# shellcheck shell=sh
+# Shared helpers for the Nexora OS A/B slot scripts (nexora-updated,
+# nexora-bootok, nexora-recovery, S01nexora-data). Sourced, never executed.
+# Written for BusyBox sh (no bashisms).
+#
+# Disk layout (see board/nexora-x86_64/genimage.cfg), GPT partition names:
+#   nexora-esp    vfat, GRUB + grub.cfg + grubenv, mounted at /boot/efi
+#   nexora-rootA  ext4 root filesystem, slot A (kernel at /boot/bzImage)
+#   nexora-rootB  ext4 root filesystem, slot B
+#   nexora-data   ext4 user data, mounted at /home
+#
+# grubenv variables (read by grub.cfg, written here with grub-editenv):
+#   nexora_slot   A|B     confirmed (known good) slot
+#   nexora_try    A|B|""  newly installed slot on trial ("" = none)
+#   nexora_tries  0..3    trial boots left; grub.cfg decrements it
+
+NEXORA_ESP_MOUNT=/boot/efi
+NEXORA_GRUBENV="${NEXORA_ESP_MOUNT}/EFI/BOOT/grubenv"
+# Written by nexora-updated after arming a trial boot, consumed by
+# nexora-bootok. On the ESP (root-only mount), not in the user's home.
+# shellcheck disable=SC2034 # used by the scripts that source this file
+NEXORA_PENDING_FILE="${NEXORA_ESP_MOUNT}/nexora/update-pending"
+NEXORA_RELEASE_FILE=/etc/nexora-release
+NEXORA_CMDLINE_FILE=/proc/cmdline
+NEXORA_GRUB_EDITENV=grub-editenv
+
+# Prints A or B (the slot GRUB booted, from nexora.slot= on the kernel
+# command line); fails if absent.
+nexora_running_slot() {
+	_slot=$(tr ' ' '\n' < "${NEXORA_CMDLINE_FILE}" |
+		sed -n 's/^nexora\.slot=\([AB]\)$/\1/p' | tail -n 1)
+	[ -n "${_slot}" ] || return 1
+	echo "${_slot}"
+}
+
+nexora_other_slot() {
+	case "$1" in
+	A) echo B ;;
+	B) echo A ;;
+	*) return 1 ;;
+	esac
+}
+
+# nexora_release_value KEY: value of KEY in /etc/nexora-release (quotes
+# removed). KEY must be a fixed word chosen by the caller.
+nexora_release_value() {
+	sed -n "s/^$1=//p" "${NEXORA_RELEASE_FILE}" 2> /dev/null |
+		tail -n 1 | tr -d '"'
+}
+
+# nexora_safe_word VALUE: prints VALUE if it only contains
+# [A-Za-z0-9._+-] (1..64 characters), else "unknown". Used for every value
+# that is written into a record or a JSON file.
+nexora_safe_word() {
+	case "$1" in
+	"" | *[!A-Za-z0-9._+-]*)
+		echo unknown
+		return 0
+		;;
+	esac
+	if [ "${#1}" -gt 64 ]; then
+		echo unknown
+	else
+		echo "$1"
+	fi
+}
+
+# grubenv sits on the vfat ESP, where an in-place rewrite torn by a power
+# cut leaves an invalid block (and then every later update fails). So it
+# is never edited in place: nexora_env_set edits a validated copy,
+# renames it over grubenv (as atomic as vfat gets) and then refreshes
+# grubenv.bak the same way. grub.cfg and nexora_env_get fall back to
+# grubenv.bak when grubenv is not a valid block; the recovery menu can
+# recreate both from defaults (nexora_env_recreate).
+
+# nexora_env_valid FILE: true if FILE is a complete 1024-byte GRUB
+# environment block that grub-editenv can parse.
+nexora_env_valid() {
+	[ -f "$1" ] && [ ! -L "$1" ] || return 1
+	[ "$(wc -c < "$1")" -eq 1024 ] || return 1
+	[ "$(head -n 1 "$1")" = "# GRUB Environment Block" ] || return 1
+	"${NEXORA_GRUB_EDITENV}" "$1" list > /dev/null 2>&1
+}
+
+# nexora_env_source: prints the environment file to read: grubenv, or
+# grubenv.bak if grubenv is damaged; fails if neither is valid.
+nexora_env_source() {
+	if nexora_env_valid "${NEXORA_GRUBENV}"; then
+		echo "${NEXORA_GRUBENV}"
+	elif nexora_env_valid "${NEXORA_GRUBENV}.bak"; then
+		echo "${NEXORA_GRUBENV}.bak"
+	else
+		return 1
+	fi
+}
+
+# nexora_env_get NAME: value of a grubenv variable (empty if unset).
+nexora_env_get() {
+	_src=$(nexora_env_source) || return 0
+	"${NEXORA_GRUB_EDITENV}" "${_src}" list 2> /dev/null |
+		sed -n "s/^$1=//p" | tail -n 1
+}
+
+# nexora_env_install SRC DST: replace DST with a validated copy of SRC via
+# DST.new and a rename.
+nexora_env_install() {
+	rm -f "$2.new"
+	cp "$1" "$2.new" && nexora_env_valid "$2.new" && sync &&
+		mv -f "$2.new" "$2" && sync && return 0
+	rm -f "$2.new"
+	return 1
+}
+
+# nexora_env_set NAME=VALUE...: update grubenv (and grubenv.bak).
+nexora_env_set() {
+	_src=$(nexora_env_source) || return 1
+	_new="${NEXORA_GRUBENV}.new"
+	rm -f "${_new}"
+	if ! cp "${_src}" "${_new}" ||
+		! "${NEXORA_GRUB_EDITENV}" "${_new}" set "$@" ||
+		! nexora_env_valid "${_new}"; then
+		rm -f "${_new}"
+		return 1
+	fi
+	sync
+	mv -f "${_new}" "${NEXORA_GRUBENV}" || { rm -f "${_new}"; return 1; }
+	sync
+	# Not fatal: grubenv itself is valid and current.
+	nexora_env_install "${NEXORA_GRUBENV}" "${NEXORA_GRUBENV}.bak" || true
+	return 0
+}
+
+# nexora_env_recreate SLOT: write a fresh grubenv (and grubenv.bak) with
+# SLOT confirmed and no trial boot, whatever the old files contain.
+nexora_env_recreate() {
+	case "$1" in
+	A | B) ;;
+	*) return 1 ;;
+	esac
+	_new="${NEXORA_GRUBENV}.new"
+	rm -f "${_new}"
+	if ! "${NEXORA_GRUB_EDITENV}" "${_new}" create ||
+		! "${NEXORA_GRUB_EDITENV}" "${_new}" set "nexora_slot=$1" \
+			nexora_try= nexora_tries=0 ||
+		! nexora_env_valid "${_new}"; then
+		rm -f "${_new}"
+		return 1
+	fi
+	sync
+	mv -f "${_new}" "${NEXORA_GRUBENV}" || { rm -f "${_new}"; return 1; }
+	sync
+	nexora_env_install "${NEXORA_GRUBENV}" "${NEXORA_GRUBENV}.bak"
+}
+
+# nexora_mask_secrets: filter (stdin to stdout) for raw diagnostics:
+# masks the values of password/token/secret/key/auth/cookie-like fields,
+# credentials in URLs and bearer tokens, and replaces /home/nexora with ~.
+nexora_mask_secrets() {
+	sed -E -e 's#/home/nexora#~#g' \
+		-e 's#://[^/@ ]*@#://***@#g' \
+		-e 's/([Bb][Ee][Aa][Rr][Ee][Rr])[ ]+[^ ]*/\1 ***/g' \
+		-e 's/([A-Za-z0-9_.-]*([Pp][Aa][Ss][Ss]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Kk][Ee][Yy]|[Aa][Uu][Tt][Hh]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Ss][Ee][Ss][Ss][Ii][Oo][Nn])[A-Za-z0-9_.-]*)([ ]*[=:][ ]*)[^ ,;&]*/\1\3***/g'
+}
+
+# nexora_run_bounded SECONDS COMMAND [ARG]...: run COMMAND, killing it
+# (SIGTERM) if it is still running after SECONDS. Its exit status (143
+# when killed). COMMAND must be an external command; it gets no stdin.
+nexora_run_bounded() {
+	_bound=$1
+	shift
+	"$@" &
+	_bpid=$!
+	(
+		_n=0
+		while kill -0 "${_bpid}" 2> /dev/null; do
+			if [ "${_n}" -ge "${_bound}" ]; then
+				kill -TERM "${_bpid}" 2> /dev/null
+				exit 0
+			fi
+			sleep 1
+			_n=$((_n + 1))
+		done
+	) > /dev/null 2>&1 &
+	_bdog=$!
+	wait "${_bpid}"
+	_brc=$?
+	kill "${_bdog}" 2> /dev/null
+	wait "${_bdog}" 2> /dev/null
+	return "${_brc}"
+}
+
+# nexora_part_device NAME: /dev node of the GPT partition called NAME on
+# the disk that holds the running root filesystem. Works before udev has
+# run (uses sysfs and devtmpfs only). Fails if not exactly one matches.
+nexora_part_device() {
+	_majmin=$(mountpoint -d /) || return 1
+	_sys=$(readlink -f "/sys/dev/block/${_majmin}") || return 1
+	_disk=${_sys%/*}
+	_found=""
+	for _uevent in "${_disk}"/*/uevent; do
+		[ -f "${_uevent}" ] || continue
+		grep -qx "PARTNAME=$1" "${_uevent}" || continue
+		[ -z "${_found}" ] || return 1
+		_found=/dev/$(sed -n 's/^DEVNAME=//p' "${_uevent}")
+	done
+	[ "${_found}" != "" ] && [ "${_found}" != "/dev/" ] || return 1
+	echo "${_found}"
+}
+
+# nexora_size PATH: size in bytes of a block device or a regular file.
+nexora_size() {
+	if [ -b "$1" ]; then
+		_name=$(readlink -f "$1") || return 1
+		_name=${_name##*/}
+		_sectors=$(cat "/sys/class/block/${_name}/size") || return 1
+		echo $((_sectors * 512))
+	elif [ -f "$1" ]; then
+		# Regular files only occur in nexora-updated's test mode.
+		echo $(($(wc -c < "$1")))
+	else
+		return 1
+	fi
+}

@@ -136,6 +136,18 @@ private slots:
                  QStringList({QStringLiteral("mario kart"), QStringLiteral("zelda")}));
     }
 
+    // The Systems tab's "Other" card: entries without a recognised system only.
+    void filtersUnknownSystem()
+    {
+        auto list = sample();
+        list[0].systemId = QStringLiteral("snes");
+        list[4].systemId = QStringLiteral("snes");
+        list[2].systemId = QStringLiteral("nes");
+        QueryOptions o;
+        o.systemId = UnknownSystemFilter;
+        QCOMPARE(titles(LibraryQuery::apply(list, o)), QStringList({QStringLiteral("Asteroids")}));
+    }
+
     void missingFilterShowsOnlyAbsentEntries()
     {
         QueryOptions o;

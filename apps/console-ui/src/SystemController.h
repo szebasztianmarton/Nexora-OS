@@ -2,6 +2,7 @@
 
 #include "nexora/shared/DataLayout.h"
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QStringList>
 #include <QVariantMap>
@@ -42,6 +43,8 @@ class SystemController : public QObject
     Q_PROPERTY(QString osVersion READ osVersion CONSTANT)
     Q_PROPERTY(QString buildId READ buildId CONSTANT)
     Q_PROPERTY(QString board READ board CONSTANT)
+    // How many times refresh() has probed the hardware (diagnostics and tests).
+    Q_PROPERTY(int refreshCount READ refreshCount NOTIFY hardwareChanged)
 
 public:
     // Everything SystemController needs from the rest of the object graph. All pointers
@@ -71,12 +74,17 @@ public:
     QString osVersion() const { return m_osVersion; }
     QString buildId() const { return m_buildId; }
     QString board() const { return m_board; }
+    int refreshCount() const { return m_refreshCount; }
 
     // Lightweight status only (uptime, load, memory, displays); never probes /proc or /sys
     // beyond what SystemIntegration::status() already reads cheaply. Also refreshes the
     // (heavier) hardware snapshot: safe to call after the first frame, never called from
     // the constructor.
     Q_INVOKABLE void refresh();
+    // refresh() unless the last one is younger than |maxAgeMs|; returns whether it probed.
+    // Screens call this when they become current, so the synchronous probe neither runs on
+    // the start-up path nor on every tab switch.
+    Q_INVOKABLE bool refreshIfStale(int maxAgeMs);
     Q_INVOKABLE bool powerOff();
     Q_INVOKABLE bool reboot();
     // Writes a diagnostics text bundle and returns its path, or "" on failure (lastError()
@@ -108,6 +116,8 @@ private:
     QString m_osVersion;
     QString m_buildId;
     QString m_board;
+    int m_refreshCount = 0;
+    QElapsedTimer m_lastRefresh; // invalid until the first refresh()
 };
 
 } // namespace nexora::ui

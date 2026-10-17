@@ -16,14 +16,17 @@ FocusScope {
     required property SystemController system
     required property UpdateController updates
 
-    // Task 9 wires this to the real update panel; Settings only offers the entry point.
+    // Main.qml opens the update panel; Settings only offers the entry point.
     signal openUpdatePanel()
+    // A transient notice for Main.qml's toast (restore backup, clear artwork cache).
+    signal notice(string message, bool isError)
 
     readonly property var focusedItem: Window.activeFocusItem
     readonly property bool inTextField: addDirField.activeFocus
     readonly property bool overlayOpen: testPanel.visible || confirmRestart.visible
                                         || confirmPowerOff.visible || confirmRestore.visible
-    readonly property var hints: overlayOpen
+    readonly property var hints: testPanel.visible ? testPanel.hints
+        : overlayOpen
         ? [{ button: "A / Enter", action: "Confirm" }, { button: "B / Esc", action: "Cancel" }]
         : inTextField
           ? [{ button: "Type", action: "Folder path" }, { button: "Enter", action: "Add folder" },
@@ -31,10 +34,13 @@ FocusScope {
           : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Change" },
              { button: "A / Enter", action: "Select" }, { button: "L1 / R1", action: "Switch tab" }]
 
-    // Action feedback (export/backup paths, restore count) shown under their own row only;
-    // there is no settings-level property for any of these, so it is kept here.
+    // Action feedback (export/backup paths or why they failed, restore count) shown under
+    // their own row only; there is no settings-level property for any of these, so it is
+    // kept here.
     property string lastDiagnosticsPath: ""
+    property string lastDiagnosticsError: ""
     property string lastBackupPath: ""
+    property string lastBackupError: ""
     property int lastRestoredCount: -1
     property var backupList: []
     property int selectedBackupIndex: 0
@@ -45,29 +51,86 @@ FocusScope {
             selectedBackupIndex = Math.max(0, backupList.length - 1)
     }
     function storageSummary() {
-        const storage = (screen.system.hardware.storage || [])
+        const storage = (screen.system.hardware.storage || []).filter(e => e.path && Number(e.totalBytes) > 0)
         const lines = []
         for (const s of storage)
             lines.push(s.path + ": " + Theme.formatBytes(s.availableBytes) + " free of " + Theme.formatBytes(s.totalBytes))
         return lines.join("\n")
     }
-    // Cycles the default emulator for |systemId| through "Automatic" + every enabled emulator.
+    // Cycles the default emulator for |systemId| through "Automatic" + the enabled emulators
+    // that declare the system (LibraryController validates the choice again).
     function cycleDefaultEmulator(systemId, step) {
-        const count = screen.app.emulators.count
-        if (count === 0)
+        const choices = screen.library.defaultEmulatorChoices(systemId)
+        if (choices.length < 2)
             return
-        const ids = [""]
-        for (let i = 0; i < count; ++i)
-            ids.push(screen.app.emulators.emulatorIdAt(i))
         const current = screen.settings.defaultEmulators[systemId] || ""
-        let idx = ids.indexOf(current)
-        if (idx < 0)
-            idx = 0
-        idx = ((idx + step) % ids.length + ids.length) % ids.length
-        screen.settings.setDefaultEmulatorForSystem(systemId, ids[idx])
+        let idx = Math.max(0, choices.findIndex(c => c.id === current))
+        idx = ((idx + step) % choices.length + choices.length) % choices.length
+        screen.lastDefaultEmulatorSystem = systemId
+        screen.library.setDefaultEmulator(systemId, choices[idx].id)
+    }
+    function exportDiagnostics() {
+        const path = screen.system.exportDiagnostics()
+        screen.lastDiagnosticsPath = path
+        screen.lastDiagnosticsError = path.length > 0 ? "" : (screen.system.lastError || "unknown error")
+    }
+    function createBackup() {
+        const path = screen.system.createBackup(true)
+        screen.lastBackupPath = path
+        screen.lastBackupError = path.length > 0 ? "" : (screen.system.lastError || "unknown error")
+        screen.refreshBackups()
+    }
+    function restoreSelectedBackup() {
+        const ok = screen.system.restoreBackup(screen.backupList[screen.selectedBackupIndex])
+        screen.refreshBackups()
+        screen.notice(ok ? "Backup restored: settings and library reloaded"
+                         : "Restoring the backup failed: " + (screen.system.lastError || "unknown error"), !ok)
+    }
+    function clearArtworkCache() {
+        const ok = screen.system.clearArtworkCache()
+        screen.notice(ok ? "Artwork cache cleared"
+                         : "Clearing the artwork cache failed: " + (screen.system.lastError || "unknown error"), !ok)
+    }
+    // Name of the gamepad button mapped to Back (the input test's hold-to-exit button).
+    function backButtonName() {
+        for (const row of screen.settings.mappingRows) {
+            if (row.action === "back")
+                return row.button
+        }
+        return "east"
     }
 
     function focusDefault() { languageRow.focus = true }
+    // Deep link from Home / the quick menu: focuses the first control of a section
+    // ("General", "Controllers", "Display", "Audio", "Library", "Emulators", "System").
+    function focusSection(name) {
+        const heading = findSectionTitle(name)
+        if (!heading)
+            return false
+        for (let item = heading.nextItemInFocusChain(true), guard = 0; item && guard < 200;
+             item = item.nextItemInFocusChain(true), ++guard) {
+            if (!isInside(item))
+                break
+            if (item.visible && item.enabled && item.activeFocusOnTab
+                    && item.mapToItem(column, 0, 0).y > heading.mapToItem(column, 0, 0).y) {
+                item.forceActiveFocus()
+                return true
+            }
+        }
+        return false
+    }
+    function findSectionTitle(name) {
+        const kids = column.children
+        for (let i = 0; i < kids.length; ++i) {
+            if (kids[i].objectName === "sectionTitle_" + name)
+                return kids[i]
+        }
+        return null
+    }
+    function cycleValue(values, current, step) {
+        const i = Math.max(0, values.indexOf(current))
+        return values[((i + step) % values.length + values.length) % values.length]
+    }
     function focusAddFolder() { addDirField.forceActiveFocus() }
 
     function isInside(item) {
@@ -118,6 +181,7 @@ FocusScope {
     // Rows built from lists (mapping, folders) are recreated when the list changes; these
     // remember which one had focus so it can be restored.
     property string lastMappingAction
+    property string lastDefaultEmulatorSystem
     function refocusDirectory(i) {
         if (dirRepeater.count > 0)
             dirRepeater.itemAt(Math.min(i, dirRepeater.count - 1)).forceActiveFocus()
@@ -132,17 +196,30 @@ FocusScope {
         if (visible)
             ensureVisible(focusedItem)
     }
+    // The hardware probe behind the Display/Audio/System information is synchronous: it
+    // runs shortly after the tab becomes current (never on the start-up path) and only when
+    // the last one is older than 30 s.
     function refresh() {
-        screen.system.refresh()
         screen.refreshBackups()
+        probeTimer.restart()
     }
-    Component.onCompleted: { refresh(); focusDefault() }
+    Timer {
+        id: probeTimer
+        interval: 150
+        onTriggered: if (screen.visible) screen.system.refreshIfStale(30000)
+    }
+    Component.onCompleted: {
+        if (visible)
+            refresh()
+        focusDefault()
+    }
     onVisibleChanged: if (visible) refresh()
 
     Keys.onDownPressed: step(true)
     Keys.onUpPressed: (event) => { event.accepted = step(false) }
 
     component SectionTitle: Text {
+        textFormat: Text.PlainText
         width: parent ? parent.width : 0
         objectName: "sectionTitle_" + text
         topPadding: Theme.spacing
@@ -154,6 +231,7 @@ FocusScope {
     }
     // A non-focusable informational line: read-only hardware/status data is not a control.
     component InfoText: Text {
+        textFormat: Text.PlainText
         width: parent ? parent.width : 0
         wrapMode: Text.Wrap
         color: Theme.textFaint
@@ -174,15 +252,17 @@ FocusScope {
             width: Math.min(flick.width - Theme.spacing * 4, 980)
             x: (flick.width - width) / 2
             y: Theme.spacing * 1.5
-            spacing: 8
+            spacing: Theme.space2
 
             Text {
+                textFormat: Text.PlainText
                 text: "Settings"
                 color: Theme.text
                 font.pixelSize: Theme.fontHero
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "Changes are saved immediately to " + screen.settings.userFile
                 color: Theme.textFaint
@@ -194,14 +274,15 @@ FocusScope {
                 objectName: "settingsIssues"
                 visible: screen.settings.lastError.length > 0 || screen.settings.issues.length > 0
                 width: parent.width
-                height: issuesText.implicitHeight + 24
+                height: issuesText.implicitHeight + Theme.space5
                 radius: Theme.radiusSmall
-                color: Qt.rgba(1, 0.39, 0.45, 0.10)
+                color: Theme.dangerTint
                 border.color: Theme.danger
                 Text {
+                    textFormat: Text.PlainText
                     id: issuesText
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: Theme.space3
                     wrapMode: Text.Wrap
                     color: Theme.text
                     font.pixelSize: Theme.fontSmall
@@ -269,6 +350,15 @@ FocusScope {
                 description: "The short introduction shown on the first start"
                 actionText: "Start"
                 onAccepted: screen.settings.tutorialCompleted = false
+            }
+            SettingRow {
+                objectName: "settingStartScreen"
+                label: "Start screen"
+                description: "What Nexora shows when it starts"
+                value: screen.settings.startScreen === "games" ? "Games" : "Home"
+                adjustable: true
+                onDecrement: screen.settings.startScreen = screen.cycleValue(["home", "games"], screen.settings.startScreen, -1)
+                onIncrement: screen.settings.startScreen = screen.cycleValue(["home", "games"], screen.settings.startScreen, 1)
             }
             SettingRow {
                 objectName: "settingSort"
@@ -429,6 +519,7 @@ FocusScope {
             // --- Library -----------------------------------------------------------------------
             SectionTitle { text: "Library" }
             Text {
+                textFormat: Text.PlainText
                 visible: screen.library.directories.length === 0
                 width: parent.width
                 wrapMode: Text.Wrap
@@ -456,13 +547,13 @@ FocusScope {
             }
             Item {
                 width: parent.width
-                height: 52
+                height: Theme.controlHeight + Theme.space1
                 TextField {
                     id: addDirField
                     objectName: "addDirField"
                     anchors.left: parent.left
                     anchors.right: addDirButton.left
-                    anchors.rightMargin: 12
+                    anchors.rightMargin: Theme.space3
                     height: parent.height
                     placeholderText: "/path/to/your/games"
                     placeholderTextColor: Theme.textFaint
@@ -470,7 +561,7 @@ FocusScope {
                     selectionColor: Theme.accent
                     selectedTextColor: Theme.text
                     font.pixelSize: Theme.fontBody
-                    leftPadding: 16
+                    leftPadding: Theme.space4
                     verticalAlignment: TextInput.AlignVCenter
                     background: Rectangle {
                         radius: Theme.radiusSmall
@@ -537,6 +628,12 @@ FocusScope {
                 actionText: "Cancel"
                 onAccepted: screen.library.cancelScan()
             }
+            InfoText {
+                objectName: "libraryArtworkInfo"
+                text: "Artwork: Nexora draws a placeholder cover from each title; downloading cover art is not "
+                      + "implemented (no network access). Titles and notes can be changed per game: open a game "
+                      + "and choose Edit details."
+            }
             SettingRow {
                 objectName: "restoreRemovedRow"
                 label: "Restore removed games"
@@ -565,24 +662,46 @@ FocusScope {
                 }
             }
             InfoText {
+                text: "Per-emulator launch profiles and status are on the Emulators tab; emulator definitions live in "
+                      + screen.app.configDirectory + "."
+            }
+            InfoText {
                 visible: screen.library.systems.count === 0
                 text: "No game systems detected yet — default emulators appear here once games are found."
             }
+            // One row per catalog system that has games or a compatible emulator (no row for
+            // "Other": games without a system have no default to choose). The model updates
+            // in place when only counts change; if it is rebuilt, focus returns to the row
+            // that was being operated (by system id, like the mapping rows).
             Repeater {
                 model: screen.library.systems
+                onItemAdded: (index, item) => {
+                    if (item.systemId === screen.lastDefaultEmulatorSystem && screen.lastDefaultEmulatorSystem.length > 0
+                            && item.visible && screen.visible && !screen.isInside(screen.focusedItem))
+                        item.forceActiveFocus()
+                }
                 delegate: SettingRow {
                     required property string systemId
                     required property string name
+                    required property int gameCount
+                    required property int emulatorCount
+                    readonly property var choices: {
+                        void screen.app.emulators.count
+                        return systemId.length > 0 ? screen.library.defaultEmulatorChoices(systemId) : []
+                    }
                     objectName: "defaultEmulator_" + systemId
+                    visible: systemId.length > 0 && (gameCount > 0 || emulatorCount > 0)
                     label: "Default emulator — " + name
                     value: {
                         const id = screen.settings.defaultEmulators[systemId] || ""
-                        return id.length > 0 ? screen.app.emulators.nameForId(id) : "Automatic"
+                        const choice = choices.find(c => c.id === id)
+                        return choice ? choice.name : (id.length > 0 ? screen.app.emulators.nameForId(id) : "Automatic")
                     }
-                    description: screen.app.emulators.count > 0 ? "" : "No emulators configured"
-                    adjustable: screen.app.emulators.count > 0
+                    description: choices.length > 1 ? "" : "No enabled emulator declares this system"
+                    adjustable: choices.length > 1
                     onDecrement: screen.cycleDefaultEmulator(systemId, -1)
                     onIncrement: screen.cycleDefaultEmulator(systemId, 1)
+                    onActiveFocusChanged: if (activeFocus) screen.lastDefaultEmulatorSystem = systemId
                 }
             }
 
@@ -601,20 +720,33 @@ FocusScope {
                 onAccepted: screen.openUpdatePanel()
             }
             SettingRow {
+                objectName: "settingLogLevel"
+                label: "Log detail"
+                description: "How much Nexora writes to its log file (for troubleshooting)"
+                value: Theme.capitalize(screen.settings.logLevel)
+                adjustable: true
+                onDecrement: screen.settings.logLevel = screen.cycleValue(["error", "warning", "info", "debug"], screen.settings.logLevel, -1)
+                onIncrement: screen.settings.logLevel = screen.cycleValue(["error", "warning", "info", "debug"], screen.settings.logLevel, 1)
+            }
+            SettingRow {
                 objectName: "exportDiagnosticsRow"
                 label: "Export diagnostics"
-                description: screen.lastDiagnosticsPath.length > 0 ? "Saved to " + screen.lastDiagnosticsPath
+                description: screen.lastDiagnosticsError.length > 0 ? "Export failed: " + screen.lastDiagnosticsError
+                             : screen.lastDiagnosticsPath.length > 0 ? "Saved to " + screen.lastDiagnosticsPath
                              : "A text report for troubleshooting, with sensitive paths redacted"
+                descriptionColor: screen.lastDiagnosticsError.length > 0 ? Theme.danger : Theme.textMuted
                 actionText: "Export"
-                onAccepted: screen.lastDiagnosticsPath = screen.system.exportDiagnostics()
+                onAccepted: screen.exportDiagnostics()
             }
             SettingRow {
                 objectName: "createBackupRow"
                 label: "Create backup"
-                description: screen.lastBackupPath.length > 0 ? "Saved to " + screen.lastBackupPath
+                description: screen.lastBackupError.length > 0 ? "Backup failed: " + screen.lastBackupError
+                             : screen.lastBackupPath.length > 0 ? "Saved to " + screen.lastBackupPath
                              : "Includes settings, library and saves"
+                descriptionColor: screen.lastBackupError.length > 0 ? Theme.danger : Theme.textMuted
                 actionText: "Create"
-                onAccepted: { screen.lastBackupPath = screen.system.createBackup(true); screen.refreshBackups() }
+                onAccepted: screen.createBackup()
             }
             SettingRow {
                 objectName: "restoreBackupRow"
@@ -636,7 +768,7 @@ FocusScope {
                 actionText: "Clear"
                 requireConfirm: true
                 confirmText: "Press A / Enter again to clear the artwork cache"
-                onAccepted: screen.system.clearArtworkCache()
+                onAccepted: screen.clearArtworkCache()
             }
             SettingRow {
                 objectName: "resetRow"
@@ -664,6 +796,7 @@ FocusScope {
                 onAccepted: confirmPowerOff.open()
             }
             Text {
+                textFormat: Text.PlainText
                 visible: !screen.system.powerSupported
                 width: parent.width
                 wrapMode: Text.Wrap
@@ -673,6 +806,7 @@ FocusScope {
                 font.pixelSize: Theme.fontSmall
             }
             Text {
+                textFormat: Text.PlainText
                 visible: screen.system.lastError.length > 0
                 width: parent.width
                 wrapMode: Text.Wrap
@@ -701,17 +835,16 @@ FocusScope {
     }
     ConfirmDialog {
         id: confirmRestore
+        objectName: "confirmRestoreBackup"
         title: "Restore this backup?"
         message: "Current settings, library and (if the backup includes them) saves will be replaced. This cannot be undone from within Nexora."
         confirmText: "Restore"
         dangerous: true
-        onConfirmed: {
-            screen.system.restoreBackup(screen.backupList[screen.selectedBackupIndex])
-            screen.refreshBackups()
-        }
+        onConfirmed: screen.restoreSelectedBackup()
     }
     InputTestPanel {
         id: testPanel
         app: screen.app
+        backButton: screen.backButtonName()
     }
 }

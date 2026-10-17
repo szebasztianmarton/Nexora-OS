@@ -112,6 +112,11 @@ void UpdateController::cancel()
     m_service->cancel();
 }
 
+bool UpdateController::acknowledgeLastResult()
+{
+    return m_service->acknowledgeLastResult();
+}
+
 QStringList UpdateController::candidateBundles() const
 {
     QStringList all;

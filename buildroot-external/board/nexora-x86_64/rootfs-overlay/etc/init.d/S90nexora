@@ -6,8 +6,10 @@
 #
 # The UI is not started when the kernel command line contains
 # "nexora.noui" or when NEXORA_AUTOSTART=no is set in
-# /etc/default/nexora. Recovery logins (ttyS0, tty2) are never
-# disabled by this script.
+# /etc/default/nexora. With "nexora.recovery" on the kernel command line
+# the text recovery menu (/usr/libexec/nexora/nexora-recovery) is started
+# on the UI's terminal instead of the UI. Recovery logins (ttyS0, tty2)
+# are never disabled by this script.
 
 DAEMON="nexora"
 PIDFILE="/var/run/$DAEMON.pid"
@@ -15,8 +17,11 @@ EXEC="/usr/libexec/nexora/nexora-session"
 APP_USER="nexora"
 LOG_DIR="/var/log/nexora"
 DRM_WAIT_SECONDS=10
+RECOVERY_EXEC="/usr/libexec/nexora/nexora-recovery"
+RECOVERY_PIDFILE="/var/run/nexora-recovery.pid"
 
 NEXORA_AUTOSTART=yes
+NEXORA_TTY=/dev/tty1
 
 # shellcheck source=/dev/null
 [ -r "/etc/default/$DAEMON" ] && . "/etc/default/$DAEMON"
@@ -57,8 +62,29 @@ prepare() {
 	done
 }
 
+start_recovery() {
+	if start-stop-daemon --stop --test --quiet --pidfile "$RECOVERY_PIDFILE"; then
+		echo "recovery menu already running"
+		return 0
+	fi
+	chvt "${NEXORA_TTY#/dev/tty}" 2> /dev/null
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile "$RECOVERY_PIDFILE" --exec "$RECOVERY_EXEC" -- "$NEXORA_TTY"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "recovery menu on $NEXORA_TTY (nexora.recovery on kernel command line)"
+	else
+		echo "FAIL (recovery menu)"
+	fi
+	return "$status"
+}
+
 start() {
 	printf 'Starting %s: ' "$DAEMON"
+	if grep -qw "nexora.recovery" /proc/cmdline; then
+		start_recovery
+		return
+	fi
 	if grep -qw "nexora.noui" /proc/cmdline; then
 		echo "skipped (nexora.noui on kernel command line)"
 		return 0
@@ -88,6 +114,9 @@ start() {
 
 stop() {
 	printf 'Stopping %s: ' "$DAEMON"
+	if start-stop-daemon --stop --quiet --pidfile "$RECOVERY_PIDFILE" 2> /dev/null; then
+		rm -f "$RECOVERY_PIDFILE"
+	fi
 	if ! running; then
 		echo "not running"
 		rm -f "$PIDFILE"

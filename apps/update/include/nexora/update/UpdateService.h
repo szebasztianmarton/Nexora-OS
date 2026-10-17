@@ -4,12 +4,14 @@
 #include "nexora/update/UpdateManifest.h"
 #include "nexora/update/Version.h"
 
+#include <QDeadlineTimer>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QTimer>
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -24,13 +26,14 @@ Q_NAMESPACE
 //   Idle ──checkBundle (ok)────────────► Checking ──compatible──────► Available
 //   Idle ──checkBundle (bad/incompat)──► Checking ──bad/incompatible─► Failed
 //   Available ──verify()──► Verifying ──hash ok──────────► ReadyToInstall
-//                            Verifying ──cancel/mismatch/low space──► Failed
-//   ReadyToInstall ──install()──► Installing ──helper "ok"────► RestartRequired
-//                                  Installing ──helper "error"/no FIFO reader──► Failed
+//                            Verifying ──cancel/mismatch/state dir unusable──► Failed
+//   ReadyToInstall ──install()──► Installing ──helper "ok <pending version>"──► RestartRequired
+//                                  Installing ──helper "error"/other version/no FIFO reader/timeout──► Failed
 //   Available / ReadyToInstall / Failed / Completed / RecoveryRequired ──checkBundle──► Checking
 //   Idle ──loadPersistedState (new build == running build)──► Completed
 //   Idle ──loadPersistedState (helper reported "rolled-back")──► RecoveryRequired
 //   Completed / Failed / RecoveryRequired ──checkBundle──► Checking
+//   Completed / RecoveryRequired ──acknowledgeLastResult──► Idle
 //
 // "Downloading" is reserved for a future network-delivered bundle; this task only
 // supports a bundle that is already present as a local directory (e.g. on a USB stick),
@@ -67,6 +70,7 @@ enum class UpdateError {
     InsufficientStorage,
     InstallRequestFailed,
     InstallFailed,
+    InstallTimedOut,
     Cancelled,
     Busy
 };
@@ -118,12 +122,18 @@ std::optional<VerifiedBundle> verifyBundle(const QString &bundleDir, const QStri
 struct UpdateEnvironment
 {
     QString keyDir; // directory of trusted *.pem public keys; see docs/update-system.md
-    QString stagingDir; // stateDir/update; holds last-update.json
+    // stateDir/update; holds last-update.json (written by nexora-bootok). Nothing is staged
+    // here: the privileged helper writes the image straight to the inactive slot. Created
+    // on demand.
+    QString stagingDir;
     Version currentVersion;
     QString currentBuildId;
     QString board;
     QString installRequestFifo = QStringLiteral("/run/nexora/update-request");
     QString installStatusFile = QStringLiteral("/run/nexora/update-status");
+    // Installing -> Failed/InstallTimedOut when the helper has not finished by then. Writing
+    // a 2 GiB image from slow USB media to the slot takes minutes, not hours.
+    std::chrono::milliseconds installTimeout = std::chrono::minutes(15);
     // Free space available at |path|'s filesystem. Default: QStorageInfo(path).bytesAvailable().
     std::function<qint64(const QString &path)> freeBytes;
 };
@@ -153,8 +163,9 @@ public:
     bool checkBundle(const QString &bundleDir);
 
     // Available -> Verifying: hashes the image on a worker thread and compares it against
-    // the manifest, after checking that stagingDir's filesystem has at least
-    // image size + 64 MiB free -> ReadyToInstall. Cancellable with cancel()
+    // the manifest -> ReadyToInstall. First creates stagingDir if needed and checks that its
+    // filesystem can hold the small status/record files (MinimumStateBytes); the image
+    // itself is never copied there. Cancellable with cancel()
     // (-> Failed/Cancelled). Returns false (state unchanged) if not currently Available.
     bool verify();
     void cancel();
@@ -162,18 +173,31 @@ public:
     // ReadyToInstall -> Installing: writes one line "install <absolute bundle dir>\n" to
     // installRequestFifo (a non-blocking open; no reader => Failed/InstallRequestFailed).
     // The privileged helper re-verifies everything as root and is polled for the outcome
-    // via installStatusFile every 500 ms: "ok <version>" -> RestartRequired,
-    // "error <text>" -> Failed/InstallFailed. Returns false (state unchanged) if not
+    // via installStatusFile every 500 ms. The status file is root-owned and outlives a
+    // request (nexora-bootok writes "ok <version>" into it after a confirmed boot), so the
+    // UI cannot delete it: install() records its identity (inode, size, timestamps,
+    // content) before sending the request, and only a status written after that counts:
+    // "installing <slot>" -> progress message, "ok <pending version>" -> RestartRequired,
+    // "ok <other version>" or "error <text>" -> Failed/InstallFailed. No answer within
+    // installTimeout -> Failed/InstallTimedOut. Returns false (state unchanged) if not
     // currently ReadyToInstall.
     bool install();
 
-    // Reads stagingDir/last-update.json, written by the privileged helper after an install
-    // attempt ({"previousBuildId","newBuildId","result"}). If its newBuildId matches the
-    // running build, moves to Completed and removes the file, so this is reported only
-    // once. If the helper reported result "rolled-back", moves to RecoveryRequired with a
-    // message and leaves the file in place. A no-op otherwise (including a missing file).
-    // Only has an effect while Idle.
+    // Reads stagingDir/last-update.json, written by nexora-bootok after a trial boot
+    // ({"format","result","previousBuildId","newBuildId","previousVersion","newVersion",
+    // "slot"}). If its newBuildId matches the running build, moves to Completed; if the helper
+    // reported result "rolled-back", moves to RecoveryRequired with a message. Either way the
+    // file stays in place until acknowledgeLastResult(), so a restart does not lose it. A no-op otherwise (including a
+    // missing file). Only has an effect while Idle. UiContext calls it once at startup.
     void loadPersistedState();
+
+    // Completed/RecoveryRequired -> Idle: the user has seen the result. Removes
+    // last-update.json (if still present) so a restart does not report it again. Returns
+    // false (state unchanged) in any other state or if the record cannot be removed.
+    bool acknowledgeLastResult();
+
+    // Free space verify() requires in stagingDir's filesystem (status/record files only).
+    static constexpr qint64 MinimumStateBytes = qint64(1024) * 1024;
 
 signals:
     void stateChanged();
@@ -184,6 +208,21 @@ private:
     void startVerifyWorker();
     void onVerifyDone(const std::optional<QByteArray> &sha256, const QString &error, bool cancelled);
     void pollInstallStatus();
+    QString lastUpdatePath() const;
+
+    // Identity of installStatusFile at one point in time; see install().
+    struct StatusSnapshot
+    {
+        bool exists = false;
+        quint64 device = 0;
+        quint64 inode = 0;
+        qint64 size = -1;
+        qint64 mtimeNs = 0;
+        qint64 ctimeNs = 0;
+        QByteArray content;
+        bool operator==(const StatusSnapshot &) const = default;
+    };
+    StatusSnapshot statusSnapshot() const;
 
     UpdateEnvironment m_env;
     UpdateState m_state = UpdateState::Idle;
@@ -196,6 +235,8 @@ private:
     QPointer<QThread> m_verifyThread;
     std::shared_ptr<std::atomic_bool> m_cancel;
     QTimer m_installPoll;
+    StatusSnapshot m_statusBefore; // installStatusFile as it was before the request
+    QDeadlineTimer m_installDeadline;
 };
 
 } // namespace nexora::update

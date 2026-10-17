@@ -17,8 +17,10 @@ GameBarController::GameBarController(AppController *app, system::SystemIntegrati
 {
     m_sampleTimer.setInterval(1000);
     connect(&m_sampleTimer, &QTimer::timeout, this, &GameBarController::refresh);
-    if (input)
-        connect(input, &input::InputController::gameBarRequested, this, &GameBarController::toggle);
+    if (input) {
+        connect(input, &input::InputController::gameBarRequested, this, &GameBarController::onGuidePressed);
+        connect(input, &input::InputController::quickMenuRequested, this, &GameBarController::openQuickMenu);
+    }
     if (m_app) {
         connect(m_app, &AppController::stateChanged, this, &GameBarController::onAppStateChanged);
         onAppStateChanged();
@@ -41,9 +43,48 @@ void GameBarController::setOpen(bool open)
     } else {
         m_sampleTimer.stop();
     }
-    if (m_app)
-        m_app->setGameBarOpen(open);
+    updateAppOverlayState();
     emit openChanged();
+}
+
+bool GameBarController::openQuickMenu()
+{
+    if (!m_app || !m_app->isBusy())
+        return false;
+    setOpen(false);
+    setQuickMenuOpen(true);
+    return true;
+}
+
+void GameBarController::closeQuickMenu()
+{
+    setQuickMenuOpen(false);
+}
+
+void GameBarController::onGuidePressed()
+{
+    if (m_quickMenuOpen)
+        closeQuickMenu();
+    else if (!m_open && m_app && m_app->isBusy())
+        openQuickMenu();
+    else
+        toggle();
+}
+
+void GameBarController::setQuickMenuOpen(bool open)
+{
+    if (m_quickMenuOpen == open)
+        return;
+    m_quickMenuOpen = open;
+    qCInfo(lcUi) << "Quick menu" << (open ? "opened" : "closed");
+    updateAppOverlayState();
+    emit quickMenuOpenChanged();
+}
+
+void GameBarController::updateAppOverlayState()
+{
+    if (m_app)
+        m_app->setGameBarOpen(m_open || m_quickMenuOpen);
 }
 
 int GameBarController::sessionSeconds() const
@@ -84,6 +125,7 @@ void GameBarController::onAppStateChanged()
 {
     if (!m_app || !m_app->isBusy()) {
         m_session.invalidate();
+        setQuickMenuOpen(false); // nothing left to return to
     } else if (!m_session.isValid()) {
         m_session.start();
     }

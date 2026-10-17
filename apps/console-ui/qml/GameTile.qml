@@ -11,6 +11,8 @@ Item {
     property bool favorite: false
     property string lastPlayed
     property bool available: true
+    property bool present: true      // false: the game file is missing
+    property string systemShortName
     property string unavailableReason
     property bool selected: false
 
@@ -20,10 +22,11 @@ Item {
 
     Accessible.role: Accessible.Button
     Accessible.name: title
-    Accessible.description: (available ? emulatorName : unavailableReason) + (favorite ? ", favorite" : "")
+    Accessible.description: (!present ? "file missing, " : "") + (available ? emulatorName : unavailableReason)
+                            + (favorite ? ", favorite" : "")
     Accessible.onPressAction: pressed()
 
-    readonly property int infoHeight: 70
+    readonly property real infoHeight: Math.round(70 * Theme.scale)
 
     z: selected ? 2 : 1
     scale: selected ? 1.05 : 1.0
@@ -35,7 +38,7 @@ Item {
         radius: Theme.radius
         color: tile.selected ? Theme.surfaceHover : Theme.surfaceRaised
         border.width: tile.selected ? Theme.focusWidth : 1
-        border.color: tile.selected ? Theme.accent : Theme.border
+        border.color: tile.selected ? Theme.focusRing : Theme.border
         clip: true
 
         Rectangle {
@@ -50,7 +53,7 @@ Item {
                 GradientStop { position: 0.0; color: Theme.artColor(tile.title, 0.34) }
                 GradientStop { position: 1.0; color: Theme.artColor(tile.title + "~", 0.16) }
             }
-            opacity: tile.available ? 1.0 : 0.45
+            opacity: tile.available && tile.present ? 1.0 : 0.45
 
             // Square off the bottom corners against the info area.
             Rectangle {
@@ -62,27 +65,70 @@ Item {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: Theme.initials(tile.title)
-                color: Qt.rgba(1, 1, 1, 0.85)
-                font.pixelSize: Math.min(art.height * 0.42, 64)
+                color: Theme.artInk
+                font.pixelSize: Math.min(art.height * 0.42, 64 * Theme.scale)
                 font.bold: true
                 font.letterSpacing: 2
             }
         }
 
         Rectangle {
-            id: unavailableBadge
-            visible: !tile.available
+            objectName: "missingBadge"
+            visible: !tile.present
             anchors.left: art.left
             anchors.top: art.top
-            anchors.margins: 8
-            height: 24
-            width: badgeLabel.implicitWidth + 16
-            radius: 12
-            color: Qt.rgba(0, 0, 0, 0.6)
+            anchors.margins: Theme.space2
+            height: Math.round(24 * Theme.scale)
+            width: missingLabel.implicitWidth + Theme.space4
+            radius: height / 2
+            color: Theme.badgeScrim
+            border.color: Theme.warning
+            Text {
+                textFormat: Text.PlainText
+                id: missingLabel
+                anchors.centerIn: parent
+                text: "File missing"
+                color: Theme.warning
+                font.pixelSize: Theme.fontTiny
+                font.bold: true
+            }
+        }
+        Rectangle {
+            objectName: "systemBadge"
+            visible: tile.systemShortName.length > 0 && tile.present
+            anchors.left: art.left
+            anchors.bottom: art.bottom
+            anchors.margins: Theme.space2
+            height: Math.round(22 * Theme.scale)
+            width: systemLabel.implicitWidth + Theme.space3
+            radius: Theme.space1
+            color: Theme.badgeScrim
+            Text {
+                textFormat: Text.PlainText
+                id: systemLabel
+                anchors.centerIn: parent
+                text: tile.systemShortName
+                color: Theme.artInk
+                font.pixelSize: Theme.fontTiny
+                font.bold: true
+            }
+        }
+        Rectangle {
+            id: unavailableBadge
+            visible: !tile.available && tile.present
+            anchors.left: art.left
+            anchors.top: art.top
+            anchors.margins: Theme.space2
+            height: Math.round(24 * Theme.scale)
+            width: badgeLabel.implicitWidth + Theme.space4
+            radius: height / 2
+            color: Theme.badgeScrim
             border.color: Theme.danger
             Text {
+                textFormat: Text.PlainText
                 id: badgeLabel
                 anchors.centerIn: parent
                 text: "Unavailable"
@@ -97,16 +143,17 @@ Item {
             visible: tile.favorite
             anchors.right: art.right
             anchors.top: art.top
-            anchors.margins: 8
-            width: 30
-            height: 30
-            radius: 15
-            color: Qt.rgba(0, 0, 0, 0.55)
+            anchors.margins: Theme.space2
+            width: Math.round(30 * Theme.scale)
+            height: width
+            radius: width / 2
+            color: Theme.badgeScrim
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: "★"
                 color: Theme.favorite
-                font.pixelSize: 18 * Theme.scale
+                font.pixelSize: Math.round(18 * Theme.scale)
             }
             MouseArea { anchors.fill: parent; onClicked: tile.favoriteClicked() }
         }
@@ -121,6 +168,8 @@ Item {
             spacing: 2
 
             Text {
+                objectName: "gameTileTitle"
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tile.title
                 color: Theme.text
@@ -129,6 +178,7 @@ Item {
                 elide: Text.ElideRight
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tile.available ? (tile.emulatorName.length > 0 ? tile.emulatorName : "Unknown emulator")
                                      : (tile.unavailableReason.length > 0 ? tile.unavailableReason : "No emulator available")
@@ -137,6 +187,7 @@ Item {
                 elide: Text.ElideRight
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tile.lastPlayed.length > 0 ? "Played " + tile.lastPlayed : "Never played"
                 color: Theme.textFaint

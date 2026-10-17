@@ -115,6 +115,7 @@ FocusScope {
                     radius: 28
                     color: Theme.accentSoft
                     Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: tutorial.steps[tutorial.step].glyph
                         color: Theme.text
@@ -125,6 +126,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
                     Text {
+                        textFormat: Text.PlainText
                         objectName: "tutorialProgress"
                         text: "STEP " + (tutorial.step + 1) + " OF " + tutorial.steps.length
                         color: Theme.accent
@@ -133,6 +135,7 @@ FocusScope {
                         font.letterSpacing: 2
                     }
                     Text {
+                        textFormat: Text.PlainText
                         objectName: "tutorialTitle"
                         text: tutorial.steps[tutorial.step].title
                         color: Theme.text
@@ -143,6 +146,7 @@ FocusScope {
             }
 
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: tutorial.steps[tutorial.step].body
                 wrapMode: Text.Wrap
@@ -169,6 +173,7 @@ FocusScope {
                             color: Theme.surfaceRaised
                             border.color: Theme.border
                             Text {
+                                textFormat: Text.PlainText
                                 id: keyLabel
                                 anchors.centerIn: parent
                                 text: control.modelData.button
@@ -178,6 +183,7 @@ FocusScope {
                             }
                         }
                         Text {
+                            textFormat: Text.PlainText
                             anchors.verticalCenter: parent.verticalCenter
                             text: control.modelData.action
                             color: Theme.textMuted

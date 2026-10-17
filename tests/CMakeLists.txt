@@ -1,6 +1,9 @@
 # nexora_add_test(<name> SOURCES <files...> LIBS <targets...> LABELS <labels...> [GUI] [FAKE_EMULATOR])
 #   GUI            the test needs a QGuiApplication (runs on the offscreen platform)
 #   FAKE_EMULATOR  defines NEXORA_FAKE_EMULATOR="<path to nexora-fake-emulator>"
+# Labels: `unit` or `integration`, plus `security` for tests that cover path traversal and
+# escapes, redaction, and signature/manifest/checksum rejection (CI runs `ctest -L security`
+# as its own step). Tests of the image's shell helpers use the label `system`.
 function(nexora_add_test name)
     cmake_parse_arguments(ARG "GUI;FAKE_EMULATOR" "" "SOURCES;LIBS;LABELS" ${ARGN})
     qt_add_executable(${name} ${ARG_SOURCES})
@@ -19,7 +22,12 @@ function(nexora_add_test name)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_LOGGING_RULES=nexora.*.debug=true")
 endfunction()
 
+# Signed update bundles written by tst_updateservice (CTest fixture nexora_update_tool_fixture)
+# and consumed by test_update_tool (integration) and test_update_helper (system).
+set(NEXORA_UPDATE_TOOL_FIXTURE_DIR ${PROJECT_BINARY_DIR}/tests/update-tool-fixture)
+
 add_subdirectory(support)
 add_subdirectory(unit)
 add_subdirectory(integration)
 add_subdirectory(qml)
+add_subdirectory(system)

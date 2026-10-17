@@ -1,0 +1,262 @@
+#!/bin/sh
+# shellcheck source-path=SCRIPTDIR
+# Nexora OS recovery menu (runs as root). Started on tty1 by
+# /etc/init.d/S90nexora instead of the console UI when the kernel command
+# line contains "nexora.recovery" (GRUB entry "Nexora OS (recovery menu)").
+#
+# A plain text menu; it needs a keyboard. Every action runs fixed commands;
+# actions on the user's files run as the unprivileged "nexora" user.
+#
+# Usage: nexora-recovery [TTY]   (TTY: terminal to attach to, e.g. /dev/tty1)
+
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export LC_ALL=C
+
+# shellcheck source=nexora-functions
+. "${0%/*}/nexora-functions"
+
+APP_USER=nexora
+MNT=/run/nexora-recovery/slot
+
+if [ -n "${1:-}" ]; then
+	# Opening the terminal as a session leader without a controlling
+	# terminal (start-stop-daemon --background calls setsid) makes it ours.
+	# shellcheck disable=SC2094 # a terminal: read and written on purpose
+	exec < "$1" > "$1" 2>&1
+fi
+
+pause() {
+	printf '\nPress Enter to return to the menu.'
+	read -r _ || sleep 1
+}
+
+confirm() {
+	printf '%s [y/N] ' "$1"
+	read -r _answer || return 1
+	[ "${_answer}" = "y" ] || [ "${_answer}" = "Y" ]
+}
+
+running=$(nexora_running_slot) || running=""
+
+# slot_version SLOT: NEXORA_VERSION / NEXORA_BUILD_ID of a slot.
+slot_version() {
+	if [ "$1" = "${running}" ]; then
+		echo "$(nexora_release_value NEXORA_VERSION) ($(nexora_release_value NEXORA_BUILD_ID)), running"
+		return 0
+	fi
+	_dev=$(nexora_part_device "nexora-root$1") || { echo "partition not found"; return 0; }
+	mkdir -p "${MNT}"
+	if ! mount -t ext4 -o ro,noload "${_dev}" "${MNT}" 2> /dev/null; then
+		echo "cannot be mounted (empty or damaged)"
+		return 0
+	fi
+	_v=$(NEXORA_RELEASE_FILE="${MNT}/etc/nexora-release" nexora_release_value NEXORA_VERSION)
+	_b=$(NEXORA_RELEASE_FILE="${MNT}/etc/nexora-release" nexora_release_value NEXORA_BUILD_ID)
+	umount "${MNT}"
+	echo "$(nexora_safe_word "${_v}") ($(nexora_safe_word "${_b}"))"
+}
+
+show_slots() {
+	echo
+	echo "Running slot:   ${running:-unknown}"
+	echo "grubenv:        nexora_slot=$(nexora_env_get nexora_slot) nexora_try=$(nexora_env_get nexora_try) nexora_tries=$(nexora_env_get nexora_tries)"
+	for _s in A B; do
+		echo "Slot ${_s}:         $(slot_version "${_s}")"
+	done
+	if mountpoint -q /home; then
+		echo "Data partition: mounted on /home"
+	else
+		echo "Data partition: NOT mounted (/home is on the root filesystem)"
+	fi
+	pause
+}
+
+boot_previous() {
+	if [ -z "${running}" ]; then
+		echo "The running slot is unknown; use the GRUB menu instead."
+		pause
+		return
+	fi
+	_other=$(nexora_other_slot "${running}")
+	echo
+	echo "This boots slot ${_other} on trial (3 attempts). It becomes the"
+	echo "default only after it has started the console UI successfully;"
+	echo "otherwise the system returns to slot ${running}."
+	confirm "Reboot into slot ${_other} now?" || return
+	if nexora_env_set "nexora_try=${_other}" nexora_tries=3; then
+		sync
+		reboot
+		sleep 30
+	else
+		echo "Cannot write ${NEXORA_GRUBENV}."
+		pause
+	fi
+}
+
+reset_preferences() {
+	echo
+	echo "This moves the console UI settings file aside (it is kept as"
+	echo "settings.json.reset-<date>). Library, saves and backups are untouched."
+	confirm "Reset UI preferences?" || return
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	if su -s /bin/sh "${APP_USER}" -c 'f=/home/nexora/.config/nexora/settings.json
+if [ -f "$f" ]; then
+	mv -f "$f" "$f.reset-$(date +%Y%m%d-%H%M%S)" && echo "Settings reset."
+else
+	echo "No settings file; nothing to reset."
+fi'; then
+		:
+	else
+		echo "Reset failed."
+	fi
+	pause
+}
+
+# Boot and slot state only (no logs, no user data); still masked.
+collect_system_state() {
+	echo "Nexora OS recovery diagnostics, $(date '+%Y-%m-%dT%H:%M:%S')"
+	echo
+	echo "== /etc/nexora-release"
+	cat "${NEXORA_RELEASE_FILE}" 2> /dev/null
+	echo
+	echo "== kernel"
+	uname -a
+	cat /proc/cmdline
+	echo
+	echo "== grubenv"
+	if _src=$(nexora_env_source); then
+		echo "(from ${_src})"
+		"${NEXORA_GRUB_EDITENV}" "${_src}" list 2> /dev/null
+	else
+		echo "grubenv and grubenv.bak are missing or damaged"
+	fi
+	echo
+	echo "== pending update"
+	cat "${NEXORA_PENDING_FILE}" 2> /dev/null
+	echo
+	echo "== mounts"
+	cat /proc/mounts
+	echo
+	echo "== disk usage"
+	df -h 2> /dev/null
+}
+
+# The logs of the failed UI session, passed through nexora_mask_secrets. Always
+# included: the console UI's own export runs in a fresh process and only
+# carries that process's log, not the session that failed.
+collect_raw_logs() {
+	echo
+	echo "== session log (last 100 lines, masked)"
+	tail -n 100 /run/nexora-session/session.log 2> /dev/null
+	echo
+	echo "== console UI log (last 100 lines, masked)"
+	tail -n 100 /var/log/nexora/console-ui.log 2> /dev/null
+	echo
+	echo "== kernel log (last 200 lines, masked)"
+	dmesg 2> /dev/null | tail -n 200
+}
+
+export_diagnostics() {
+	echo
+	echo "Writing diagnostics to /home/nexora ..."
+	# Preferred: the console UI's own report, which redacts secrets and
+	# personal paths (runs as the user, headless).
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	if su -s /bin/sh "${APP_USER}" -c 'QT_QPA_PLATFORM=offscreen nexora-console-ui --export-diagnostics'; then
+		echo "(console UI report above; boot state and masked session logs below)"
+	else
+		echo "The console UI could not export its report; writing boot state and masked logs only."
+	fi
+	# The file is created by the user itself, so a planted symlink in the
+	# user's home cannot redirect a root-owned write.
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	{
+		collect_system_state
+		collect_raw_logs
+	} | nexora_mask_secrets | su -s /bin/sh "${APP_USER}" -c 'umask 077
+f=/home/nexora/recovery-diagnostics-$(date +%Y%m%d-%H%M%S).txt
+cat > "$f" && echo "Written: $f"' || echo "Export failed."
+	pause
+}
+
+repair_boot_environment() {
+	echo
+	if [ -z "${running}" ]; then
+		echo "The running slot is unknown; cannot repair the boot environment."
+		pause
+		return
+	fi
+	if _src=$(nexora_env_source); then
+		echo "Current boot environment (${_src}):"
+		"${NEXORA_GRUB_EDITENV}" "${_src}" list 2> /dev/null
+	else
+		echo "grubenv and grubenv.bak are missing or damaged."
+	fi
+	echo
+	echo "This recreates ${NEXORA_GRUBENV} (and grubenv.bak) from defaults:"
+	echo "slot ${running} (the running slot) becomes the confirmed slot and any"
+	echo "pending trial boot is cancelled."
+	confirm "Repair the boot environment?" || return
+	if nexora_env_recreate "${running}"; then
+		rm -f "${NEXORA_PENDING_FILE}"
+		sync
+		echo "Boot environment recreated: nexora_slot=${running}."
+	else
+		echo "Cannot write ${NEXORA_GRUBENV} (is the ESP mounted on ${NEXORA_ESP_MOUNT}?)."
+	fi
+	pause
+}
+
+restore_backup() {
+	echo
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	latest=$(su -s /bin/sh "${APP_USER}" -c 'ls -1d /home/nexora/.local/share/nexora/backups/nexora-backup-* 2> /dev/null | sort | tail -n 1')
+	if [ -z "${latest}" ]; then
+		echo "No backup found in /home/nexora/.local/share/nexora/backups."
+		pause
+		return
+	fi
+	echo "Latest backup: ${latest}"
+	confirm "Restore it (current files are moved aside first)?" || return
+	# shellcheck disable=SC2016 # expanded by the user's shell
+	su -s /bin/sh "${APP_USER}" -c 'latest=$(ls -1d /home/nexora/.local/share/nexora/backups/nexora-backup-* 2> /dev/null | sort | tail -n 1)
+[ -n "$latest" ] && QT_QPA_PLATFORM=offscreen nexora-console-ui --restore "$latest"' ||
+		echo "Restore failed."
+	pause
+}
+
+while :; do
+	echo
+	echo "==== Nexora OS recovery ===="
+	echo "Running slot: ${running:-unknown}   $(nexora_release_value NEXORA_VERSION)"
+	echo
+	echo "  1) Show slots and versions"
+	echo "  2) Boot the other (previous) slot"
+	echo "  3) Reset UI preferences"
+	echo "  4) Export diagnostics to /home/nexora"
+	echo "  5) Restore the latest backup"
+	echo "  6) Repair boot environment"
+	echo "  7) Reboot"
+	echo "  8) Shell login"
+	echo
+	printf 'Choice: '
+	if ! read -r choice; then
+		sleep 1
+		continue
+	fi
+	case "${choice}" in
+	1) show_slots ;;
+	2) boot_previous ;;
+	3) reset_preferences ;;
+	4) export_diagnostics ;;
+	5) restore_backup ;;
+	6) repair_boot_environment ;;
+	7)
+		sync
+		reboot
+		sleep 30
+		;;
+	8) login ;;
+	*) echo "Unknown choice." ;;
+	esac
+done

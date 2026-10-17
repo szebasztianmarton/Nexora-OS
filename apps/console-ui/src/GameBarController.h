@@ -21,6 +21,12 @@ class AppController;
 // running game, performance, audio and power, available on top of a running emulator.
 //
 // Performance figures are only sampled while the bar is open, so a closed bar costs nothing.
+//
+// Also owns the in-game quick menu state: while an emulator runs, the controller's Guide
+// button (gameBarRequested) or holding Start for a second (quickMenuRequested) opens the
+// quick menu instead of the bar; Guide again closes it. With no emulator running Guide
+// toggles the bar as before. Ctrl+G (QML, calls toggle()) always toggles the bar. Either
+// overlay being open keeps controller input flowing to the shell (AppController).
 class GameBarController : public QObject
 {
     Q_OBJECT
@@ -28,6 +34,7 @@ class GameBarController : public QObject
     QML_UNCREATABLE("Created by the application")
 
     Q_PROPERTY(bool open READ isOpen WRITE setOpen NOTIFY openChanged)
+    Q_PROPERTY(bool quickMenuOpen READ isQuickMenuOpen NOTIFY quickMenuOpenChanged)
     Q_PROPERTY(int cpuPercent READ cpuPercent NOTIFY statsChanged)
     Q_PROPERTY(QVariantList cpuHistory READ cpuHistory NOTIFY statsChanged)
     Q_PROPERTY(int memoryPercent READ memoryPercent NOTIFY statsChanged)
@@ -51,6 +58,13 @@ public:
     Q_INVOKABLE void toggle() { setOpen(!m_open); }
     Q_INVOKABLE void close() { setOpen(false); }
 
+    bool isQuickMenuOpen() const { return m_quickMenuOpen; }
+    // Opens the quick menu (closing the bar) when an emulator is active; false otherwise.
+    Q_INVOKABLE bool openQuickMenu();
+    Q_INVOKABLE void closeQuickMenu();
+    // The controller's Guide button: see the class comment.
+    void onGuidePressed();
+
     // -1 while unknown (first sample after opening, or no /proc).
     int cpuPercent() const { return m_cpuPercent; }
     // Oldest first, at most kHistoryLength entries.
@@ -73,10 +87,13 @@ public:
 
 signals:
     void openChanged();
+    void quickMenuOpenChanged();
     void statsChanged();
 
 private:
     void onAppStateChanged();
+    void setQuickMenuOpen(bool open);
+    void updateAppOverlayState();
 
     QPointer<AppController> m_app;
     system::SystemIntegration *m_system;
@@ -86,6 +103,7 @@ private:
     system::DeviceStatus m_device;
     QVariantList m_cpuHistory;
     bool m_open = false;
+    bool m_quickMenuOpen = false;
     int m_cpuPercent = -1;
     int m_memoryPercent = -1;
     int m_memoryUsedMiB = -1;

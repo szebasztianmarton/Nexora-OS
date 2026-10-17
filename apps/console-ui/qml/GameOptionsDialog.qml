@@ -127,6 +127,7 @@ FocusScope {
             spacing: Theme.spacing * 0.75
 
             Text {
+                textFormat: Text.PlainText
                 objectName: "gameOptionsTitle"
                 width: parent.width
                 text: dialog.details.title || ""
@@ -136,6 +137,7 @@ FocusScope {
                 elide: Text.ElideRight
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: (dialog.details.path || "") + (dialog.details.size ? "  ·  " + dialog.details.size : "")
                 color: Theme.textMuted
@@ -143,6 +145,7 @@ FocusScope {
                 elide: Text.ElideMiddle
             }
             Text {
+                textFormat: Text.PlainText
                 objectName: "gameOptionsSummary"
                 width: parent.width
                 wrapMode: Text.Wrap
@@ -183,6 +186,7 @@ FocusScope {
                     Accessible.description: modelData.detail
 
                     Text {
+                        textFormat: Text.PlainText
                         id: mark
                         anchors.left: parent.left
                         anchors.leftMargin: Theme.spacing * 0.75
@@ -199,6 +203,7 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
                         Text {
+                            textFormat: Text.PlainText
                             width: parent.width
                             text: option.modelData.label
                             color: Theme.text
@@ -207,6 +212,7 @@ FocusScope {
                             elide: Text.ElideRight
                         }
                         Text {
+                            textFormat: Text.PlainText
                             width: parent.width
                             visible: text.length > 0
                             text: option.modelData.detail

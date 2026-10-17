@@ -1,16 +1,36 @@
 import QtQuick
 import Nexora.Console
 
-// Modal layer shown while an emulator process is active. Only "Stop" is available.
+// Modal layer shown while an emulator process is active: "Stop" (asks first: unsaved
+// progress in the emulator may be lost) plus the quick menu (Menu / F1 here; Guide or holding
+// Start on a controller, see GameBarController).
 FocusScope {
     id: overlay
     objectName: "runningOverlay"
     required property AppController app
 
+    signal quickMenuRequested()
+
+    readonly property var hints: confirmStop.visible
+        ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
+           { button: "B / Esc", action: "Cancel" }]
+        : [{ button: "A / Enter", action: "Stop emulator" },
+           { button: "Guide / hold Start", action: "Quick menu" },
+           { button: "Select + Start (hold)", action: "Return to Nexora" }]
+
+    function requestStop() {
+        if (overlay.app.state !== "stopping")
+            confirmStop.open()
+    }
+    // Closes the confirmation when the emulator exits on its own meanwhile.
+    onVisibleChanged: if (!visible && confirmStop.visible) confirmStop.cancel()
+
     Rectangle {
+        objectName: "runningScrim"
         anchors.fill: parent
         color: Theme.background
-        opacity: 0.92
+        // Opaque in high contrast: no game artwork bleeding through behind the text.
+        opacity: Theme.highContrast ? 1.0 : 0.92
     }
     // Swallow pointer input to the screens underneath.
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true }
@@ -20,6 +40,7 @@ FocusScope {
         spacing: Theme.spacing * 1.5
 
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: "NOW PLAYING"
             color: Theme.accent
@@ -28,6 +49,7 @@ FocusScope {
             font.letterSpacing: 2
         }
         Text {
+            textFormat: Text.PlainText
             objectName: "runningTitle"
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(implicitWidth, overlay.width - 96)
@@ -39,6 +61,7 @@ FocusScope {
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: overlay.app.state === "starting" ? "Starting…"
                 : overlay.app.state === "stopping" ? "Stopping…"
@@ -51,36 +74,53 @@ FocusScope {
             objectName: "stopButton"
             anchors.horizontalCenter: parent.horizontalCenter
             focus: true
-            height: 56
-            width: 240
-            radius: 12
+            height: Math.round(56 * Theme.scale)
+            width: Math.round(240 * Theme.scale)
+            radius: Theme.radius
             color: Theme.surfaceRaised
             border.width: activeFocus ? Theme.focusWidth : 1
-            border.color: activeFocus ? Theme.accent : Theme.border
+            border.color: activeFocus ? Theme.focusRing : Theme.border
             opacity: overlay.app.state === "stopping" ? 0.5 : 1.0
             scale: activeFocus ? 1.04 : 1.0
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: "■  Stop emulator"
                 color: Theme.text
                 font.pixelSize: Theme.fontBody
                 font.bold: true
             }
-            MouseArea { anchors.fill: parent; onClicked: overlay.app.stop() }
-            Keys.onReturnPressed: overlay.app.stop()
-            Keys.onEnterPressed: overlay.app.stop()
-            Keys.onSpacePressed: overlay.app.stop()
+            MouseArea { anchors.fill: parent; onClicked: overlay.requestStop() }
+            Keys.onReturnPressed: overlay.requestStop()
+            Keys.onEnterPressed: overlay.requestStop()
+            Keys.onSpacePressed: overlay.requestStop()
         }
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Nexora returns here automatically when the emulator exits.\n"
-                  + "Controller: hold Select + Start to stop the emulator and return."
+                  + "Controller: Guide or hold Start for the quick menu · hold Select + Start to stop and return.\n"
+                  + "Keyboard: Menu / F1 for the quick menu."
             horizontalAlignment: Text.AlignHCenter
             color: Theme.textMuted
             font.pixelSize: Theme.fontSmall
         }
     }
 
-    // Back / Menu / navigation do nothing while an emulator runs; consume them here.
-    Keys.onPressed: (event) => { event.accepted = true }
+    ConfirmDialog {
+        id: confirmStop
+        objectName: "confirmStopGame"
+        title: "Stop the emulator?"
+        message: "Unsaved progress in the emulator may be lost."
+        confirmText: "Stop emulator"
+        dangerous: true
+        onConfirmed: overlay.app.stop()
+    }
+
+    // Menu / F1 open the quick menu; Back and navigation do nothing while an emulator runs.
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_Menu || event.key === Qt.Key_F1)
+            overlay.quickMenuRequested()
+        event.accepted = true
+    }
 }

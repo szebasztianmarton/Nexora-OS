@@ -4,6 +4,9 @@
 
 #include "nexora/shared/Logging.h"
 
+#include <QDir>
+#include <QFile>
+
 namespace nexora::ui {
 
 namespace {
@@ -32,6 +35,7 @@ UiContext::UiContext(const Options &options, input::InputController *input, QObj
     , m_input(input)
     , m_databasePath(options.databasePath.isEmpty() ? options.layout.dataDir + QStringLiteral("/library.sqlite")
                                                     : options.databasePath)
+    , m_updateStateDir(options.update.stagingDir)
 {
     m_settings.load(); // before anything reads preferences
     m_library.setCatalog(m_catalog);
@@ -66,6 +70,9 @@ UiContext::UiContext(const Options &options, input::InputController *input, QObj
         = std::make_unique<UpdateController>(m_updateService.get(), options.update.currentVersion.toString(),
                                              options.update.currentBuildId, desktopPlatform);
     m_gameBarController = std::make_unique<GameBarController>(m_app.get(), m_system.get(), m_input);
+    // Result of the last update attempt (written by nexora-bootok after the trial boot):
+    // Completed or RecoveryRequired until the user acknowledges it.
+    m_updateService->loadPersistedState();
 
     connect(&m_settings, &shared::Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == shared::Settings::EmulatorDefaultProfiles)
@@ -83,6 +90,15 @@ void UiContext::start()
     QString layoutError;
     if (!m_layout.ensureDirectories(&layoutError))
         qCWarning(lcApp).noquote() << "Could not prepare data directories:" << layoutError;
+    // Update state (last-update.json) lives in its own owner-only directory under stateDir;
+    // nexora-bootok writes into it as the same user.
+    if (!m_updateStateDir.isEmpty()) {
+        if (QDir().mkpath(m_updateStateDir))
+            QFile::setPermissions(m_updateStateDir,
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        else
+            qCWarning(lcApp).noquote() << "Could not create the update state directory" << m_updateStateDir;
+    }
     m_settingsController->applyAll();
     if (!m_library.open(m_databasePath))
         qCCritical(lcLibrary).noquote() << "Game library disabled:" << m_library.lastError();

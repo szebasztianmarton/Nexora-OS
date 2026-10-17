@@ -6,7 +6,11 @@ import QtQuick
 //
 // Accessibility inputs: set once at start-up (see Main.qml), everything else derives from
 // them so every screen reacts the same way without having to know about settings itself.
-//   scale          Theme.scale (= settings.uiScale / 100). Multiplies spacing, typography,
+//   userScale      Theme.userScale (= settings.uiScale / 100, Settings › Interface scale).
+//   resolutionScale  Theme.resolutionScale (= max(1, min(window width / 1280, window height
+//                  / 720)), set by Main.qml): the layout is designed for 1280x720, so a
+//                  1080p screen draws everything 1.5x instead of with 720p-sized text.
+//   scale          userScale x resolutionScale (read-only). Multiplies spacing, typography,
 //                  radii, icon sizes and the game/emulator card grid.
 //   highContrast   Theme.highContrast (= settings.theme === "highContrast"). Swaps the whole
 //                  palette for a pure-black-background / white-text / yellow-focus-ring one;
@@ -18,7 +22,9 @@ import QtQuick
 QtObject {
     id: theme
 
-    property real scale: 1.0
+    property real userScale: 1.0
+    property real resolutionScale: 1.0
+    readonly property real scale: userScale * resolutionScale
     property bool highContrast: false
     property bool reducedMotion: false
 
@@ -40,6 +46,34 @@ QtObject {
     // Dedicated focus-ring colour: equal to accent in the normal theme, but kept separate so
     // a future palette can tune focus visibility without touching the accent colour itself.
     readonly property color focusRing: highContrast ? "#ffd400" : accent
+
+    // Game bar / quick menu palette: neutral graphite surfaces with light selected buttons in
+    // the normal theme, the same black/white/yellow scheme as everything else in high contrast.
+    readonly property color overlayScrim: "#000000"
+    readonly property color overlaySurface: highContrast ? "#000000" : "#2a2c30"
+    readonly property color overlayFooter: highContrast ? "#000000" : "#101114"
+    readonly property color overlayTile: highContrast ? "#141414" : "#3c3e42"
+    readonly property color overlayTileHover: highContrast ? "#262626" : "#4a4d53"
+    readonly property color overlaySelected: highContrast ? "#ffd400" : "#e6e6e6"
+    readonly property color overlayInk: highContrast ? "#000000" : "#1b1b1b"
+    readonly property color overlayLine: highContrast ? "#ffffff" : "#45484e"
+    readonly property color overlayText: "#ffffff"
+    readonly property color overlayFocus: highContrast ? "#ffd400" : "#ffffff"
+    readonly property color overlayTextSoft: highContrast ? "#ffffff" : "#e6e6e6"
+    readonly property color overlayTextMuted: highContrast ? "#cfcfcf" : "#b9bcc2"
+    readonly property color overlayTextFaint: highContrast ? "#b5b5b5" : "#9a9da3"
+    readonly property color overlayDisabled: highContrast ? "#b5b5b5" : "#8a8d93"
+    readonly property color overlayTrack: highContrast ? "#ffffff" : "#5a5d63"
+    readonly property color overlayAccent: highContrast ? "#00ff6a" : "#107c10"
+    readonly property color overlayGraph: highContrast ? "#00ff6a" : "#5dc21e"
+    readonly property color overlayDanger: highContrast ? "#ff3b3b" : "#a4262c"
+    readonly property color overlayDangerSoft: highContrast ? "#ff3b3b" : "#ff99a4"
+    readonly property color overlayArmed: highContrast ? "#4a0000" : "#6b1015"
+    readonly property color overlayArtEmpty: highContrast ? "#000000" : "#0d0f14"
+    // Translucent tints for warning panels and badges over artwork.
+    readonly property color dangerTint: highContrast ? "#000000" : Qt.rgba(1, 0.39, 0.45, 0.10)
+    readonly property color badgeScrim: highContrast ? "#000000" : Qt.rgba(0, 0, 0, 0.6)
+    readonly property color artInk: highContrast ? "#ffffff" : Qt.rgba(1, 1, 1, 0.85)
 
     // --- Spacing scale (4, 8, 12, 16, 24, 32 base px, × scale) --------------------------------
     readonly property real space1: Math.round(4 * scale)
@@ -76,6 +110,18 @@ QtObject {
     readonly property int animFast: reducedMotion ? 0 : 90
     readonly property int animNormal: reducedMotion ? 0 : 160
     readonly property int animSlow: reducedMotion ? 0 : 240
+
+    // List/grid highlight movement (key navigation inside views).
+    readonly property int animMove: reducedMotion ? 0 : 120
+
+    // --- Control sizes (× scale) -------------------------------------------------------------
+    readonly property real controlHeight: Math.round(48 * scale)
+    readonly property real controlHeightCompact: Math.round(40 * scale)
+    readonly property real chipHeight: Math.round(44 * scale)
+    readonly property real tabHeight: Math.round(42 * scale)
+    readonly property real rowHeight: Math.round(60 * scale)
+    readonly property real barHeight: Math.round(48 * scale)
+    readonly property real headerHeight: Math.round(64 * scale)
 
     // --- Game / emulator card grid -----------------------------------------------------------------
     readonly property real cardWidth: Math.round(230 * scale)

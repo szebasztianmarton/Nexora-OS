@@ -45,6 +45,93 @@ void flipFirstByte(const QString &path)
     f.close();
 }
 
+// Replaces |path| the way the privileged helpers do (write a temporary file, rename it over
+// the old one), so every status update is a new inode.
+void writeStatusAtomically(const QString &path, const QByteArray &line)
+{
+    const QString tmp = path + QStringLiteral(".tmp");
+    QFile f(tmp);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return;
+    f.write(line);
+    f.close();
+    ::rename(QFile::encodeName(tmp).constData(), QFile::encodeName(path).constData());
+}
+
+// Stands in for nexora-updated: waits for one request line on |fifoPath|, then writes each
+// of |statusLines| to |statusPath| (atomically, |gapMs| apart).
+class FakeHelper
+{
+public:
+    FakeHelper(const QString &fifoPath, const QString &statusPath, const QList<QByteArray> &statusLines,
+               int gapMs = 100)
+    {
+        QVERIFY(::mkfifo(QFile::encodeName(fifoPath).constData(), 0600) == 0);
+        m_thread = std::thread([this, fifoPath, statusPath, statusLines, gapMs] {
+            QFile fifo(fifoPath);
+            fifo.open(QIODevice::ReadOnly); // blocks until a writer opens the FIFO
+            m_request = QString::fromUtf8(fifo.readLine());
+            for (const QByteArray &line : statusLines) {
+                QThread::msleep(gapMs);
+                writeStatusAtomically(statusPath, line);
+            }
+        });
+        // Let the reader reach its blocking open() before install() opens the FIFO
+        // non-blocking (see installWithFifoReaderReachesRestartRequired).
+        QThread::msleep(200);
+    }
+    ~FakeHelper() { join(); }
+    FakeHelper(const FakeHelper &) = delete;
+    FakeHelper &operator=(const FakeHelper &) = delete;
+
+    QString request()
+    {
+        join();
+        return m_request;
+    }
+
+private:
+    void join()
+    {
+        if (m_thread.joinable())
+            m_thread.join();
+    }
+
+    std::thread m_thread;
+    QString m_request;
+};
+
+// checkBundle() + verify() a fresh 1 MiB bundle of version 0.4.1 -> ReadyToInstall.
+void makeReady(UpdateService &service, const QString &bundleDir, const TestKeyPair &key)
+{
+    BundleSpec spec;
+    spec.imageSize = 1024 * 1024;
+    spec.version = QStringLiteral("0.4.1");
+    writeBundle(bundleDir, spec, key);
+    QVERIFY(service.checkBundle(bundleDir));
+    QVERIFY(service.verify());
+    QVERIFY(QTest::qWaitFor([&] { return service.state() == UpdateState::ReadyToInstall; }, 5000));
+}
+
+// Runs the install flow against a FakeHelper answering with |statusLines| (after |stale|
+// was left in the status file by an earlier request, if not empty).
+struct InstallRig
+{
+    QTemporaryDir bundleRoot, keyRoot, stageRoot, runRoot;
+    TestKeyPair key = TestKeyPair::generate();
+    QString fifoPath = runRoot.filePath(QStringLiteral("update-request"));
+    QString statusPath = runRoot.filePath(QStringLiteral("update-status"));
+
+    UpdateEnvironment env()
+    {
+        writePublicKey(keyRoot.path(), QStringLiteral("release"), key);
+        UpdateEnvironment e = baseEnv(keyRoot.path(), stageRoot.path());
+        e.installRequestFifo = fifoPath;
+        e.installStatusFile = statusPath;
+        return e;
+    }
+};
+
 } // namespace
 
 class TestUpdateService : public QObject
@@ -152,7 +239,9 @@ private slots:
         writeBundle(bundleRoot.path(), spec, key);
 
         UpdateEnvironment env = baseEnv(keyRoot.path(), stageRoot.path());
-        env.freeBytes = [](const QString &) { return qint64(1) * 1024 * 1024; }; // 1 MiB
+        // Nothing is staged (the helper writes the image straight to the inactive slot), so
+        // only room for the small status/record files is required; 16 KiB is below that.
+        env.freeBytes = [](const QString &) { return qint64(16) * 1024; };
         UpdateService service(env);
         QVERIFY(service.checkBundle(bundleRoot.path()));
         QVERIFY(service.verify());
@@ -248,6 +337,177 @@ private slots:
         QCOMPARE(receivedLine, QStringLiteral("install %1\n").arg(bundleRoot.path()));
     }
 
+    void verifyCreatesAMissingStateDirectory()
+    {
+        // First update on a fresh system: stateDir/update does not exist yet. The default
+        // free-space probe (QStorageInfo) must not see a missing path as "no space".
+        QTemporaryDir bundleRoot, keyRoot, stageRoot;
+        const auto key = TestKeyPair::generate();
+        writePublicKey(keyRoot.path(), QStringLiteral("release"), key);
+        BundleSpec spec;
+        spec.imageSize = 1024 * 1024;
+        writeBundle(bundleRoot.path(), spec, key);
+
+        const QString stagingDir = stageRoot.filePath(QStringLiteral("state/nexora/update"));
+        QVERIFY(!QFileInfo::exists(stagingDir));
+        UpdateService service(baseEnv(keyRoot.path(), stagingDir));
+        QVERIFY(service.checkBundle(bundleRoot.path()));
+        QVERIFY(service.verify());
+        QVERIFY(QTest::qWaitFor([&] { return service.state() != UpdateState::Verifying; }, 5000));
+        QCOMPARE(service.state(), UpdateState::ReadyToInstall);
+        QVERIFY(QFileInfo(stagingDir).isDir());
+    }
+
+    void verifyDoesNotRequireRoomForTheImage()
+    {
+        // The image is never copied into the state directory (the 1 GiB data partition is
+        // smaller than a 2 GiB root image), so an image larger than the free space there is
+        // fine: the helper writes it straight to the inactive slot.
+        QTemporaryDir bundleRoot, keyRoot, stageRoot;
+        const auto key = TestKeyPair::generate();
+        writePublicKey(keyRoot.path(), QStringLiteral("release"), key);
+        BundleSpec spec;
+        spec.imageSize = 3 * 1024 * 1024;
+        writeBundle(bundleRoot.path(), spec, key);
+
+        UpdateEnvironment env = baseEnv(keyRoot.path(), stageRoot.path());
+        env.freeBytes = [](const QString &) { return qint64(2) * 1024 * 1024; }; // < image size
+        UpdateService service(env);
+        QVERIFY(service.checkBundle(bundleRoot.path()));
+        QVERIFY(service.verify());
+        QVERIFY(QTest::qWaitFor([&] { return service.state() != UpdateState::Verifying; }, 5000));
+        QCOMPARE(service.state(), UpdateState::ReadyToInstall);
+    }
+
+    void staleStatusIsIgnored_data()
+    {
+        QTest::addColumn<QByteArray>("stale");
+        QTest::newRow("ok from nexora-bootok") << QByteArray("ok 0.4.1\n");
+        QTest::newRow("earlier error") << QByteArray("error bundle directory not found\n");
+    }
+
+    void staleStatusIsIgnored()
+    {
+        // /run/nexora/update-status survives between requests (nexora-bootok writes
+        // "ok <version>" there after confirming a boot); it must not decide this attempt.
+        QFETCH(QByteArray, stale);
+        InstallRig rig;
+        writeStatusAtomically(rig.statusPath, stale);
+        UpdateService service(rig.env());
+        FakeHelper helper(rig.fifoPath, rig.statusPath, {}); // accepts the request, never answers
+        makeReady(service, rig.bundleRoot.path(), rig.key);
+        QVERIFY(service.install());
+        QTest::qWait(1500); // three poll intervals
+        QCOMPARE(service.state(), UpdateState::Installing);
+        QCOMPARE(helper.request(), QStringLiteral("install %1\n").arg(rig.bundleRoot.path()));
+    }
+
+    void freshStatusWithTheSameTextIsAccepted()
+    {
+        // The helper may repeat the previous attempt's line verbatim; a rewritten file is
+        // still a new answer.
+        InstallRig rig;
+        writeStatusAtomically(rig.statusPath, "error invalid request\n");
+        UpdateService service(rig.env());
+        FakeHelper helper(rig.fifoPath, rig.statusPath, {"error invalid request\n"});
+        makeReady(service, rig.bundleRoot.path(), rig.key);
+        QVERIFY(service.install());
+        QVERIFY(QTest::qWaitFor([&] { return service.state() != UpdateState::Installing; }, 5000));
+        QCOMPARE(service.state(), UpdateState::Failed);
+        QCOMPARE(service.error(), UpdateError::InstallFailed);
+        QVERIFY(service.message().contains(QStringLiteral("invalid request")));
+    }
+
+    void installingThenOkForThePendingVersionSucceeds()
+    {
+        InstallRig rig;
+        writeStatusAtomically(rig.statusPath, "ok 0.4.0\n"); // the running version's boot confirmation
+        UpdateService service(rig.env());
+        FakeHelper helper(rig.fifoPath, rig.statusPath, {"installing b\n", "ok 0.4.1\n"}, 1200);
+        makeReady(service, rig.bundleRoot.path(), rig.key);
+        QVERIFY(service.install());
+        QVERIFY(QTest::qWaitFor([&] { return service.message().contains(QStringLiteral("slot b")); }, 5000));
+        QCOMPARE(service.state(), UpdateState::Installing);
+        QVERIFY(QTest::qWaitFor([&] { return service.state() != UpdateState::Installing; }, 5000));
+        QCOMPARE(service.state(), UpdateState::RestartRequired);
+    }
+
+    void okForAnotherVersionIsAFailure()
+    {
+        InstallRig rig;
+        UpdateService service(rig.env());
+        FakeHelper helper(rig.fifoPath, rig.statusPath, {"installing b\n", "ok 0.9.9\n"});
+        makeReady(service, rig.bundleRoot.path(), rig.key);
+        QVERIFY(service.install());
+        QVERIFY(QTest::qWaitFor([&] { return service.state() != UpdateState::Installing; }, 5000));
+        QCOMPARE(service.state(), UpdateState::Failed);
+        QCOMPARE(service.error(), UpdateError::InstallFailed);
+    }
+
+    void installTimesOut()
+    {
+        InstallRig rig;
+        UpdateEnvironment env = rig.env();
+        env.installTimeout = std::chrono::milliseconds(1500);
+        UpdateService service(env);
+        FakeHelper helper(rig.fifoPath, rig.statusPath, {"installing b\n"}); // then never finishes
+        makeReady(service, rig.bundleRoot.path(), rig.key);
+        QVERIFY(service.install());
+        QVERIFY(QTest::qWaitFor([&] { return service.state() != UpdateState::Installing; }, 6000));
+        QCOMPARE(service.state(), UpdateState::Failed);
+        QCOMPARE(service.error(), UpdateError::InstallTimedOut);
+        QVERIFY(!service.message().isEmpty());
+    }
+
+    void acknowledgeClearsARollbackRecord()
+    {
+        QTemporaryDir stageRoot, keyRoot;
+        const QString stagingDir = stageRoot.filePath(QStringLiteral("update"));
+        QVERIFY(QDir().mkpath(stagingDir));
+        const QString path = stagingDir + QStringLiteral("/last-update.json");
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        // Exactly what nexora-bootok writes.
+        f.write(R"({"format": 1, "result": "rolled-back", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+                R"("newBuildId": "v0.4.1-0-gabcdef0", "previousVersion": "0.4.0", "newVersion": "0.4.1", "slot": "a"})"
+                "\n");
+        f.close();
+
+        UpdateService service(baseEnv(keyRoot.path(), stagingDir));
+        QVERIFY(!service.acknowledgeLastResult()); // nothing to acknowledge while Idle
+        service.loadPersistedState();
+        QCOMPARE(service.state(), UpdateState::RecoveryRequired);
+        QVERIFY(service.message().contains(QStringLiteral("0.4.1")));
+        QVERIFY(service.acknowledgeLastResult());
+        QCOMPARE(service.state(), UpdateState::Idle);
+        QVERIFY(!QFileInfo::exists(path));
+
+        // A restart does not report it again.
+        UpdateService again(baseEnv(keyRoot.path(), stagingDir));
+        again.loadPersistedState();
+        QCOMPARE(again.state(), UpdateState::Idle);
+    }
+
+    void acknowledgeReturnsCompletedToIdle()
+    {
+        QTemporaryDir stageRoot, keyRoot;
+        const QString stagingDir = stageRoot.filePath(QStringLiteral("update"));
+        QVERIFY(QDir().mkpath(stagingDir));
+        QFile f(stagingDir + QStringLiteral("/last-update.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"format": 1, "result": "ok", "previousBuildId": "v0.4.0-0-gcafebabe", )"
+                R"("newBuildId": "v0.4.1-0-gabcdef0"})");
+        f.close();
+
+        UpdateEnvironment env = baseEnv(keyRoot.path(), stagingDir);
+        env.currentBuildId = QStringLiteral("v0.4.1-0-gabcdef0");
+        UpdateService service(env);
+        service.loadPersistedState();
+        QCOMPARE(service.state(), UpdateState::Completed);
+        QVERIFY(service.acknowledgeLastResult());
+        QCOMPARE(service.state(), UpdateState::Idle);
+    }
+
     void invalidTransitionsAreRejected()
     {
         using S = UpdateState;
@@ -275,6 +535,9 @@ private slots:
         QVERIFY(isValidTransition(S::Failed, S::Checking));
         QVERIFY(isValidTransition(S::Completed, S::Checking));
         QVERIFY(isValidTransition(S::RecoveryRequired, S::Checking));
+        QVERIFY(isValidTransition(S::Completed, S::Idle)); // acknowledged
+        QVERIFY(isValidTransition(S::RecoveryRequired, S::Idle)); // acknowledged
+        QVERIFY(!isValidTransition(S::Failed, S::Idle));
     }
 
     void loadPersistedStateDetectsCompletion()
@@ -292,7 +555,13 @@ private slots:
         UpdateService service(env);
         service.loadPersistedState();
         QCOMPARE(service.state(), UpdateState::Completed);
-        QVERIFY(!QFileInfo::exists(path)); // reported once
+        // Kept until the user acknowledges it, so a restart before then does not lose it.
+        QVERIFY(QFileInfo::exists(path));
+        UpdateService afterRestart(env);
+        afterRestart.loadPersistedState();
+        QCOMPARE(afterRestart.state(), UpdateState::Completed);
+        QVERIFY(afterRestart.acknowledgeLastResult());
+        QVERIFY(!QFileInfo::exists(path));
     }
 
     void loadPersistedStateDetectsRollback()

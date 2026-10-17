@@ -15,7 +15,29 @@ FocusScope {
     Accessible.name: "Navigation tabs"
     Accessible.description: "Use Left and Right to switch tabs"
 
-    implicitHeight: 60
+    implicitHeight: Theme.tabHeight + Theme.space4
+    // Eight sections have to fit side by side at 1280 px, also with a larger UI scale: tabs
+    // shrink (down to their label) rather than overflow the window.
+    readonly property real keyCapsWidth: Theme.space6 * 3
+    readonly property real maxTabWidth: tabs.length > 0
+        ? Math.max(0, (width - keyCapsWidth - tabs.length * tabRow.spacing) / tabs.length) : 0
+    // When the widest label does not fit (large UI scale at 1280 px), every tab switches to a
+    // slightly smaller font and tighter padding instead of eliding a label.
+    FontMetrics {
+        id: labelMetrics
+        font.pixelSize: Theme.fontBody
+        font.bold: true
+    }
+    readonly property real widestLabel: {
+        void labelMetrics.font.pixelSize
+        let widest = 0
+        for (const t of tabs)
+            widest = Math.max(widest, labelMetrics.advanceWidth(t.title))
+        return widest
+    }
+    readonly property bool compact: widestLabel + Theme.space5 > maxTabWidth
+    readonly property real labelPadding: compact ? Theme.space2 : Theme.space5
+    readonly property real labelFontSize: compact ? Math.round(Theme.fontBody * 0.82) : Theme.fontBody
 
     Rectangle {
         anchors.fill: parent
@@ -31,12 +53,13 @@ FocusScope {
 
     component KeyCap: Rectangle {
         property string label
-        height: 24
-        width: capLabel.implicitWidth + 14
-        radius: 6
+        height: Math.round(24 * Theme.scale)
+        width: capLabel.implicitWidth + Theme.space3
+        radius: Theme.space1 + 2
         color: Theme.surfaceRaised
         border.color: Theme.border
         Text {
+            textFormat: Text.PlainText
             id: capLabel
             anchors.centerIn: parent
             text: parent.label
@@ -49,13 +72,13 @@ FocusScope {
     Row {
         id: tabRow
         anchors.centerIn: parent
-        spacing: 6
+        spacing: Theme.space1
 
         KeyCap {
             label: "L1"
             anchors.verticalCenter: parent.verticalCenter
         }
-        Item { width: 10; height: 1 }
+        Item { width: Theme.space2; height: 1 }
 
         Repeater {
             model: bar.tabs
@@ -66,13 +89,14 @@ FocusScope {
                 readonly property bool current: index === bar.currentIndex
                 objectName: "tab_" + modelData.key
                 anchors.verticalCenter: parent.verticalCenter
-                height: 42
-                width: Math.max(120, tabLabel.implicitWidth + 40)
-                radius: 21
+                height: Theme.tabHeight
+                width: Math.min(bar.maxTabWidth, Math.max(bar.compact ? 0 : 96 * Theme.scale,
+                                                          tabLabel.implicitWidth + bar.labelPadding))
+                radius: height / 2
                 color: current ? (bar.activeFocus ? Theme.accent : Theme.accentSoft)
                      : tabMouse.containsMouse ? Theme.surfaceRaised : "transparent"
-                border.width: current && bar.activeFocus ? 2 : 0
-                border.color: Theme.text
+                border.width: current && bar.activeFocus ? Theme.focusWidth : 0
+                border.color: Theme.highContrast ? Theme.focusRing : Theme.text
 
                 Accessible.role: Accessible.PageTab
                 Accessible.name: modelData.title
@@ -82,11 +106,16 @@ FocusScope {
                 Accessible.onPressAction: bar.tabRequested(index)
 
                 Text {
+                    textFormat: Text.PlainText
                     id: tabLabel
                     anchors.centerIn: parent
+                    width: Math.min(implicitWidth, tab.width - bar.labelPadding / 2)
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter
                     text: tab.modelData.title
-                    color: tab.current ? Theme.text : Theme.textMuted
-                    font.pixelSize: Theme.fontBody
+                    color: tab.current ? (bar.activeFocus && Theme.highContrast ? Theme.background : Theme.text)
+                                       : Theme.textMuted
+                    font.pixelSize: bar.labelFontSize
                     font.bold: tab.current
                 }
                 MouseArea {
@@ -99,7 +128,7 @@ FocusScope {
             }
         }
 
-        Item { width: 10; height: 1 }
+        Item { width: Theme.space2; height: 1 }
         KeyCap {
             label: "R1"
             anchors.verticalCenter: parent.verticalCenter

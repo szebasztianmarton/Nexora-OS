@@ -2,7 +2,7 @@
 
 Nexora is meant to be used with a game controller only. This page describes how gamepad input reaches the UI, which controllers are expected to work, how buttons are mapped and remapped, and how to test with real hardware.
 
-**Test status:** no physical controller has been tested with either backend. Everything below is implemented and covered by unit tests on the mapping and navigation logic (`tst_gamepadnavigator`, `tst_buttonmapping`, `tst_inputcontroller`, plus `tst_appcontroller`/`tst_uicontext` for the chord and remapping), but the device handling of the evdev and SDL3 backends has only been exercised without devices. The SDL3 backend was compile/link-verified against SDL 3.2.30 in an earlier MVP. Use the [manual test checklist](#manual-test-checklist) when testing real pads.
+**Test status (MVP 4, 0.4.0):** no physical controller has been tested with either backend, on a desktop or on the image. Everything below is implemented and covered by unit and UI tests on the mapping and navigation logic (`tst_gamepadnavigator`, `tst_buttonmapping`, `tst_inputcontroller`, plus `tst_appcontroller`/`tst_uicontext` for the chord, disconnect notice and remapping, and the QML tests `tst_navigation.qml`, `tst_quickmenu.qml` for controller-only operation with synthesized keys), but the device handling of the evdev and SDL3 backends has only been exercised without devices. The SDL3 backend is compiled and its tests run in the `build-sdl3` CI job. Use the [manual test checklist](#manual-test-checklist) when testing real pads.
 
 Code: `apps/console-ui/src/input/`.
 
@@ -13,7 +13,9 @@ Code: `apps/console-ui/src/input/`.
 - [Button names and controller layouts](#button-names-and-controller-layouts)
 - [Default mapping](#default-mapping)
 - [Configurable mapping](#configurable-mapping)
-- [Fixed behaviour](#fixed-behaviour)
+- [Directions, dead zone and repeat](#directions-dead-zone-and-repeat)
+- [Quick menu and game bar](#quick-menu-and-game-bar)
+- [Devices and test input](#devices-and-test-input)
 - [Keyboard](#keyboard)
 - [While an emulator runs](#while-an-emulator-runs)
 - [Multiple controllers and disconnects](#multiple-controllers-and-disconnects)
@@ -23,17 +25,24 @@ Code: `apps/console-ui/src/input/`.
 
 ## Architecture
 
-```
-evdev (/dev/input/event*)  ─┐
-                            ├─> GamepadNavigator ──> InputController ──> QKeyEvent ──> focused QML window
-SDL3 gamepad API (optional) ┘    buttons/axes →        actions →          (posted)
-                                 actions, repeat,      Qt keys, suspension,
-                                 chord, per device     capture
+```mermaid
+graph LR
+    evdev["EvdevGamepadBackend<br/>/dev/input/event*"] --> nav
+    sdl["Sdl3GamepadBackend<br/>(optional, not on the image)"] --> nav
+    nav["GamepadNavigator<br/>ButtonMapping, dead zone + hysteresis,<br/>repeat, Select+Start chord,<br/>Start hold, per-device state"]
+    nav -- "actions" --> ic["InputController<br/>suspension, capture, test mode,<br/>device list"]
+    ic -- "QKeyEvent press+release (posted)" --> win["focused QML window<br/>Keys handlers"]
+    kb[Keyboard] --> win
+    ic -- "gameBarRequested (Guide)<br/>quickMenuRequested (Start held 1 s)" --> gbc["GameBarController<br/>game bar / quick menu"]
+    ic -- "returnToLauncherRequested (chord)" --> ac["AppController<br/>stop emulator"]
+    ic -- "deviceConnected / deviceDisconnected" --> ac
+    ic -- "rawEvent (test mode)" --> test["InputTestPanel"]
+    ac -- "setSuspended(true) while an emulator runs" --> ic
 ```
 
 1. A **backend** (`EvdevGamepadBackend` or `Sdl3GamepadBackend`) turns device events into backend-neutral `GamepadButton` presses/releases and `GamepadAxis` values (−1…1), tagged with a device id.
-2. **`GamepadNavigator`** maps buttons to navigation actions through the `ButtonMapping`, turns D-pad/hat/left stick into directions with auto-repeat, and detects the Select + Start chord.
-3. **`InputController`** owns the navigator and at most one backend, drops actions while suspended, handles remap capture, and posts a synthesized key press + release for each action to the focused window.
+2. **`GamepadNavigator`** maps buttons to navigation actions through the `ButtonMapping`, turns D-pad/hat/left stick into directions (dead zone, hysteresis, auto-repeat), ignores OS key auto-repeat for non-directional actions, and detects the Select + Start chord and a 1 s Start hold.
+3. **`InputController`** owns the navigator and at most one backend, drops actions while suspended, handles remap capture and test mode, keeps the list of connected devices, and posts a synthesized key press + release for each action to the focused window.
 4. The **QML UI** only handles ordinary key events, so gamepad and keyboard behave identically.
 
 All of this runs on the GUI thread; backends never block it (non-blocking reads / a 16 ms poll timer).
@@ -79,7 +88,7 @@ Kernel auto-repeat events (value 2) are ignored; the navigator does its own repe
 
 ### SDL3 (optional)
 
-Built only with `-DNEXORA_WITH_SDL3=ON` or `AUTO` when SDL3 is found ([development.md](development.md#optional-sdl3-backend)). Ubuntu 24.04 does not package SDL3 and **Buildroot 2026.02.3 has no SDL3 package, so the image uses evdev only** (`-DNEXORA_WITH_SDL3=OFF` in `nexora-os.mk`).
+Built only with `-DNEXORA_WITH_SDL3=ON` or `AUTO` when SDL3 is found ([building.md](building.md#optional-sdl3-backend)). Ubuntu 24.04 does not package SDL3 and **Buildroot 2026.02.3 has no SDL3 package, so the image uses evdev only** (`-DNEXORA_WITH_SDL3=OFF` in `nexora-os.mk`).
 
 - Uses SDL's gamepad API, which normalises button positions across many controllers through SDL's built-in controller database. Nexora does not ship or load an additional mapping database; SDL's own mechanisms (e.g. the `SDL_GAMECONTROLLERCONFIG` environment variable) are SDL behaviour and were not tested with Nexora.
 - Only the gamepad subsystem is initialised; events are polled every 16 ms on the GUI thread.
@@ -113,15 +122,15 @@ Synthesized keys are fixed; the button for each remappable action comes from `in
 
 | Action | Default button | Xbox / PlayStation / Nintendo label | Synthesized key | In the dashboard |
 | --- | --- | --- | --- | --- |
-| `accept` | `south` | A / ✕ / B | `Return` | Select / launch / confirm (destructive actions such as power off need a second press) |
-| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker or game options, cancel a pending confirmation or remap capture; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
-| `menu` | `start` | Menu / Options / + | `Menu` | Open the Diagnostics tab |
+| `accept` | `south` | A / ✕ / B | `Return` | Select / launch / confirm (destructive actions ask first: a confirmation dialog whose default is Cancel, e.g. stopping a game from the running overlay, Restart and Power off in the game bar; a few rows such as Reset preferences and the game bar's Stop emulator need a second press instead) |
+| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker or game options, cancel a dialog or remap capture; inside a page where nothing consumes it, move focus to the tab bar; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
+| `menu` | `start` | Menu / Options / + | `Menu` | Open the System tab (holding Start for 1 s while a game runs opens the quick menu instead) |
 | `favorite` | `north` | Y / △ / X | `Favorites` | Toggle favorite of the focused game (Home rows, Games grid); in the Emulators tab's profile picker, make the selected profile the default |
 | `search` | `west` | X / □ / Y | `Search` | Open the Games tab with the search field focused |
-| `prevTab` | `l1` | LB / L1 / L | `PageUp` | Previous tab (Home, Games, Emulators, Settings, Diagnostics) |
+| `prevTab` | `l1` | LB / L1 / L | `PageUp` | Previous tab (Home, Games, Systems, Favorites, Recent, Emulators, Settings, System) |
 | `nextTab` | `r1` | RB / R1 / R | `PageDown` | Next tab |
-| `gameBar` | `guide` | Xbox / PS / Home | (none; `InputController::gameBarRequested`) | Open or close the [game bar](game-bar.md). Works while an emulator runs (navigation suspended). |
-| `options` | `select` | View / Share (Create) / − | `Context1` | Open the [game options](game-library.md#game-options) of the focused game (Home rows, Games grid); closes them again |
+| `gameBar` | `guide` | Xbox / PS / Home | (none; `InputController::gameBarRequested`) | With no game running: open or close the [game bar](game-bar.md). While a game runs: open or close the [quick menu](#quick-menu-and-game-bar). Works while navigation is suspended. |
+| `options` | `select` | View / Share (Create) / − | `Context1` | Open the launch options of the focused game (Home rows, Games grid); closes them again. Accept on a game opens its [details](game-library.md#game-details). |
 | Up/Down/Left/Right | D-pad, hat, left stick | (fixed) | arrow keys | Move focus; Up at the top of a page moves to the tab bar; Left/Right change values on Settings rows |
 
 The dashboard behaviour is defined in `apps/console-ui/qml/` and covered by `tst_qmlsmoke` with key events. The hint bar at the bottom shows the keys that apply to the focused element.
@@ -158,18 +167,38 @@ An ignored mapping falls back to the **default** mapping; the settings screen li
 - Binding a button that another action already uses **swaps** them: the other action gets the old button of the remapped action, so every action stays reachable (example: binding `accept` to `east` moves `back` to `south`).
 - Each change is validated and saved immediately. "Reset to defaults" restores the default mapping together with all other settings.
 
-## Fixed behaviour
-
-Not configurable in MVP 2:
+## Directions, dead zone and repeat
 
 | Behaviour | Details |
 | --- | --- |
-| Directions | D-pad buttons, hat axes and the left stick always navigate. Sticks/hats trigger at \|value\| ≥ 0.5 and release below 0.3 (hysteresis); flicking straight to the opposite side registers. |
+| Directions | D-pad buttons, hat axes and the left stick always navigate. |
+| Dead zone | `input.deadzone` (5–60 %, default 25 %; Settings › Controllers › "Analog stick dead zone", steps of 5), applied live. Readings with \|v\| below the dead zone count as centred; a direction is pressed at \|v\| ≥ dz + (1 − dz) × 0.4 and released below dz + (1 − dz) × 0.15 (default: press at 0.55, release below 0.36). Flicking straight to the opposite side registers. Tested: `tst_gamepadnavigator` (0.25 ignores 0.2, presses at 0.6, releases at 0.3; clamping). |
 | Auto-repeat | A held direction repeats after 400 ms, then every 120 ms. Only the most recently pressed direction repeats; releasing it stops repeat even if an older direction is still held. Buttons never repeat. |
+| Key-repeat filter | A button reported as pressed again without a release (kernel/OS auto-repeat) fires Accept, Back and the other actions only once per physical press; only navigation repeats. |
 | Return to launcher | Hold **Select + Start** on the same controller for **1 second**: the running emulator is asked to stop (SIGTERM, SIGKILL after its stop timeout, 5 s by default). Fires once per hold; releasing either button earlier cancels it. Works while navigation is suspended. Does nothing when no emulator is starting/running. |
-| Guide / Select fallback | If `guide` is not bound to any action, pressing it triggers `gameBar` (so mappings saved before the game bar existed still open it); an unbound `select` triggers `menu`. Older stored mappings gain `options` on Select when Select is free, so with the default mapping neither fallback applies. |
+| Guide / Select fallback | If `guide` is not bound to any action, pressing it triggers `gameBar`; an unbound `select` triggers `menu`. Older stored mappings gain `options` on Select when Select is free, so with the default mapping neither fallback applies. |
 
-Note: pressing Start or Select also triggers their normal action (by default `menu` and `options`) when navigation is not suspended, including at the start of the chord. While an emulator runs, navigation is suspended, so only the chord counts.
+Pressing Start or Select also triggers their normal action (by default `menu` and `options`) when navigation is not suspended, including at the start of the chord. While an emulator runs, navigation is suspended, so only the chord, Guide and the Start hold count.
+
+## Quick menu and game bar
+
+`GameBarController` (`apps/console-ui/src/GameBarController.cpp`) owns both overlays:
+
+| Input | No game running | Game running |
+| --- | --- | --- |
+| Guide (controller) | toggles the game bar | opens the **quick menu**; Guide again closes it |
+| Hold Start 1 s (Select not held) | — | opens the quick menu |
+| Ctrl+G (keyboard) | toggles the game bar | toggles the game bar |
+
+While either overlay is open, controller input flows to the shell even though an emulator runs. Quick menu items: Return to game (resumes the emulator first if it is paused), Pause/Resume emulator (only when the emulator definition is `pausable`), controller status, Volume and Mute, Display settings (display mode, resolution, interface scale), System info, Exit game (confirmation "Unsaved progress in the emulator may be lost"; default button Cancel). Tested: `tst_quickmenu.qml`, `tst_appcontroller`.
+
+On the image the emulator owns the display (EGLFS/KMS), so the quick menu becomes visible when the shell regains it; this hand-over has not been tested on the image.
+
+## Devices and test input
+
+- **Device list:** `InputController.devices` lists each connected pad as `{id, name, backend, connectedAt}`; shown in Settings › Controllers, on the System tab and as a count on Home.
+- **Disconnect notice:** a pad that disappears while an emulator runs produces the notice "Controller disconnected: <name>"; the emulator is not stopped (`tst_appcontroller`). Connect/disconnect events are also logged in `nexora.input`.
+- **Test input:** Settings › Controllers › "Test input" opens `InputTestPanel`. In test mode every button and axis event is shown as text (`south pressed`, `LeftX -0.82`) and **not** turned into navigation; holding the button currently mapped to Back (east by default; the panel names it) for 2 s leaves test mode (`tst_inputcontroller`), and Escape closes it from the keyboard. Every other key stays inside the panel (L1/R1, Menu and Search included), and if the panel is hidden from outside it closes and leaves test mode.
 
 ## Keyboard
 
@@ -187,22 +216,23 @@ The keyboard always works, with or without a controller backend. Because gamepad
 
 | Key | Effect |
 | --- | --- |
-| `F1` | Diagnostics tab (like Menu) |
-| `Ctrl+G` | Open / close the game bar (like Guide) |
+| `F1` | System tab (like Menu) |
+| `Ctrl+G` | Open / close the game bar (Guide opens the quick menu instead while a game runs) |
 | `F` (no modifier) on a focused game | Toggle favorite |
-| `O` (no modifier) on a focused game | Game options (like `options`) |
+| `O` (no modifier) on a focused game | Launch options (like `options`) |
 | `/` or `Ctrl+F` | Search on the Games tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | `Backspace` | Same as Esc |
 | `Space` | Activates buttons and rows like Enter |
 | `Ctrl+Q` | Quit (development convenience) |
 
-Text entry (search, adding a library folder) needs a keyboard: there is no on-screen keyboard.
+Editing a game's title and notes works with the controller through the on-screen keyboard (`OnScreenKeyboard.qml`, tested in `tst_gamedetails.qml`). **Search and adding a library folder still need a keyboard**: those text fields do not use the on-screen keyboard yet.
 
 ## While an emulator runs
 
+- The launcher shows the running overlay; Accept on its **Stop** button asks "Stop the emulator?" (default Cancel) because unsaved progress may be lost. The Select + Start chord below stops without asking.
 - Gamepads are not grabbed, so the emulator receives the same input. While an emulator is starting, running or stopping, `InputController` is **suspended**: all navigation actions are dropped, so pressing A in a game cannot click "Stop" in the launcher. Held directions and repeat are reset on suspend and resume.
-- The Select + Start chord is still detected while suspended; it is the controller-only way back to the launcher.
+- The Select + Start chord, Guide (quick menu) and the 1 s Start hold are still detected while suspended; they are the controller-only ways back to the shell.
 - When the emulator exits, navigation resumes.
 - Many emulators have their own Select + Start bindings (e.g. exit or menu); test the interaction per emulator.
 
@@ -212,7 +242,7 @@ Text entry (search, adding a library folder) needs a keyboard: there is no on-sc
 - The most recent direction press, from any pad, is the one that repeats.
 - The chord counts only when Select and Start are held on the **same** pad.
 - All pads drive the same UI; there are no player slots.
-- On disconnect (evdev read error, SDL `GAMEPAD_REMOVED`) that device's held buttons, directions and chord are dropped immediately, so nothing stays "stuck". Reconnecting is picked up by hotplug.
+- On disconnect (evdev read error, SDL `GAMEPAD_REMOVED`) that device's held buttons, directions and chord are dropped immediately, so nothing stays "stuck"; the device list updates and, while a game runs, a notice is shown. Reconnecting is picked up by hotplug.
 
 ## Known limitations
 
@@ -223,7 +253,9 @@ Text entry (search, adding a library folder) needs a keyboard: there is no on-sc
 - evdev uses the kernel's codes as-is (no correction database): pads with non-standard drivers may have swapped or missing buttons; generic HID pads without `BTN_GAMEPAD` are ignored.
 - SDL3 is not available on the Buildroot image.
 - The input backend cannot be switched without a restart.
-- The chord duration (1 s) and repeat timings are fixed.
+- The chord and Start-hold durations (1 s) and the repeat timings are fixed; only the dead zone is configurable.
+- Search and library-folder entry need a keyboard; the recovery menu and GRUB menu need a keyboard.
+- Devices are not grabbed while an emulator runs.
 
 ## Manual test checklist
 
@@ -233,21 +265,24 @@ Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --wind
 2. **Permissions:** as a user without `input` group membership, the status explains the permission problem; after adding the group and logging in again, the pad is detected.
 3. **Hotplug:** unplug → "Gamepad disconnected" in the log and device list updates; plug in again → detected within about a second.
 4. **Face buttons by position:** bottom = confirm, right = back, top = favorite, left = search. Note any swapped pair (especially west/north on Xbox pads under evdev).
-5. **Start / Select / Guide:** Start opens the Diagnostics tab (menu action); Select on a game opens its options; Guide opens and closes the game bar.
+5. **Start / Select / Guide:** Start opens the System tab (menu action); Select on a game opens its launch options; Guide opens and closes the game bar; Accept on a game opens its details.
 6. **Shoulders:** L1/R1 switch to the previous/next tab.
 7. **Directions:** D-pad, left stick and (if the pad reports one) the hat all move focus; a held direction repeats; releasing stops immediately; resting stick does not drift.
 8. **Remap:** remap `favorite` to L1 from the settings screen; check that `prevTab` moved to the old favorite button, the new binding works, it survives a restart, and an unpressed capture times out after 5 s.
 9. **Invalid mapping:** put `"accept": "south", "back": "south"` in the settings file; the settings screen reports the problem and the default mapping works.
 10. **Emulator suspension:** launch a game; pressing buttons in the emulator does not navigate the launcher behind it.
-11. **Game bar over a game:** in a running emulator press Guide → the Nexora window comes to the front with the game bar; the pad navigates it; Guide or "Back to game" returns to the emulator window.
+11. **Quick menu over a game:** in a running emulator press Guide (and, separately, hold Start for 1 s) → the Nexora window comes to the front with the quick menu; the pad navigates it; Guide or "Return to game" returns to the emulator (and resumes it if it was paused); Exit game asks for confirmation. Ctrl+G still opens the game bar.
 12. **Return chord:** in a running emulator hold Select + Start for 1 s → emulator stops and the launcher has focus again; releasing earlier does nothing; an emulator that ignores SIGTERM is killed after its stop timeout.
 13. **Two pads:** hold a direction on pad 1 while moving the stick on pad 2; holding Select on one pad and Start on the other does not trigger the chord.
 14. **Disconnect while holding:** hold a direction and unplug; repeat stops.
 15. **Keyboard alongside:** arrows/Enter/Esc keep working with a pad connected.
-15. **Backend `none`:** `--input-backend none` → pad ignored, keyboard works.
+16. **Dead zone and test input:** open Settings › Controllers › "Test input"; a resting stick reports nothing at the default 25 %; change the dead zone and check navigation; hold the Back button (B by default) for 2 s to leave.
+17. **Backend `none`:** `--input-backend none` → pad ignored, keyboard works.
+18. **Back and confirmations:** Back inside a page moves to the tab bar; Accept on Stop in the running overlay asks first and Cancel is focused.
 
 ## Planned
 
 - Testing with real Xbox, PlayStation, Nintendo and 8BitDo pads and recording the results in this document.
 - Optional correction database for evdev, or SDL3 on the image once Buildroot packages it.
 - Per-controller mappings, configurable chord and repeat timings.
+- On-screen keyboard for search and folder entry; a folder browser.

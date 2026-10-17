@@ -6,9 +6,11 @@
 #include <QDir>
 #include <QFileInfo>
 
+#include <cerrno>
 #include <csignal>
 #include <sys/prctl.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <utility>
 
 namespace nexora::emulator {
@@ -135,6 +137,7 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
                                                   : config.name;
     m_stopRequested = false;
     m_killed = false;
+    m_terminatePending = false;
     m_activePausable = config.pausable;
     m_paused = false;
     m_pid = 0;
@@ -166,8 +169,15 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
     process->setArguments(resolved->arguments);
     process->setProcessChannelMode(QProcess::SeparateChannels);
     process->setWorkingDirectory(resolved->workingDirectory);
-    // Make sure the emulator does not outlive a crashed launcher (Linux only).
-    process->setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
+    // Runs in the child between fork and exec (async-signal-safe calls only):
+    //  - its own process group, so stop/kill/pause/resume reach everything the emulator
+    //    spawns (wrapper scripts, helper processes), not just the direct child;
+    //  - make sure the emulator does not outlive a crashed launcher (Linux only; covers the
+    //    direct child, the group is signalled on every regular stop/shutdown).
+    process->setChildProcessModifier([] {
+        ::setpgid(0, 0);
+        ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+    });
 
     connect(process, &QProcess::started, this, &EmulatorManager::onStarted);
     connect(process, &QProcess::errorOccurred, this, &EmulatorManager::onErrorOccurred);
@@ -195,16 +205,28 @@ bool EmulatorManager::stop()
 
     m_stopRequested = true;
     if (m_paused) {
-        // A stopped process cannot handle SIGTERM until it is continued.
-        if (m_pid > 0)
-            ::kill(static_cast<pid_t>(m_pid), SIGCONT);
+        // A stopped process group cannot handle SIGTERM until it is continued.
+        signalGroup(SIGCONT);
         setPaused(false);
     }
     setState(ProcessState::Stopping);
     qCInfo(lcProcess) << "Stopping" << m_activeId << "(timeout" << m_activeStopTimeout.count() << "ms)";
-    m_process->terminate();
+    // During Starting the pid may not be known yet: onStarted() sends SIGTERM as soon as it
+    // is, instead of waiting for the kill timeout.
+    m_terminatePending = !signalGroup(SIGTERM);
     m_killTimer.start(m_activeStopTimeout);
     return true;
+}
+
+bool EmulatorManager::signalGroup(int signal)
+{
+    const qint64 pid = m_pid > 0 ? m_pid : (m_process ? m_process->processId() : 0);
+    if (pid <= 0)
+        return false;
+    if (::kill(-static_cast<pid_t>(pid), signal) == 0)
+        return true;
+    // No such group (setpgid failed, or the leader is gone): the direct child only.
+    return ::kill(static_cast<pid_t>(pid), signal) == 0 || errno == ESRCH;
 }
 
 bool EmulatorManager::pause()
@@ -213,7 +235,7 @@ bool EmulatorManager::pause()
         return false;
     if (m_paused)
         return true;
-    if (::kill(static_cast<pid_t>(m_pid), SIGSTOP) != 0) {
+    if (!signalGroup(SIGSTOP)) {
         qCWarning(lcProcess) << "Could not pause" << m_activeId << "pid" << m_pid;
         return false;
     }
@@ -226,7 +248,7 @@ bool EmulatorManager::resume()
 {
     if (!m_process || !m_paused || m_pid <= 0)
         return false;
-    if (::kill(static_cast<pid_t>(m_pid), SIGCONT) != 0) {
+    if (!signalGroup(SIGCONT)) {
         qCWarning(lcProcess) << "Could not resume" << m_activeId << "pid" << m_pid;
         return false;
     }
@@ -252,6 +274,7 @@ void EmulatorManager::shutdown()
     process->disconnect(this);
     if (process->state() != QProcess::NotRunning) {
         qCInfo(lcProcess) << "Shutdown: killing" << m_activeId;
+        signalGroup(SIGKILL);
         process->kill();
         process->waitForFinished(2000);
     }
@@ -310,9 +333,12 @@ void EmulatorManager::onStarted()
     m_startedAt = QDateTime::currentDateTimeUtc();
     m_runClock.start();
     qCInfo(lcProcess) << m_activeId << "started, pid" << m_pid;
-    // A stop() during Starting already moved us to Stopping; stay there.
+    // A stop() during Starting already moved us to Stopping; stay there, and deliver the
+    // SIGTERM it could not send without a pid.
     if (m_state == ProcessState::Starting)
         setState(ProcessState::Running);
+    else if (m_state == ProcessState::Stopping && m_terminatePending)
+        m_terminatePending = !signalGroup(SIGTERM);
 }
 
 void EmulatorManager::onErrorOccurred(QProcess::ProcessError error)
@@ -351,6 +377,11 @@ void EmulatorManager::onFinished(int exitCode, QProcess::ExitStatus status)
     // Drain anything still buffered (a trailing incomplete UTF-8 sequence is dropped).
     readChannel(OutputChannel::Stdout);
     readChannel(OutputChannel::Stderr);
+
+    // A requested stop ends the whole group: anything the emulator spawned and left behind
+    // (e.g. a helper that ignores SIGTERM) goes with it.
+    if (m_stopRequested && m_pid > 0)
+        ::kill(-static_cast<pid_t>(m_pid), SIGKILL);
 
     ProcessOutcome outcome;
     outcome.stoppedByRequest = m_stopRequested;
@@ -395,6 +426,7 @@ void EmulatorManager::onStopTimeout()
         return;
     qCWarning(lcProcess) << m_activeId << "did not exit within" << m_activeStopTimeout.count() << "ms, sending SIGKILL";
     m_killed = true;
+    signalGroup(SIGKILL);
     m_process->kill();
 }
 

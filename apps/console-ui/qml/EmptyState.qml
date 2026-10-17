@@ -13,6 +13,7 @@ Column {
     width: Math.min(parent ? parent.width - 64 : 800, 900)
 
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         text: empty.app.configDirectoryFound ? "No emulators configured"
@@ -22,6 +23,7 @@ Column {
         font.bold: true
     }
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
@@ -30,6 +32,7 @@ Column {
         font.pixelSize: Theme.fontBody
     }
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
@@ -37,15 +40,16 @@ Column {
         text: empty.app.configIssues.length > 0
               ? empty.app.configIssues[0]
                 + (empty.app.configIssues.length > 1
-                   ? "\n(+" + (empty.app.configIssues.length - 1) + " more issue(s) in Diagnostics)" : "")
+                   ? "\n(+" + (empty.app.configIssues.length - 1) + " more issue(s) on the System tab)" : "")
               : ""
         color: Theme.danger
         font.pixelSize: Theme.fontSmall
     }
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
-        text: "Press Menu / F1 for diagnostics"
+        text: "Press Menu / F1 for system information"
         color: Theme.textMuted
         font.pixelSize: Theme.fontSmall
     }

@@ -18,7 +18,8 @@ env:
     qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtqml-models
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates
     qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qttest
-    libqt6sql6-sqlite libgl-dev
+    qml6-module-qtquick-shapes qt6-declarative-dev-tools
+    libqt6sql6-sqlite libgl-dev libssl-dev openssl grub-common
   SDL3_TAG: release-3.2.30
 
 jobs:
@@ -47,8 +48,24 @@ jobs:
           done
           exit $status
 
-      - name: shellcheck (scripts)
-        run: shellcheck scripts/*.sh
+      # Discovers scripts by glob + shebang: scripts/**/*.sh (incl. scripts/release),
+      # tests/**/*.sh and every shell script under buildroot-external/ (board scripts,
+      # rootfs-overlay init.d + libexec helpers); '#!/bin/sh' ones are checked with -s sh.
+      - name: shellcheck (scripts, release, Buildroot tree)
+        run: scripts/shellcheck.sh
+
+      - name: Shell syntax (bash -n)
+        run: |
+          status=0
+          for f in scripts/*.sh scripts/release/*.sh tests/integration/*.sh; do
+            bash -n "$f" || { echo "::error file=$f::bash syntax error"; status=1; }
+          done
+          exit $status
+
+      # Required documentation set exists and is non-empty; every relative link in
+      # README.md and docs/ resolves.
+      - name: Documentation check
+        run: scripts/release/check-docs.sh
 
   build-test:
     name: ${{ matrix.name }}
@@ -99,6 +116,22 @@ jobs:
 
       - name: Integration tests
         run: ctest --preset ${{ matrix.preset }} -L integration
+
+      # Path traversal, redaction, signature/manifest/checksum rejection. These also ran
+      # above under their unit/integration label; this step makes a regression visible
+      # as a failed "security" check of its own.
+      - name: Security tests
+        run: ctest --preset ${{ matrix.preset }} -L security
+
+      # Image helper tests (buildroot-external): registered only when their host tools
+      # (bash, grub-editenv, grub-script-check from grub-common) exist, so an empty
+      # selection is not an error here.
+      - name: System tests
+        run: ctest --preset ${{ matrix.preset }} -L system --no-tests=ignore
+
+      - name: QML lint (fails on errors only)
+        if: matrix.preset == 'ci' && matrix.cc == 'gcc'
+        run: scripts/qmllint.sh build/${{ matrix.preset }}
 
       - name: Dashboard screenshots
         if: matrix.preset == 'ci' && matrix.cc == 'gcc'

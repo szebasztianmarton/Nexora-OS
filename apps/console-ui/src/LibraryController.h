@@ -46,6 +46,9 @@ class LibraryController : public QObject
     Q_PROPERTY(int missingCount READ missingCount NOTIFY contentChanged)
     Q_PROPERTY(int scanFilesSeen READ scanFilesSeen NOTIFY scanProgressChanged)
     Q_PROPERTY(QString scanCurrentRoot READ scanCurrentRoot NOTIFY scanProgressChanged)
+    // systemFilter value for the games without a recognised system (the "Other" bucket,
+    // whose SystemListModel row has an empty systemId).
+    Q_PROPERTY(QString otherSystemFilter READ otherSystemFilter CONSTANT)
 
 public:
     LibraryController(library::GameLibrary *library, shared::Settings *settings, AppController *app,
@@ -75,6 +78,16 @@ public:
     int missingCount() const { return m_library->missingCount(); }
     int scanFilesSeen() const { return m_scanFilesSeen; }
     QString scanCurrentRoot() const { return m_scanCurrentRoot; }
+    QString otherSystemFilter() const { return library::UnknownSystemFilter; }
+
+    // Settings › Emulators › Default emulator. [{id: "", name: "Automatic"}, then every
+    // enabled emulator that declares |systemId| ({id, name})]; empty for "" ("Other") or a
+    // system the catalog does not know.
+    Q_INVOKABLE QVariantList defaultEmulatorChoices(const QString &systemId) const;
+    // Stores the default emulator of a catalog system ("" = automatic). Only an emulator
+    // offered by defaultEmulatorChoices() is accepted; anything else returns false and
+    // leaves the setting alone.
+    Q_INVOKABLE bool setDefaultEmulator(const QString &systemId, const QString &emulatorId);
 
     Q_INVOKABLE bool refresh();
     Q_INVOKABLE bool cancelScan();
@@ -95,7 +108,11 @@ public:
     //  lastPlayedText (local, for display), addedAt (ISO), present, notes}. Empty map for an
     //  unknown id.
     Q_INVOKABLE QVariantMap gameDetails(qint64 id) const;
-    // |title| empty = use the derived (file name) title.
+    // Display name of a catalog system id ("" for an unknown or empty id). Used by the
+    // game details screen to label the system candidates it offers.
+    Q_INVOKABLE QString systemName(const QString &systemId) const;
+    // |title| empty = use the derived (file name) title. setGameMetadata, setGameSystem and
+    // removeGame emit notice(..., true) when they fail.
     Q_INVOKABLE bool setGameMetadata(qint64 id, const QString &title, const QString &notes);
     // |systemId| empty clears the override.
     Q_INVOKABLE bool setGameSystem(qint64 id, const QString &systemId);
@@ -126,6 +143,8 @@ private:
     void rebuildEmulatorInfo();
     bool launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile);
     void rebuildSystems();
+    // Why an edit of game |id| failed, for the notice shown to the user.
+    QString failureReason(qint64 id) const;
     // The emulator the entry would actually launch with: its override if still a
     // candidate; otherwise the settings default for its system if that is a candidate;
     // otherwise the first candidate.

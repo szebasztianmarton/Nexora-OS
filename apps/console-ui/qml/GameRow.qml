@@ -39,6 +39,7 @@ FocusScope {
         id: heading
         spacing: 12
         Text {
+            textFormat: Text.PlainText
             id: headingLabel
             text: row.title
             color: row.activeFocus ? Theme.text : Theme.textMuted
@@ -46,6 +47,7 @@ FocusScope {
             font.bold: true
         }
         Text {
+            textFormat: Text.PlainText
             anchors.baseline: headingLabel.baseline
             visible: row.hasGames
             text: row.count
@@ -71,7 +73,7 @@ FocusScope {
         topMargin: 12
         clip: false
         keyNavigationEnabled: true
-        highlightMoveDuration: 120
+        highlightMoveDuration: Theme.animMove
         preferredHighlightBegin: 8
         preferredHighlightEnd: width - row.tileWidth - 8
         highlightRangeMode: ListView.ApplyRange
@@ -138,6 +140,7 @@ FocusScope {
         border.color: Theme.border
         border.width: 1
         Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.leftMargin: Theme.spacing

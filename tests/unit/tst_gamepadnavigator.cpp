@@ -53,6 +53,8 @@ private slots:
     void chordNeedsBothButtons();
     void devicesDoNotInterfere();
     void chordIsPerDevice();
+    void startHoldRequestsQuickMenu();
+    void startHoldWithSelectIsTheChordNotTheMenu();
     void resetDeviceDropsOnlyThatDevice();
     void defaultDeadzoneMatchesSettings();
     void deadzoneThresholdFormulas();
@@ -338,6 +340,43 @@ void TestGamepadNavigator::chordFiresAfterHold()
     nav.buttonEvent(GamepadButton::Start, false);
     nav.buttonEvent(GamepadButton::Start, true);
     QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 2, 2000);
+}
+
+void TestGamepadNavigator::startHoldRequestsQuickMenu()
+{
+    GamepadNavigator nav;
+    QCOMPARE(nav.menuHoldDuration(), 1000ms);
+    nav.setMenuHoldDuration(50ms);
+    QSignalSpy menu(&nav, &GamepadNavigator::quickMenuRequested);
+    QSignalSpy actions(&nav, &GamepadNavigator::actionTriggered);
+    nav.buttonEvent(GamepadButton::Start, true);
+    QCOMPARE(actions.size(), 1); // the normal Menu action still fires on the press edge
+    QCOMPARE(menu.size(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(menu.size(), 1, 2000);
+    QTest::qWait(150);
+    QCOMPARE(menu.size(), 1); // once per hold
+
+    // A short press does not open it.
+    nav.buttonEvent(GamepadButton::Start, false);
+    nav.setMenuHoldDuration(300ms);
+    nav.buttonEvent(GamepadButton::Start, true);
+    nav.buttonEvent(GamepadButton::Start, false);
+    QTest::qWait(450);
+    QCOMPARE(menu.size(), 1);
+}
+
+void TestGamepadNavigator::startHoldWithSelectIsTheChordNotTheMenu()
+{
+    GamepadNavigator nav;
+    nav.setMenuHoldDuration(80ms);
+    nav.setChordHoldDuration(80ms);
+    QSignalSpy menu(&nav, &GamepadNavigator::quickMenuRequested);
+    QSignalSpy chord(&nav, &GamepadNavigator::returnToLauncherRequested);
+    nav.buttonEvent(GamepadButton::Select, true);
+    nav.buttonEvent(GamepadButton::Start, true);
+    QTRY_COMPARE_WITH_TIMEOUT(chord.size(), 1, 2000);
+    QTest::qWait(150);
+    QCOMPARE(menu.size(), 0);
 }
 
 void TestGamepadNavigator::chordCancelledByEarlyRelease()
