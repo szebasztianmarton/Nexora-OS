@@ -2,7 +2,7 @@
 
 A Linux-based gaming operating system built for controller-first gaming.
 
-Nexora OS turns an x86-64 PC or mini PC into a console-like environment: it boots into a polished, controller-driven interface for finding, organizing and launching your locally stored games with open-source native Linux emulators. It works entirely offline, has no accounts and no telemetry. (The license of Nexora OS itself has not been decided yet; see [Licensing](#licensing).)
+Nexora OS turns an x86-64 PC or mini PC into a console-like environment: it boots into a polished, controller-driven interface for finding, organizing and launching your locally stored games with open-source native Linux emulators. It works entirely offline, has no accounts and no telemetry. Nexora OS is free software under the GNU GPL, version 3 or later ([Licensing](#licensing)).
 
 > **Status: MVP 4, version 0.4.0.** The application (Qt 6 / QML UI and C++ services) is implemented and tested on a Linux host — **41/41** automated tests pass with GCC and Clang under `-Werror`. The Buildroot image now has A/B root slots, a persistent data partition, signed updates with automatic rollback and a recovery menu, but **this image has not been built or booted yet**, and **no physical hardware, controller or real emulator has been tested**. Full acceptance report: [docs/mvp-4.md](docs/mvp-4.md). <!-- TASK12-RESULT: update once the A/B image has been built and booted in QEMU -->
 
@@ -136,4 +136,8 @@ Nexora OS integrates existing emulator projects rather than reimplementing them.
 
 ## Licensing
 
-The repository does not contain a LICENSE file yet, and the licensing decision is still open. Until a license is chosen, no license is granted for the code in this repository. Dependencies keep their own licenses (for example Qt 6: LGPLv3/GPL or commercial; OpenSSL 3: Apache-2.0; SQLite: public domain; SDL3: zlib).
+Copyright © 2026 the Nexora OS contributors.
+
+Nexora OS is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version** (SPDX: `GPL-3.0-or-later`). It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
+
+Dependencies keep their own licenses, all compatible with GPL-3.0-or-later: Qt 6 (LGPLv3, used through dynamic linking, so Qt can be replaced), OpenSSL 3 (Apache-2.0), SQLite (public domain), SDL3 (zlib). A disk image built with Buildroot also contains the Linux kernel, BusyBox, GRUB, Mesa, firmware and other packages under their own licenses; whoever distributes an image must also offer their sources and license texts (`make legal-info` in the Buildroot output collects them). Emulators that may be packaged later (RetroArch, PPSSPP) are GPL as well. Games, BIOS files and firmware are never part of Nexora OS.

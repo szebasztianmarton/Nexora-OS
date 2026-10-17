@@ -36,7 +36,7 @@ These items turn "implemented" into "verified" and are the precondition for a fi
 | Audio/display | output selection and display/mode selection are read-only | real device selection where the stack supports it |
 | Localization | English only | translations |
 | Artwork | generated placeholders only | local artwork import (no scraping service by default) |
-| Licensing | undecided | choose a license before the first public release |
+| Licensing | decided: GPL-3.0-or-later ([LICENSE](../LICENSE)) | add SPDX headers to the source files; ship license texts of bundled emulators with them |
 
 ## Out of scope
 

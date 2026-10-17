@@ -72,7 +72,7 @@ buildroot-external/
 - Selects Qt6 `qt6base` GUI + SQL + SQLite plugin (the game library uses `Qt6::Sql`/`QSQLITE`) and `qt6declarative` Quick (which also provides QuickControls2). Depends on `BR2_PACKAGE_QT6` and GCC ≥ 10 (C++20).
 - Depends on OpenSSL (Ed25519/SHA-256 for updates). The build id is taken from the source tree with `git describe --always --dirty` and passed as `-DNEXORA_BUILD_ID` (the rsynced copy has no `.git`).
 - Installs what the CMake install rules install: `/usr/bin/nexora-console-ui`, `/usr/bin/nexora-update-tool`, `/usr/share/nexora/emulators/example.json` (the default config directory resolved from `<bindir>/../share/nexora/emulators`), `/usr/share/nexora/systems.json` and `/usr/share/nexora/build-info` (version, build id, board, used by `post-build.sh` for `/etc/nexora-release`). A post-install hook copies every `board/nexora-x86_64/update-keys/*.pem` to `/usr/share/nexora/update-keys/`; with no key the image refuses all updates.
-- License: `NEXORA_OS_LICENSE = Unknown (licensing decision pending)`; there is no license file yet, so `make legal-info` will warn for this package.
+- License: `NEXORA_OS_LICENSE = GPL-3.0-or-later`, `NEXORA_OS_LICENSE_FILES = LICENSE`, so `make legal-info` collects the license text together with the other packages'.
 
 ## Building
 
@@ -183,7 +183,7 @@ Requirements: an x86-64 PC booting in **UEFI** mode (legacy BIOS/CSM boot is not
 | Qt | Qt 6.9.1: `qt6base` (GUI, EGLFS, OpenGL ES 2, fontconfig, HarfBuzz, PNG, SQL + SQLite), `qt6declarative` (Quick, QuickControls2), `qt6shadertools`; default QPA `eglfs`, used with the `eglfs_kms` integration |
 | Fonts | DejaVu (all variants) via fontconfig |
 | Firmware | `linux-firmware`: i915, xe, amdgpu |
-| Kernel drivers | DRM: simpledrm (built in, boot framebuffer), i915, xe, amdgpu (+DC), virtio-gpu, bochs (modules). Input: evdev, USB HID, hid-generic, xpad, hid-sony, hid-playstation, hid-nintendo, hid-microsoft. USB: xHCI/EHCI/OHCI/UHCI, usb-storage, UAS. Storage: AHCI, NVMe, virtio-blk/scsi. Sound: snd-hda-intel (+ Realtek/HDMI/generic codecs), snd-usb-audio (modules). Serial 8250 console. |
+| Kernel drivers | DRM: simpledrm (built in, boot framebuffer), i915, xe, amdgpu (+DC), virtio-gpu, bochs (modules). Input: evdev, joydev, USB HID, hid-generic, xpad, hid-sony, hid-playstation, hid-nintendo, hid-microsoft, hid-steam, hid-logitech (+ hid-logitech-hidpp, wheels), hid-thrustmaster + hid-tmff, hid-dr, hid-gaff, hid-sjoy, hid-pl, hid-zpff, hid-betopff, hid-google-stadiaff, hid-mf, virtio-input (modules, loaded on plug-in; [controller list](linux_gamepad_drivers.md#támogatás-a-nexora-os-ben)). USB: xHCI/EHCI/OHCI/UHCI, usb-storage, UAS. Storage: AHCI, NVMe, virtio-blk/scsi. Sound: snd-hda-intel (+ Realtek/HDMI/generic codecs), snd-usb-audio (modules). Serial 8250 console. |
 | Audio user space | alsa-lib, alsa-utils (`amixer`, `aplay`) |
 
 GPU drivers are modules on purpose: built-in amdgpu/i915 would request their firmware before the root filesystem is mounted. eudev loads them during `S10udevd`, and `S90nexora` waits up to 10 s for `/dev/dri/card*`.

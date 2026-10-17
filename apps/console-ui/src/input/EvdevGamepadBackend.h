@@ -1,5 +1,6 @@
 #pragma once
 
+#include "input/EvdevMapping.h"
 #include "input/GamepadInput.h"
 #include "input/InputBackend.h"
 
@@ -17,9 +18,12 @@ namespace nexora::input {
 
 // Reads gamepads directly from /dev/input/event* (Linux evdev).
 //
-// Only devices advertising BTN_GAMEPAD are kept (keyboards and mice are never held open).
-// Devices are opened non-blocking and never grabbed, so other programs (e.g. a running
-// emulator) still receive the same input. Hotplug is handled by watching /dev/input.
+// Kept devices: gamepads (BTN_GAMEPAD) and joystick-class pads, wheels and sticks (numbered
+// BTN_TRIGGER... buttons plus ABS_X/ABS_Y); keyboards, mice and motion sensors are never held
+// open. Each device gets an EvdevLayout from its vendor and kernel driver, which corrects
+// drivers that report Xbox labels or numbered buttons. Devices are opened non-blocking and
+// never grabbed, so other programs (e.g. a running emulator) still receive the same input.
+// Hotplug is handled by watching /dev/input.
 class EvdevGamepadBackend : public InputBackend
 {
     Q_OBJECT
@@ -34,6 +38,7 @@ public:
     QList<DeviceInfo> devices() const override;
 
     void setInputDirectory(const QString &path) { m_inputDir = path; } // for tests
+    void setSysfsDirectory(const QString &path) { m_sysfsDir = path; } // for tests
 
 private:
     struct AxisRange
@@ -49,6 +54,7 @@ private:
         QString name;
         QSocketNotifier *notifier = nullptr;
         std::array<AxisRange, 4> ranges{}; // indexed by GamepadAxis
+        EvdevLayout layout = EvdevLayout::Positional;
         bool dropping = false; // after SYN_DROPPED until the next SYN_REPORT
     };
 
@@ -59,11 +65,15 @@ private:
     void closeDevice(Device &device);
     void removeClosedDevices();
     void updateStatus();
+    QString driverOf(const QString &eventNode) const;
 
     QString m_inputDir = QStringLiteral("/dev/input");
+    QString m_sysfsDir = QStringLiteral("/sys");
     std::vector<std::unique_ptr<Device>> m_devices;
     QFileSystemWatcher m_watcher;
     QTimer m_rescanTimer;
+    QTimer m_permissionRetryTimer;
+    int m_permissionRetries = 0;
     QString m_status;
     QStringList m_lastNames;
     int m_eventNodeCount = 0;

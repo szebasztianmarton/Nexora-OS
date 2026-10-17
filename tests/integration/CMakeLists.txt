@@ -12,6 +12,11 @@ nexora_add_test(tst_qmlsmoke SOURCES tst_qmlsmoke.cpp
     LIBS nexora_uiplugin nexora_ui Qt6::Quick Qt6::QuickControls2 LABELS integration GUI FAKE_EMULATOR)
 # Every case runs at 1280x720 and 1920x1080 (plus high-contrast/reduced-motion runs).
 set_tests_properties(tst_qmlsmoke PROPERTIES TIMEOUT 300)
+# Virtual controllers through /dev/uinput (skipped where uinput is not writable).
+if(NEXORA_HAVE_LINUX_INPUT_H AND TARGET nexora-virtual-pad)
+    nexora_add_test(tst_evdevhotplug SOURCES tst_evdevhotplug.cpp LIBS nexora_input LABELS integration)
+    target_include_directories(tst_evdevhotplug PRIVATE ${PROJECT_SOURCE_DIR}/tests/fixtures/virtual-pad)
+endif()
 nexora_add_test(tst_backupservice SOURCES tst_backupservice.cpp
     LIBS nexora_system LABELS integration security)
 

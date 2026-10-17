@@ -135,7 +135,7 @@ Result: 14 of 19 criteria met with evidence; MVP 4 is **not complete** until the
 - **Security:** no Secure Boot, no disk encryption, empty root password on the development image, UI and emulators share one user, pattern-based redaction ([security.md](security.md#known-limitations)).
 - **Not measured:** startup time, memory over long sessions, frame times, crash frequency.
 - **Not localized:** English only.
-- **Licensing undecided.**
+- **Licensing undecided** at the time of this report; decided afterwards (2026-10-17): GPL-3.0-or-later ([LICENSE](../LICENSE)).
 
 ## Documentation
 

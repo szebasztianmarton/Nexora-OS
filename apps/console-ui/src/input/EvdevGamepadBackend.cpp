@@ -12,6 +12,7 @@
 #include <linux/input.h>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <climits>
 #include <cstring>
@@ -24,8 +25,16 @@ namespace nexora::input {
 namespace {
 
 constexpr int kRescanDebounceMs = 500;
+// A hotplugged node first appears as root:root 0600 (devtmpfs) until udev applies the input
+// group, so nodes refused right after a change are tried again a few times.
+constexpr int kPermissionRetryMs = 1000;
+constexpr int kMaxPermissionRetries = 5;
 constexpr std::size_t kBitsPerLong = sizeof(unsigned long) * CHAR_BIT;
 constexpr std::size_t kKeyBitsLongs = KEY_MAX / kBitsPerLong + 1;
+constexpr std::size_t kAbsBitsLongs = ABS_MAX / kBitsPerLong + 1;
+constexpr std::size_t kPropBitsLongs = INPUT_PROP_MAX / kBitsPerLong + 1;
+constexpr std::array<int, 10> kJoystickButtons{BTN_TRIGGER, BTN_THUMB, BTN_THUMB2, BTN_TOP,   BTN_TOP2,
+                                               BTN_PINKIE,  BTN_BASE,  BTN_BASE2,  BTN_BASE3, BTN_BASE4};
 
 bool testBit(const unsigned long *bits, std::size_t bit)
 {
@@ -45,6 +54,9 @@ EvdevGamepadBackend::EvdevGamepadBackend(GamepadNavigator *navigator, QObject *p
     m_rescanTimer.setSingleShot(true);
     m_rescanTimer.setInterval(kRescanDebounceMs);
     connect(&m_rescanTimer, &QTimer::timeout, this, &EvdevGamepadBackend::rescan);
+    m_permissionRetryTimer.setSingleShot(true);
+    m_permissionRetryTimer.setInterval(kPermissionRetryMs);
+    connect(&m_permissionRetryTimer, &QTimer::timeout, this, &EvdevGamepadBackend::rescan);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &EvdevGamepadBackend::scheduleRescan);
 }
 
@@ -93,6 +105,7 @@ QList<EvdevGamepadBackend::DeviceInfo> EvdevGamepadBackend::devices() const
 
 void EvdevGamepadBackend::scheduleRescan()
 {
+    m_permissionRetries = 0;
     m_rescanTimer.start(); // restarts the debounce window
 }
 
@@ -121,6 +134,10 @@ void EvdevGamepadBackend::rescan()
     // The watcher may drop the path if /dev/input was recreated.
     if (m_started && !m_watcher.directories().contains(m_inputDir) && QFileInfo(m_inputDir).isDir())
         m_watcher.addPath(m_inputDir);
+    if (m_permissionDeniedCount > 0 && m_permissionRetries < kMaxPermissionRetries) {
+        ++m_permissionRetries;
+        m_permissionRetryTimer.start();
+    }
     updateStatus();
 }
 
@@ -136,14 +153,34 @@ std::unique_ptr<EvdevGamepadBackend::Device> EvdevGamepadBackend::openDevice(con
     }
 
     unsigned long keyBits[kKeyBitsLongs] = {};
-    if (::ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) < 0 || !testBit(keyBits, BTN_GAMEPAD)) {
-        ::close(fd); // not a gamepad (keyboard, mouse, power button, ...)
+    unsigned long absBits[kAbsBitsLongs] = {};
+    unsigned long propBits[kPropBitsLongs] = {};
+    if (::ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) < 0) {
+        ::close(fd);
+        return nullptr;
+    }
+    ::ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(absBits)), absBits);
+    ::ioctl(fd, EVIOCGPROP(sizeof(propBits)), propBits);
+    const bool gamepad = testBit(keyBits, BTN_GAMEPAD);
+    // Joystick-class: numbered buttons 1-10 and a stick or wheel. Motion sensor nodes
+    // (DualShock/DualSense, Joy-Con) have the axes but no buttons and are marked anyway.
+    const bool joystickButtons = std::any_of(kJoystickButtons.cbegin(), kJoystickButtons.cend(),
+                                             [&](int code) { return testBit(keyBits, code); });
+    const bool joystick = joystickButtons && testBit(absBits, ABS_X) && testBit(absBits, ABS_Y)
+        && !testBit(propBits, INPUT_PROP_ACCELEROMETER);
+    if (!gamepad && !joystick) {
+        ::close(fd); // not a controller (keyboard, mouse, power button, touchpad, ...)
         return nullptr;
     }
 
     auto device = std::make_unique<Device>();
     device->fd = fd;
     device->path = path;
+
+    input_id id{};
+    ::ioctl(fd, EVIOCGID, &id);
+    const QString driver = driverOf(QFileInfo(path).fileName());
+    device->layout = evdevLayout(gamepad, id.vendor, id.product, driver);
 
     char name[256] = {};
     if (::ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) >= 0 && name[0] != '\0')
@@ -165,6 +202,13 @@ std::unique_ptr<EvdevGamepadBackend::Device> EvdevGamepadBackend::openDevice(con
         if (::ioctl(fd, EVIOCGABS(code), &info) >= 0 && info.maximum > info.minimum)
             range = {info.minimum, info.maximum};
     }
+
+    qCInfo(lcInput).noquote() << QStringLiteral("evdev: %1 [%2:%3] driver %4, layout %5")
+                                     .arg(device->name)
+                                     .arg(id.vendor, 4, 16, QLatin1Char('0'))
+                                     .arg(id.product, 4, 16, QLatin1Char('0'))
+                                     .arg(driver.isEmpty() ? QStringLiteral("unknown") : driver,
+                                          evdevLayoutName(device->layout));
 
     device->notifier = new QSocketNotifier(fd, QSocketNotifier::Read, this);
     connect(device->notifier, &QSocketNotifier::activated, this, [this, fd] { readDevice(fd); });
@@ -213,7 +257,7 @@ void EvdevGamepadBackend::readDevice(int fd)
             if (ev.type == EV_KEY) {
                 if (ev.value == 2)
                     continue; // kernel autorepeat; the navigator does its own
-                if (const auto button = evdevKeyToButton(ev.code))
+                if (const auto button = evdevKeyToButton(ev.code, device.layout))
                     navigator()->buttonEvent(*button, ev.value != 0, static_cast<quint32>(fd));
             } else if (ev.type == EV_ABS) {
                 if (const auto axis = evdevAbsToAxis(ev.code)) {
@@ -224,6 +268,15 @@ void EvdevGamepadBackend::readDevice(int fd)
             }
         }
     }
+}
+
+QString EvdevGamepadBackend::driverOf(const QString &eventNode) const
+{
+    // /sys/class/input/eventN/device is the input device; its parent is the USB interface
+    // (xpad) or the HID device (hid-*), whose driver link names the kernel driver.
+    const QFileInfo link(m_sysfsDir + QStringLiteral("/class/input/") + eventNode
+                         + QStringLiteral("/device/device/driver"));
+    return link.exists() ? QFileInfo(link.canonicalFilePath()).fileName() : QString();
 }
 
 void EvdevGamepadBackend::closeDevice(Device &device)

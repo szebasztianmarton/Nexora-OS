@@ -196,4 +196,4 @@ Architecture: [architecture.md](architecture.md).
 
 ## Licensing
 
-The repository has no LICENSE file and the licensing decision is open; no license is granted yet. Dependencies keep their own licenses (Qt: LGPLv3/GPL or commercial; OpenSSL 3: Apache-2.0; SQLite: public domain; SDL3: zlib). Never commit games, BIOS files, firmware or private keys.
+Nexora OS is licensed under the GNU GPL, version 3 or later (`GPL-3.0-or-later`, [LICENSE](../LICENSE)); `cmake --install` installs the license text to `share/doc/nexora/LICENSE`. Dependencies keep their own licenses (Qt: LGPLv3, linked dynamically; OpenSSL 3: Apache-2.0; SQLite: public domain; SDL3: zlib). Contributions are accepted under the same license. Never commit games, BIOS files, firmware or private keys.
