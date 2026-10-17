@@ -20,7 +20,8 @@ Related: [settings.md](settings.md) (`ui.theme`, `ui.scale`, `ui.reducedMotion`)
 
 - **Console, not desktop:** a dark foundation, full-screen, no windows or mouse-first widgets; everything reachable with directions, Accept and Back.
 - **Focus is always visible:** a `focusRing` outline of `focusWidth` (3 px, 4 px in high contrast) on the focused item, never only a colour change of the content.
-- **Readable at TV distance:** body text 17 px at scale 1.0, nothing below 12 px; layouts are checked at 1280×720 and 1920×1080.
+- **Readable at TV distance:** body text 17 px at scale 1.0 (scaled up with the window size above 1280×720), nothing below 12 px; layouts are checked at 1280×720 and 1920×1080, also at 150 % interface scale.
+- **Plain text only:** every `Text` sets `textFormat: Text.PlainText`; titles, notes, file names, paths and update bundle content are never interpreted as markup.
 - **Honest states:** loading, empty and error states say what is happening and what to do; features that do not exist do not appear (there is no Downloads tab).
 - **Restrained motion:** short transitions (90–240 ms), none with reduced motion.
 
@@ -30,7 +31,9 @@ Set in `Main.qml` with bindings, so they change live when the setting changes:
 
 | Input | Bound to | Effect |
 | --- | --- | --- |
-| `Theme.scale` | `settings.uiScale / 100` (`ui.scale`, 75–150 %, default 100) | multiplies spacing, typography, radii, icon sizes, control heights and the card grid |
+| `Theme.userScale` | `settings.uiScale / 100` (`ui.scale`, 75–150 %, default 100) | the user's part of `Theme.scale` |
+| `Theme.resolutionScale` | `max(1, min(window width / 1280, window height / 720))` | the layout is designed for 1280×720; larger windows scale up (1920×1080 → 1.5), never down |
+| `Theme.scale` (read-only) | `userScale × resolutionScale` | multiplies spacing, typography, radii, icon sizes, control heights and the card grid |
 | `Theme.highContrast` | `settings.theme === "highContrast"` (`ui.theme`: `dark` or `highContrast`) | swaps the whole palette: pure black background, white text, yellow `#ffd400` focus ring and accent, wider focus ring; every colour used for text keeps a contrast ratio of at least 7:1 against the background it is drawn on (stated in `Theme.qml`; the ratios were chosen by design, not measured by a test) |
 | `Theme.reducedMotion` | `settings.reducedMotion` (`ui.reducedMotion`) | `animFast`, `animNormal`, `animSlow` and `animMove` become 0; continuous animations (library scan spinner, pulsing status dot) stop |
 
@@ -58,7 +61,7 @@ All three are in Settings › General (Theme, Interface scale, Reduce motion); t
 
 The game bar and quick menu use a separate `overlay*` family (Xbox Game Bar–style greys in the dark theme, black/white/yellow in high contrast) defined next to the main palette.
 
-### Spacing, radii, sizes (× `scale`)
+### Spacing, radii, sizes (× `scale`, i.e. user scale × resolution factor)
 
 | Group | Tokens (px at scale 1.0) |
 | --- | --- |
@@ -82,38 +85,40 @@ Reusable items in `apps/console-ui/qml/` (QML module `Nexora.Console`):
 
 | Component | Purpose |
 | --- | --- |
-| `NxButton` | focusable button with label, optional hint, disabled and danger styles |
-| `SettingRow` | one settings line: label, value, Left/Right to change, Accept to activate |
-| `ConfirmDialog` | modal confirmation; focus trapped; **default focus on the safe button (Cancel)**; Back cancels without action |
+| `NxButton` | focusable button with label, optional hint, disabled and danger styles; in high contrast a focused primary button (yellow fill) draws its label in the background colour |
+| `SettingRow` | one settings line: label, value, Left/Right to change, Accept to activate; the value takes at most half the row and elides; an optional `descriptionColor` (e.g. `danger` for a failed action) |
+| `ConfirmDialog` | modal confirmation; focus trapped (Left/Right move between the two buttons, every other key, including L1/R1, Menu and Search, stops there); **default focus on the safe button (Cancel)**; Back cancels without action; if its page or layer is hidden while it is open, it cancels itself |
 | `EmptyState` | icon, title, explanation and an action for empty/error states |
 | `Toast` | transient notice at the bottom; errors in `danger` |
 | `GameTile`, `GameGrid`, `GameRow` | game card (artwork or a placeholder drawn from the title, missing-file badge, favorite star), grid/list container, horizontal row for Home |
 | `NavTabBar`, `NavColumn` | top tab bar; vertical list that skips hidden and info rows |
 | `Header`, `HintBar` | title/status header; context-sensitive button hints (`ui.showHints`) |
-| `OnScreenKeyboard` | controller-operable keyboard (used by `MetadataEditor`) |
+| `OnScreenKeyboard` | controller-operable keyboard (used by `MetadataEditor`); never taller than the space it gets: with little height the keys get shorter and the help line hides |
 | `BarIcon` | line icons drawn on a 24×24 grid (no icon font needed on the image) |
 | `EmulatorCard` | emulator with health status |
 | Overlays | `RunningOverlay`, `GameBar`, `QuickMenu`, `GameOptionsDialog`, `TutorialOverlay`, `InputTestPanel`, `UpdatePanel`, `MetadataEditor` |
 
 ## Screens and navigation
 
-Top-level tabs, in order (`Main.qml`): **Home, Games, Systems, Favorites, Recent, Emulators, Settings, System**. L1/R1 (Page Up/Down) move between tabs; Up from a page reaches the tab bar. There is no Downloads/Imports tab because importing beyond library scanning is not implemented.
+Top-level tabs, in order (`Main.qml`): **Home, Games, Systems, Favorites, Recent, Emulators, Settings, System**. L1/R1 (Page Up/Down) move between tabs; Up from a page reaches the tab bar; **Back inside a page** (when nothing there consumes it: no dialog, details view or text field) **moves focus to the tab bar**, and Back on the tab bar re-enters the page. When the widest tab label does not fit (large scale at 1280 px), all tabs switch to a smaller font and tighter padding instead of eliding. There is no Downloads/Imports tab because importing beyond library scanning is not implemented.
 
 | Screen | Content |
 | --- | --- |
-| Home | Continue playing, Favorites, Recently added and Systems rows (horizontal navigation), status cards: controllers connected, health summary (unavailable emulators, configuration and library issues), update availability |
-| Games | grid/list toggle, search, sort (title, recently played, date added), system filter chips, scan progress with Cancel, missing-file badges, onboarding when empty |
-| Systems | one card per system with games or an emulator; Accept opens Games filtered to it |
+| Home | Continue playing, Favorites, Recently added and Systems rows (horizontal navigation), status cards: controllers connected, health summary (unavailable emulators, configuration and library issues), updates (the result of the last update comes first: "Update rolled back" in `danger` or "Update installed" in `success` until it is dismissed in the update panel, otherwise availability) |
+| Games | grid/list toggle, search, sort (title, recently played, date added), system filter chips (All systems, every system with games, **Other** for games without a system, and the active filter even when it has no games), scan progress with Cancel, missing-file badges, onboarding when empty. Card size follows the available height; when even small cards do not fit (large scale at 720p) the grid shows list rows and the view chip says "List" |
+| Systems | one card per system with games or an emulator, plus "Other" for games without a system; Accept opens Games filtered to it ("Other" filters to games without a system, `@other`) |
 | Favorites, Recent | game collections (`GameCollectionScreen`) |
 | Game details | opened with Accept on a tile; artwork/placeholder, system, emulator selector, last played, play count, notes; Play, Favorite, Edit details (on-screen keyboard), Change system, Remove from library (confirmation states that the file is not deleted); Back returns focus to the same tile |
 | Emulators | emulator cards with health, launch and profiles |
-| Settings | sections General, Controllers, Display, Audio, Library, Emulators, System |
-| System | version and build, update status and panel, hardware (CPU, memory, GPUs, storage, audio, display outputs), launch history, configuration/input/library/log diagnostics, Export diagnostics |
-| Quick menu | over a running game (Guide, or hold Start 1 s): Return to game, Pause/Resume (when the emulator allows it), controller status, volume and mute, display settings, system info, Exit game (with confirmation) |
+| Settings | sections General, Controllers, Display, Audio, Library, Emulators, System. Emulators lists a default-emulator row only for catalog systems with games or a compatible emulator, cycling through "Automatic" and the enabled emulators that declare the system. System actions report in place: Export diagnostics and Create backup show "Saved to …" or "Export failed: …"/"Backup failed: …" in `danger` under their row; Restore backup and Clear artwork cache report through a toast |
+| System | version and build, update status and panel, hardware (CPU, memory, GPUs, storage, audio, display outputs), launch history, configuration/input/library/log diagnostics, Export diagnostics. The hardware probe is synchronous, so it runs lazily: about 150 ms after Settings or System becomes current, and at most once per 30 s (Reload probes at once) |
+| Running overlay | shown while an emulator runs: **Stop** asks first ("Stop the emulator?", default Cancel; it closes by itself if the emulator exits meanwhile); the scrim is opaque in high contrast |
+| Quick menu | over a running game (Guide, or hold Start 1 s): Return to game (resumes a paused emulator first), Pause/Resume (when the emulator allows it), controller status, volume and mute, display settings, system info, Exit game (with confirmation) |
+| Game bar | Restart and Power off ask through `ConfirmDialog` (default Cancel); Stop emulator still needs a second press ([game-bar.md](game-bar.md)) |
 
 ## States
 
-Every screen that loads data has a loading state (scan spinner, "Scanning… N files"), an empty state with the next step (add a folder, rescan, clear search, configure an emulator) and an error state (database unavailable, unknown game, emulator unavailable with reason). Disabled controls are drawn with `textFaint` and are skipped or explained in the hint bar.
+Every screen that loads data has a loading state (scan spinner, "Scanning… N files"), an empty state with the next step (add a folder, rescan, clear search, configure an emulator) and an error state (database unavailable, unknown game, emulator unavailable with reason). Disabled controls are drawn with `textFaint` and are skipped or explained in the hint bar. Failed edits (game details, system change, remove from library, default emulator) show an error notice with the reason; the metadata editor stays open with the edits after a failed save. Modal layers (dialogs, the input test panel) keep every key and close or cancel themselves when hidden from outside.
 
 ## Icons and typography
 
@@ -124,11 +129,12 @@ Every screen that loads data has a loading state (scan spinner, "Scanning… N f
 
 | Test | Checks |
 | --- | --- |
-| `tst_console_qml` → `tst_theme.qml` | scale 1.5 multiplies `fontBody`, `space4`, `cardWidth` and control sizes; high contrast gives `#000000` background, white text, `#ffd400` focus ring and switches the overlay palette; reduced motion zeroes the animation tokens; old names still resolve |
-| `tst_console_qml` → `tst_settings_ui.qml` | the seven settings sections exist; keyboard navigation stays inside the screen; `ConfirmDialog` defaults to Cancel and Back cancels |
+| `tst_console_qml` → `tst_theme.qml` | user scale 1.5 multiplies `fontBody`, `space4`, `cardWidth` and control sizes; the resolution factor multiplies the user scale; high contrast gives `#000000` background, white text, `#ffd400` focus ring and switches the overlay palette, and a focused primary button stays readable; reduced motion zeroes the animation tokens; old names still resolve |
+| `tst_console_qml` → `tst_settings_ui.qml` | the seven settings sections exist; keyboard navigation stays inside the screen; `ConfirmDialog` defaults to Cancel and Back cancels; a long value elides at half the row and is plain text |
 | `tst_console_qml` → `tst_navigation.qml` | all eight tabs with keys only; tabs fit at TV resolutions and large scale |
-| `tst_qmlsmoke` | every journey at 1280×720 and 1920×1080; `accessibilityModes` runs with high contrast and reduced motion; any QML warning fails the test |
-| `scripts/qmllint.sh` | 0 errors (149 warnings, mostly unqualified access, at the time of writing) |
+| `tst_console_qml` → `tst_gamedetails.qml` | markup in a title or note is shown literally; a failed save keeps the editor open |
+| `tst_qmlsmoke` | every journey at 1280×720 and 1920×1080; `accessibilityModes` runs with high contrast and reduced motion; `layoutAtLargeScale` (150 %: grid/list fallback, tabs, keyboard, editor), Back from a page to the tab bar, modal key trapping, confirmation before stopping a game and for game bar power actions, Settings action feedback, default-emulator rows keeping focus, "Other" and an empty system in the Games filter, lazy hardware probe, the rolled-back update card and its dismissal; any QML warning fails the test |
+| `scripts/qmllint.sh` | 0 errors (155 warnings, mostly unqualified access, after the verification fixes) |
 
 All UI tests run on the offscreen platform with the software renderer; nothing has been checked on a real TV or with a screen reader.
 

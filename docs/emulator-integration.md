@@ -104,7 +104,7 @@ sequenceDiagram
         EM-->>AC: processFinished(Failed, reason) — no process started
         AC-->>QML: error notice
     else valid
-        EM->>P: QProcess::start(program, args) + PR_SET_PDEATHSIG
+        EM->>P: QProcess::start(program, args) + own process group, PR_SET_PDEATHSIG
         EM-->>AC: Starting (pid, start time)
         AC-->>IC: suspend navigation
         AC-->>QML: running overlay ("loading")
@@ -149,13 +149,14 @@ The full transition table is tested in `tst_processstate`; outcomes with the fak
 
 ## Pause and resume
 
-Only for definitions with `"pausable": true`, and only while `Running`. `pause()` sends SIGSTOP, `resume()` SIGCONT; `paused` is exposed to QML and the quick menu shows "Pause emulator"/"Resume emulator" only when `app.canPause` is true. Stopping a paused process sends SIGCONT before SIGTERM so it can exit. Tested: `tst_emulatormanager` (process state `T` in `/proc/<pid>/stat`, non-pausable refused, stop while paused), `tst_appcontroller`, `tst_quickmenu.qml`. SIGSTOP freezes the whole process; whether a given emulator tolerates it (audio devices, timers) is untested.
+Only for definitions with `"pausable": true`, and only while `Running`. `pause()` sends SIGSTOP, `resume()` SIGCONT, both to the emulator's whole process group (see [Stopping](#stopping)); `paused` is exposed to QML and the quick menu shows "Pause emulator"/"Resume emulator" only when `app.canPause` is true. The quick menu's "Return to game" resumes a paused emulator before closing. Stopping a paused group sends SIGCONT before SIGTERM so it can exit. Tested: `tst_emulatormanager` (process state `T` in `/proc/<pid>/stat`, non-pausable refused, stop while paused), `tst_appcontroller`, `tst_quickmenu.qml`. SIGSTOP freezes the whole process group; whether a given emulator tolerates it (audio devices, timers) is untested.
 
 ## Stopping
 
-- Quick menu › Exit game (confirmation: unsaved progress may be lost), the running overlay's Stop, or holding **Select + Start** for 1 s ([controller-support.md](controller-support.md)).
-- `stop()` sends SIGTERM and arms a timer with the emulator's `stopTimeoutMs`; if the process is still alive, SIGKILL.
-- On application exit `shutdown()` kills a running emulator and waits up to 2 s; `PR_SET_PDEATHSIG` sends SIGTERM to the emulator if the UI dies.
+- Quick menu › Exit game (confirmation: unsaved progress may be lost), the running overlay's Stop (same confirmation, default Cancel), the game bar's Stop emulator (second press), or holding **Select + Start** for 1 s (no confirmation; [controller-support.md](controller-support.md)).
+- The emulator is started as the leader of its own **process group** (`setpgid(0, 0)` between fork and exec), and every signal goes to the whole group (falling back to the direct child if the group is gone), so wrapper scripts and helper processes it spawns are stopped, paused and resumed with it.
+- `stop()` sends SIGTERM to the group and arms a timer with the emulator's `stopTimeoutMs`; if the process is still alive, SIGKILL to the group. A `stop()` during `Starting`, before the pid is known, sends SIGTERM as soon as the process has started instead of waiting for the kill timer. When the emulator exits after a requested stop, anything left in its group (e.g. a helper that ignores SIGTERM) gets SIGKILL. Tested: `tst_emulatormanager::stopTerminatesGrandchildren`, `stopDuringStartingIsFast` (fake emulator `--spawn-child`).
+- On application exit `shutdown()` kills the running emulator's group and waits up to 2 s; `PR_SET_PDEATHSIG` sends SIGTERM to the direct child if the UI dies (grandchildren are not covered by that).
 
 ## Launch history and output logs
 
@@ -167,7 +168,7 @@ Only for definitions with `"pausable": true`, and only while `Running`. `pause()
 Candidates are the enabled emulators that declare the file's extension. The effective emulator is (`LibraryController::effectiveEmulatorId()`):
 
 1. the per-game override (game details › emulator), if still a candidate;
-2. else `emulators.defaultForSystem[<game's system>]` (Settings › Emulators › "Default emulator — <system>"), if that emulator is a candidate;
+2. else `emulators.defaultForSystem[<game's system>]` (Settings › Emulators › "Default emulator — <system>"), if that emulator is a candidate. The settings row exists only for catalog systems with games or a compatible emulator and offers "Automatic" plus the enabled emulators that declare the system; `LibraryController::setDefaultEmulator()` refuses anything else (including the "Other" bucket);
 3. else the first candidate (definitions sorted by file name).
 
 The launch profile is `emulators.defaultProfiles[<emulator>]` when it exists and is enabled, unless a profile was chosen explicitly.
@@ -185,7 +186,7 @@ The launch profile is `emulators.defaultProfiles[<emulator>]` when it exists and
 | Non-zero exit / crash later | message with exit code or "crashed"; history record kept |
 | Duplicate launch | refused while a process is active (`AlreadyActive`) |
 | Controller disconnected while playing | notice "Controller disconnected: <name>"; the emulator keeps running |
-| Shell exits while an emulator runs | the emulator is killed (bounded wait) or receives SIGTERM via `PR_SET_PDEATHSIG` |
+| Shell exits while an emulator runs | the emulator's process group is killed (bounded wait), or, if the UI crashes, the direct child receives SIGTERM via `PR_SET_PDEATHSIG` |
 
 ## Limitations
 

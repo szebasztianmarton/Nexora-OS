@@ -23,7 +23,7 @@ The Guide button is the `gameBar` action in `input.mapping` and can be remapped 
 | Button | Panel |
 | --- | --- |
 | Home | The game in focus: placeholder cover art, title, state and play time (idle: the Nexora mark and version). Below, a row of tiles: while a game runs **Back to game** and **Stop emulator** (needs a second press); with nothing running **Nexora home** and **Game library**. Then up to four recently played games, which launch directly (disabled while a game runs: one emulator at a time). |
-| Quick settings | **All settings** (the dashboard's Settings tab; not while a game runs), **Restart** and **Power off** (each needs a second press; only enabled where power control is available), connected controllers. |
+| Quick settings | **All settings** (the dashboard's Settings tab; not while a game runs), **Restart** and **Power off** (each asks through a confirmation dialog, "Restart Nexora?" / "Power off?", default Cancel, which says that a running emulator will be stopped; only enabled where power control is available), connected controllers. |
 | Audio | Volume slider (the `audio.volume` setting; applied only on the embedded platform, see [settings.md](settings.md#keys)). |
 | Performance | CPU usage with a graph of the last 30 seconds, memory used / total, 1-minute load average. |
 

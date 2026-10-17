@@ -79,7 +79,7 @@ QML is presentation only: every system operation goes through a C++ controller, 
 | Target | Kind | Location | Responsibility |
 | --- | --- | --- | --- |
 | `nexora_shared` | static library | `shared/` | `Settings` (layered, validated, versioned), `ConfigLoader` (emulator JSON), `EmulatorConfig`, `DataLayout` (all user-data directories), `AtomicFile` (`QSaveFile` writes, size-limited reads, move-aside), `Redaction`, `SystemCatalog` (gaming systems), `Paths`, `Logging` (categories, rotation, ring buffer, runtime level), generated `BuildInfo.h` (version, build id, board) |
-| `nexora_emulator_manager` | static library | `apps/emulator-manager/` | `EmulatorManager` (one supervised `QProcess`, startup-failure detection, pause/resume, SIGTERM→SIGKILL), `EmulatorProcessState`, `EmulatorHealth` (stat-only checks), `LaunchHistory` (bounded JSON records) |
+| `nexora_emulator_manager` | static library | `apps/emulator-manager/` | `EmulatorManager` (one supervised `QProcess` in its own process group, startup-failure detection, pause/resume, SIGTERM→SIGKILL to the whole group), `EmulatorProcessState`, `EmulatorHealth` (stat-only checks), `LaunchHistory` (bounded JSON records) |
 | `nexora_library` | static library | `apps/game-library/` | `LibraryScanner` (stat-only walk, progress, cancel), `GameDatabase` (SQLite schema v2, migration with backup, metadata, hidden, system override, `VACUUM INTO` snapshots), `LibraryQuery`, `GameLibrary` (worker-thread scans) |
 | `nexora_system` | static library | `apps/system/` | `SystemIntegration` (desktop/embedded: status, power FIFO, volume via `amixer`), `HardwareInfo` (CPU, memory, GPUs, outputs, audio, storage from `/proc`, `/sys`, `statvfs`), `BackupService`, `DiagnosticReport`, `SingleInstanceGuard`, `UnixSignalWatcher` |
 | `nexora_update` | static library | `apps/update/` | `Version`, `UpdateManifest` (strict parser), `SignatureVerifier` (Ed25519, OpenSSL 3), `sha256File`, `UpdateService` (state machine, FIFO install request) |
@@ -167,11 +167,11 @@ Passed to `Main.qml` as initial properties (`UiBootstrap::loadMainWindow()`):
 | Property | Object | Main members |
 | --- | --- | --- |
 | `app` | `AppController` | `emulators` (model with health, version, systems), `state`, `busy`, `paused`, `canPause`, `launchHistory`, `statusMessage`, config issues, input status, `launch()`, `stop()`, `pause()`, `resume()`, `reloadConfig()` |
-| `library` | `LibraryController` | `games`, `recentGames`, `favoriteGames`, `recentlyAdded`, `systems`; `searchText`, `filter`, `sortOrder`, `systemFilter`; `scanning`, `scanFilesSeen`, `scanCurrentRoot`, `cancelScan()`; `gameDetails()`, `setGameMetadata()`, `setGameSystem()`, `setGameEmulator()`, `removeGame()`, `restoreRemovedGames()`, `purgeMissing()`, directories |
-| `settings` | `SettingsController` | every preference incl. `theme`, `uiScale`, `reducedMotion`, `startScreen`, `deadzone`, `muted`, `logLevel`, remapping, default profiles, default emulator per system, reset |
-| `system` | `SystemController` | `hardware`, `osVersion`, `buildId`, `board`, status lines, `powerOff()`, `reboot()`, `exportDiagnostics()`, `createBackup()`, `backups()`, `restoreBackup()`, `clearArtworkCache()` |
+| `library` | `LibraryController` | `games`, `recentGames`, `favoriteGames`, `recentlyAdded`, `systems`; `searchText`, `filter`, `sortOrder`, `systemFilter`; `scanning`, `scanFilesSeen`, `scanCurrentRoot`, `cancelScan()`; `otherSystemFilter` (`@other`); `gameDetails()`, `setGameMetadata()`, `setGameSystem()`, `setGameEmulator()`, `removeGame()` (the three edits emit an error notice on failure), `defaultEmulatorChoices()`, `setDefaultEmulator()` (validated), `restoreRemovedGames()`, `purgeMissing()`, directories |
+| `settings` | `SettingsController` | every preference incl. `theme`, `uiScale`, `reducedMotion`, `startScreen`, `deadzone`, `muted`, `logLevel`, remapping, default profiles, `defaultEmulators` (read-only mirror; changed through `LibraryController.setDefaultEmulator()`), reset |
+| `system` | `SystemController` | `hardware`, `osVersion`, `buildId`, `board`, status lines, `refresh()`, `refreshIfStale(ms)`, `refreshCount`, `powerOff()`, `reboot()`, `exportDiagnostics()`, `createBackup()`, `backups()`, `restoreBackup()`, `clearArtworkCache()` |
 | `gameBar` | `GameBarController` | game bar `open`, `quickMenuOpen`, CPU/memory/load samples (only while open), session time, battery, network |
-| `updates` | `UpdateController` | `state`, `error`, `message`, `progress`, `availableVersion`, `notes`, `currentVersion`, `currentBuildId`, `supported`, `candidateBundles()`, `checkBundle()`, `verify()`, `install()`, `cancel()` |
+| `updates` | `UpdateController` | `state`, `error`, `message`, `progress`, `availableVersion`, `notes`, `currentVersion`, `currentBuildId`, `supported`, `candidateBundles()`, `checkBundle()`, `verify()`, `install()`, `cancel()`, `acknowledgeLastResult()` |
 
 No property or method lets QML run a command or write an arbitrary file.
 
@@ -197,7 +197,7 @@ No property or method lets QML run a command or write an arbitrary file.
 | Power off / restart | refused (protects the developer's machine) | one line `poweroff\n` / `reboot\n`, non-blocking, to `/run/nexora/power-request` (`nexora-powerd`) |
 | Volume / mute | stored preference only | `amixer -q sset Master <n>%` (fallback `PCM`), asynchronous |
 
-Hardware information (`HardwareInfo`) is read on demand by `SystemController::refresh()`, never on the start-up path. Updates are handled by `UpdateService`/`UpdateController`, which on the desktop report `supported = false` (unless `NEXORA_UPDATE_TEST=1`) and on the image talk to `nexora-updated` ([update-system.md](update-system.md)). `SingleInstanceGuard` (lock in `$XDG_RUNTIME_DIR`) and `UnixSignalWatcher` (SIGTERM/SIGINT/SIGHUP → clean quit) complete the system layer.
+Hardware information (`HardwareInfo`) is read on demand by `SystemController::refresh()`, never on the start-up path: the Settings and System screens call `refreshIfStale(30000)` about 150 ms after they become current (the quick menu's info page does the same), so the synchronous probe runs at most once per 30 s; an explicit Reload probes at once. Updates are handled by `UpdateService`/`UpdateController`, which on the desktop report `supported = false` (unless `NEXORA_UPDATE_TEST=1`) and on the image talk to `nexora-updated` ([update-system.md](update-system.md)). `SingleInstanceGuard` (lock in `$XDG_RUNTIME_DIR`) and `UnixSignalWatcher` (SIGTERM/SIGINT/SIGHUP → clean quit) complete the system layer.
 
 ## Start-up and shutdown
 
@@ -207,9 +207,9 @@ Hardware information (`HardwareInfo`) is read on demand by `SystemController::re
 2. Parse options; `--version` prints `<version> <build id> <board>`; `--check-config` validates and exits.
 3. Build `DataLayout::fromEnvironment()`, detect the platform, install the log handler (on the embedded platform the default log file is `<state>/logs/console-ui.log`; the image's supervisor passes `--log-file /var/log/nexora/console-ui.log`).
 4. Root policy (exit 2) and single-instance lock (exit 3).
-5. Create `InputController` and `UiContext` (settings loaded, catalog, library, system integration, launch history, backup and update services, controllers; update keys from `<appDir>/../share/nexora/update-keys`, staging in `<state>/update`).
+5. Create `InputController` and `UiContext` (settings loaded, catalog, library, system integration, launch history, backup and update services, controllers; update keys from `<appDir>/../share/nexora/update-keys`, update state in `<state>/update`); the update service reads `last-update.json` here, so the result of a previous update is shown from the first frame ([update-system.md](update-system.md#boot-confirmation-and-rollback-record)).
 6. Headless actions (`--backup`, `--restore`, `--export-diagnostics`, `--verify-update`) run against the started context and exit.
-7. Start the input backend; `UiContext::start()` creates the data directories (0700), applies all settings, opens the library (migrating v1 → v2 with a backup if needed) and rescans only if the scan signature changed; the update service picks up the result of a previous update from `last-update.json` ([update-system.md](update-system.md#boot-confirmation-and-rollback-record)).
+7. Start the input backend; `UiContext::start()` creates the data directories (0700) including the update state directory, applies all settings, opens the library (migrating v1 → v2 with a backup if needed) and rescans only if the scan signature changed.
 8. Load `Main.qml` (exit 1 on failure), apply the window mode, run the event loop.
 
 Shutdown (`aboutToQuit`): stop a running emulator (bounded wait), cancel and join a scan or hash worker. Settings need no flush; every change was saved atomically.

@@ -44,7 +44,7 @@ buildroot-external/
 │   ├── grub.cfg                  GRUB2 (x86_64-efi): A/B slot selection with boot counting
 │   ├── genimage.cfg              GPT layout: ESP, rootA, rootB, data
 │   ├── post-build.sh             installs grub.cfg, fills /etc/nexora-release, adds the tty2 getty
-│   ├── post-image.sh             initial grubenv, empty data.ext4, runs genimage
+│   ├── post-image.sh             initial grubenv and grubenv.bak, empty data.ext4, runs genimage
 │   ├── update-keys/              README + .gitignore only; release public keys (*.pem) go here
 │   └── rootfs-overlay/
 │       ├── etc/fstab                         documents the ESP and data mounts (noauto)
@@ -136,7 +136,7 @@ buildroot-external/scripts/check-kernel-fragment.sh ~/br/out
 
 The image boots through UEFI only, so QEMU needs OVMF firmware (Ubuntu/Debian package `ovmf`; file names differ between distributions).
 
-Automated check: `scripts/image/qemu-boot-test.sh [disk.img]` boots a temporary copy headless (`virtio-vga`, no network, KVM when available), captures the serial console to `qemu-serial.log` and prints PASS when `Starting nexora: OK` appears within `NEXORA_QEMU_TIMEOUT` seconds (default 300), then powers the VM off through the QEMU monitor (`socat` needed for that step). It checks only that the UI session was started by init, not that the UI rendered. Result for the A/B image: **not yet run** <!-- TASK12-RESULT -->.
+Automated check: `scripts/image/qemu-boot-test.sh [disk.img]` boots a temporary copy headless (`virtio-vga`, no network, KVM when available), captures the serial console to `qemu-serial.log` and requires `Starting nexora: OK` within `NEXORA_QEMU_TIMEOUT` seconds (default 300), then keeps watching the log for `NEXORA_QEMU_SETTLE` seconds (default 60) and fails if `nexora-session` gives up or restarts the UI `NEXORA_QEMU_MAX_RESTARTS` times or more (default 2; both are written to the kernel log and so reach the serial console), and finally powers the VM off through the QEMU monitor (`socat` needed for that step). It prints PASS with the settle time, or FAIL with the reason. It checks that the UI session started and stayed up, not that the UI rendered. Result for the A/B image: **not yet run** <!-- TASK12-RESULT -->.
 
 Interactive runs:
 
@@ -207,9 +207,11 @@ Boot sequence (BusyBox init → `/etc/init.d/rcS`):
    ```
 
    as user **`nexora`** (via `start-stop-daemon --chuid nexora`, which also sets the supplementary groups), in a new session whose controlling terminal is **tty1** (owned by `nexora` while the UI runs, so Qt can switch it to graphics mode and mute the console keyboard), with the environment `QT_QPA_PLATFORM=eglfs`, `QT_QPA_EGLFS_INTEGRATION=eglfs_kms`, `XDG_RUNTIME_DIR=/run/user/1000`, `NEXORA_PLATFORM=embedded`, `HOME=/home/nexora`.
+   - Before every start the supervisor increments `/run/nexora-session/ui-starts` (read by `nexora-bootok`).
    - Whenever the UI exits (crash, `Ctrl+Q`, …) it is restarted after a delay of 1, 2, 4, … up to 30 s.
    - A run of at least 15 s resets the backoff. After **5 consecutive runs shorter than 15 s** the supervisor gives up, logs it and switches to tty2 (`chvt 2`), so a broken UI cannot lock up the machine. Limits are configurable in `/etc/default/nexora`.
-7. **`S99nexora-bootok`** — in the background: if the running slot is on trial after an update, confirms it in `grubenv` once the UI has run for 45 s, or records a rollback ([update-system.md](update-system.md#boot-confirmation-and-rollback-record)).
+   - Each restart and giving up are also written to the kernel log (`/dev/kmsg`, e.g. `nexora-session: nexora-console-ui exited with status 1 after 2s; restarting in 1s`), so they reach the serial console.
+7. **`S99nexora-bootok`** — in the background: if the running slot is on trial after an update, confirms it in `grubenv` once the UI has stayed up for the whole 45 s (supervisor and UI running at every 5 s check, UI start counter and supervisor PID unchanged), or records a rollback ([update-system.md](update-system.md#boot-confirmation-and-rollback-record)).
 
 Logs:
 
@@ -230,7 +232,7 @@ Login prompts are never disabled:
 - **Serial console `ttyS0`** (115200 baud; `BR2_TARGET_GENERIC_GETTY_PORT`) — QEMU `-serial mon:stdio`, or a real serial port/adapter.
 - **`tty2`** — added to `/etc/inittab` by `post-build.sh`. Reachable with `Ctrl+Alt+F2` when the UI is not running (and automatically after the supervisor gives up). Whether `Ctrl+Alt+F2` works *while* the Qt EGLFS UI runs depends on Qt's evdev keyboard handler and has not been tested.
 - **GRUB entry "Nexora OS (maintenance shell: no console UI)"** — boots with `nexora.noui`, so tty1 shows the normal console and the logins above are available. Press any arrow key during the 3 s GRUB timeout to select it.
-- **GRUB entry "Nexora OS (recovery menu)"** — boots with `nexora.recovery`: a keyboard-driven text menu (slots and versions, boot the previous slot, reset preferences, export diagnostics, restore the latest backup, reboot, shell). See [recovery.md](recovery.md).
+- **GRUB entry "Nexora OS (recovery menu)"** — boots with `nexora.recovery`: a keyboard-driven text menu (slots and versions, boot the previous slot, reset preferences, export diagnostics, restore the latest backup, repair the boot environment, reboot, shell). See [recovery.md](recovery.md).
 - **GRUB entry "Nexora OS (previous slot)"** — boots the other root slot once.
 - From a root shell: `/etc/init.d/S90nexora stop|start|restart`; set `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to disable autostart persistently.
 
@@ -298,7 +300,7 @@ MVP 4 checks of the A/B tree (2026-10-16, build host only; no image built):
 
 | Check | How | Result |
 | --- | --- | --- |
-| Update helper and boot confirmation | `test_update_helper` (CTest, label `system`): `nexora-updated --once` and `nexora-bootok` in test mode on 16 MiB scratch slot files and a scratch grubenv | pass: installs into B and A, refuses tampered/not-newer/too-large bundles and bad request lines; confirmation, unhealthy UI, rollback and manual-slot cases |
+| Update helper and boot confirmation | `test_update_helper` (CTest, label `system`): `nexora-updated --once` and `nexora-bootok` in test mode on 16 MiB scratch slot files and a scratch grubenv | pass: installs into B and A, refuses tampered/not-newer/too-large bundles, bad request lines, symlinked bundle files and installs during a trial boot, writes the verified image even if it is swapped after verification, replaces grubenv via a validated copy with `grubenv.bak`; confirmation, unhealthy UI, UI restarted during the window, rollback and manual-slot cases |
 | GRUB script | `grub-script-check grub.cfg` (CTest `grub_cfg_syntax`) | syntax OK; the logic was **not executed** by GRUB |
 | Shell scripts | `shellcheck -s sh` on all overlay and board scripts (CTest `shellcheck_image_scripts`) | clean |
 | Defconfig / kernel fragment for the new symbols (`BR2_LINUX_KERNEL_INSTALL_TARGET`, `BR2_PACKAGE_E2FSPROGS`, GRUB modules and tools, NLS options) | `check-defconfig.sh`, `check-kernel-fragment.sh` against a Buildroot checkout | <!-- TASK12-RESULT: result of running both checks in Task 12 --> not yet run for the MVP 4 changes |
@@ -338,7 +340,7 @@ A separate session recorded in commit `73a4df0` (2026-10-10, on `feature/mvp2`) 
 - **Volatile logs:** `/var/log` and `/run` are tmpfs.
 - **Single display:** EGLFS shows one full-screen window on the first connected output of the first DRM device; multi-GPU/multi-monitor selection is not configured (`QT_QPA_EGLFS_KMS_CONFIG` can be used if needed).
 - Emulators: none are packaged; the shipped `example.json` runs `/bin/true`. Emulator definitions live on the root slot.
-- `NEXORA_OS_VERSION` in `nexora-os.mk` (0.4.0) must be kept equal to `project(... VERSION ...)` by hand; `/etc/nexora-release` is filled from the version compiled into the application, so it is always consistent with the binary.
+- `NEXORA_OS_VERSION` in `nexora-os.mk` (0.4.0) and the login banner `/etc/issue` (`BR2_TARGET_GENERIC_ISSUE="Nexora OS 0.4.0 (development image)"` in the defconfig) must be kept equal to `project(... VERSION ...)` by hand; `make-release.sh` refuses to package a `rootfs.ext4` whose `/etc/nexora-release` names another version ([release-process.md](release-process.md)); `/etc/nexora-release` is filled from the version compiled into the application, so it is always consistent with the binary.
 
 ## Requirements for the application
 

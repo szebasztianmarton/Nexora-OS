@@ -22,7 +22,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | Diagnostics report (redacted) | System tab › Export diagnostics, or `nexora-console-ui --export-diagnostics`; written to `~/.local/state/nexora/diagnostics/` |
 | More log detail | Settings › System › Log detail = debug (`log.level`), or `QT_LOGGING_RULES="nexora.*.debug=true"`; add `--log-file nexora.log` on the desktop |
 | Emulator output | `~/.local/state/nexora/emulator-logs/<id>.log` (and `.log.1`), launch history on the System tab |
-| Image logs | `/run/nexora-session/session.log`, `/var/log/nexora/console-ui.log`, `/var/log/messages` (all tmpfs); recovery menu option 4 saves them to `/home/nexora` |
+| Image logs | `/run/nexora-session/session.log`, `/var/log/nexora/console-ui.log`, `/var/log/messages` (all tmpfs); copy them to `/home/nexora` from a root shell before rebooting. Recovery menu option 4 writes the UI's redacted report plus the boot state, and includes these logs (masked) only when the UI's export fails ([recovery.md](recovery.md#recovery-menu)) |
 | Configuration check | `nexora-console-ui --check-config [--config-dir DIR] [--settings-file FILE]` |
 
 ## Building
@@ -81,7 +81,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | "failed during startup (exit N)" | the emulator exited or crashed within 3 s; read its stderr tail on the System tab and its output log |
 | A definition is ignored | it failed validation; see configuration issues on the System tab or `--check-config` |
 | Pause is missing in the quick menu | the definition is not `"pausable": true` |
-| Game launches the wrong emulator | per-game choice in the game details, or Settings › Emulators › default emulator per system |
+| Game launches the wrong emulator | per-game choice in the game details, or Settings › Emulators › default emulator per system (a row exists only for systems with games or a compatible emulator, and only emulators that declare the system can be chosen) |
 
 ## Settings and user data
 
@@ -104,9 +104,13 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | `WrongBoard`, `WrongProduct` | bundle for another target |
 | `NotNewer`, `TooOld` | same/older version, or the running version is below the bundle's `minimumVersion` |
 | `ImageMissing`, `SizeMismatch`, `HashMismatch` | incomplete or damaged copy of `rootfs.ext4`; copy the bundle again |
+| `InsufficientStorage` | the update state directory `~/.local/state/nexora/update` cannot be created, or the data partition has less than 1 MiB free (the image itself needs no space there); free some space or check that the data partition is mounted read-write |
 | `InstallRequestFailed` | the root helper `nexora-updated` is not running (`/etc/init.d/S85nexora-updated start` from a root shell) |
 | `InstallFailed` + reason | the helper's own verification or the write failed; see `/var/log/messages` (`nexora-updated`) |
-| After an update the old version is still running | the new slot did not start the UI within 3 boots and GRUB rolled back ([recovery.md](recovery.md#failed-update-automatic-rollback)); the update panel should show the rollback message; `/var/log/messages` (`nexora-bootok`) and the recovery menu's slot view confirm it |
+| `InstallFailed: trial boot pending; restart to confirm or roll back first` | the running slot is still on trial after an earlier update; restart so that `nexora-bootok` can confirm it (or GRUB rolls back), then try again |
+| `InstallFailed: boot environment (grubenv) not found or damaged` | the ESP is not mounted or both `grubenv` and `grubenv.bak` are damaged; recovery menu option 6 (Repair boot environment) |
+| `InstallTimedOut` | the helper did not answer within 15 minutes; restart before trying again and check `/var/log/messages` (`nexora-updated`) |
+| After an update the old version is still running | the new slot did not keep the UI up within 3 boots and GRUB rolled back ([recovery.md](recovery.md#failed-update-automatic-rollback)); the Home card says "Update rolled back" and the update panel shows the message until you press OK; `/var/log/messages` (`nexora-bootok`) and the recovery menu's slot view confirm it |
 
 ## Image boot
 

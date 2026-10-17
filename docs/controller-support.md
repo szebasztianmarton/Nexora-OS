@@ -122,8 +122,8 @@ Synthesized keys are fixed; the button for each remappable action comes from `in
 
 | Action | Default button | Xbox / PlayStation / Nintendo label | Synthesized key | In the dashboard |
 | --- | --- | --- | --- | --- |
-| `accept` | `south` | A / ✕ / B | `Return` | Select / launch / confirm (destructive actions such as power off need a second press) |
-| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker or game options, cancel a pending confirmation or remap capture; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
+| `accept` | `south` | A / ✕ / B | `Return` | Select / launch / confirm (destructive actions ask first: a confirmation dialog whose default is Cancel, e.g. stopping a game from the running overlay, Restart and Power off in the game bar; a few rows such as Reset preferences and the game bar's Stop emulator need a second press instead) |
+| `back` | `east` | B / ○ / A | `Escape` | Leave a text field, close the profile picker or game options, cancel a dialog or remap capture; inside a page where nothing consumes it, move focus to the tab bar; on the tab bar it re-enters the page. Never quits the UI and never stops a running emulator. |
 | `menu` | `start` | Menu / Options / + | `Menu` | Open the System tab (holding Start for 1 s while a game runs opens the quick menu instead) |
 | `favorite` | `north` | Y / △ / X | `Favorites` | Toggle favorite of the focused game (Home rows, Games grid); in the Emulators tab's profile picker, make the selected profile the default |
 | `search` | `west` | X / □ / Y | `Search` | Open the Games tab with the search field focused |
@@ -190,7 +190,7 @@ Pressing Start or Select also triggers their normal action (by default `menu` an
 | Hold Start 1 s (Select not held) | — | opens the quick menu |
 | Ctrl+G (keyboard) | toggles the game bar | toggles the game bar |
 
-While either overlay is open, controller input flows to the shell even though an emulator runs. Quick menu items: Return to game, Pause/Resume emulator (only when the emulator definition is `pausable`), controller status, Volume and Mute, Display settings (display mode, resolution, interface scale), System info, Exit game (confirmation "Unsaved progress in the emulator may be lost"; default button Cancel). Tested: `tst_quickmenu.qml`, `tst_appcontroller`.
+While either overlay is open, controller input flows to the shell even though an emulator runs. Quick menu items: Return to game (resumes the emulator first if it is paused), Pause/Resume emulator (only when the emulator definition is `pausable`), controller status, Volume and Mute, Display settings (display mode, resolution, interface scale), System info, Exit game (confirmation "Unsaved progress in the emulator may be lost"; default button Cancel). Tested: `tst_quickmenu.qml`, `tst_appcontroller`.
 
 On the image the emulator owns the display (EGLFS/KMS), so the quick menu becomes visible when the shell regains it; this hand-over has not been tested on the image.
 
@@ -198,7 +198,7 @@ On the image the emulator owns the display (EGLFS/KMS), so the quick menu become
 
 - **Device list:** `InputController.devices` lists each connected pad as `{id, name, backend, connectedAt}`; shown in Settings › Controllers, on the System tab and as a count on Home.
 - **Disconnect notice:** a pad that disappears while an emulator runs produces the notice "Controller disconnected: <name>"; the emulator is not stopped (`tst_appcontroller`). Connect/disconnect events are also logged in `nexora.input`.
-- **Test input:** Settings › Controllers › "Test input" opens `InputTestPanel`. In test mode every button and axis event is shown as text (`south pressed`, `LeftX -0.82`) and **not** turned into navigation; holding Back (east) for 2 s leaves test mode (`tst_inputcontroller`).
+- **Test input:** Settings › Controllers › "Test input" opens `InputTestPanel`. In test mode every button and axis event is shown as text (`south pressed`, `LeftX -0.82`) and **not** turned into navigation; holding the button currently mapped to Back (east by default; the panel names it) for 2 s leaves test mode (`tst_inputcontroller`), and Escape closes it from the keyboard. Every other key stays inside the panel (L1/R1, Menu and Search included), and if the panel is hidden from outside it closes and leaves test mode.
 
 ## Keyboard
 
@@ -230,6 +230,7 @@ Editing a game's title and notes works with the controller through the on-screen
 
 ## While an emulator runs
 
+- The launcher shows the running overlay; Accept on its **Stop** button asks "Stop the emulator?" (default Cancel) because unsaved progress may be lost. The Select + Start chord below stops without asking.
 - Gamepads are not grabbed, so the emulator receives the same input. While an emulator is starting, running or stopping, `InputController` is **suspended**: all navigation actions are dropped, so pressing A in a game cannot click "Stop" in the launcher. Held directions and repeat are reset on suspend and resume.
 - The Select + Start chord, Guide (quick menu) and the 1 s Start hold are still detected while suspended; they are the controller-only ways back to the shell.
 - When the emulator exits, navigation resumes.
@@ -270,13 +271,14 @@ Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --wind
 8. **Remap:** remap `favorite` to L1 from the settings screen; check that `prevTab` moved to the old favorite button, the new binding works, it survives a restart, and an unpressed capture times out after 5 s.
 9. **Invalid mapping:** put `"accept": "south", "back": "south"` in the settings file; the settings screen reports the problem and the default mapping works.
 10. **Emulator suspension:** launch a game; pressing buttons in the emulator does not navigate the launcher behind it.
-11. **Quick menu over a game:** in a running emulator press Guide (and, separately, hold Start for 1 s) → the Nexora window comes to the front with the quick menu; the pad navigates it; Guide or "Return to game" returns to the emulator; Exit game asks for confirmation. Ctrl+G still opens the game bar.
+11. **Quick menu over a game:** in a running emulator press Guide (and, separately, hold Start for 1 s) → the Nexora window comes to the front with the quick menu; the pad navigates it; Guide or "Return to game" returns to the emulator (and resumes it if it was paused); Exit game asks for confirmation. Ctrl+G still opens the game bar.
 12. **Return chord:** in a running emulator hold Select + Start for 1 s → emulator stops and the launcher has focus again; releasing earlier does nothing; an emulator that ignores SIGTERM is killed after its stop timeout.
 13. **Two pads:** hold a direction on pad 1 while moving the stick on pad 2; holding Select on one pad and Start on the other does not trigger the chord.
 14. **Disconnect while holding:** hold a direction and unplug; repeat stops.
 15. **Keyboard alongside:** arrows/Enter/Esc keep working with a pad connected.
-16. **Dead zone and test input:** open Settings › Controllers › "Test input"; a resting stick reports nothing at the default 25 %; change the dead zone and check navigation; hold B for 2 s to leave.
+16. **Dead zone and test input:** open Settings › Controllers › "Test input"; a resting stick reports nothing at the default 25 %; change the dead zone and check navigation; hold the Back button (B by default) for 2 s to leave.
 17. **Backend `none`:** `--input-backend none` → pad ignored, keyboard works.
+18. **Back and confirmations:** Back inside a page moves to the tab bar; Accept on Stop in the running overlay asks first and Cancel is focused.
 
 ## Planned
 

@@ -23,14 +23,14 @@ Nexora OS turns an x86-64 PC or mini PC into a console-like environment: it boot
 Implemented in 0.4.0 (tested on a desktop Linux host unless stated otherwise):
 
 - **Controller-first UI** (`nexora-console-ui`, Qt 6 / QML) with eight tabs — Home, Games, Systems, Favorites, Recent, Emulators, Settings, System — game details with metadata editing through an on-screen keyboard, an in-game **quick menu** (Guide or hold Start), the game bar, notices, loading/empty/error states, and confirmation dialogs whose default is Cancel. → [docs/design-system.md](docs/design-system.md)
-- **Accessibility:** high-contrast theme, interface scale 75–150 %, reduced motion, visible focus everywhere, layouts checked at 1280×720 and 1920×1080.
+- **Accessibility:** high-contrast theme, interface scale 75–150 % on top of automatic scaling for screens larger than 1280×720, reduced motion, visible focus everywhere, plain-text rendering of all titles and metadata, layouts checked at 1280×720 and 1920×1080 (also at 150 %).
 - **Game library:** scans approved folders on a background thread with progress and cancel, never enters system directories or follows escaping symlinks, assigns games to 19 gaming systems, keeps your edited titles, notes, system and emulator choices across rescans, handles duplicates and missing files, and "removes" games by hiding them — game files are never deleted. SQLite schema v2 with an automatic backup before migration. → [docs/game-library.md](docs/game-library.md)
-- **Emulator integration:** JSON emulator definitions with versions, systems and capabilities; health checks; one supervised process with startup-failure detection, pause/resume where allowed, graceful stop with bounded kill; launch history with redacted error output. Tested with a mock emulator only. → [docs/emulator-integration.md](docs/emulator-integration.md)
+- **Emulator integration:** JSON emulator definitions with versions, systems and capabilities; health checks; one supervised process group with startup-failure detection, pause/resume where allowed, graceful stop with bounded kill (helper processes included); launch history with redacted error output. Tested with a mock emulator only. → [docs/emulator-integration.md](docs/emulator-integration.md)
 - **Controllers:** evdev (optional SDL3) backends, position-based remappable buttons, configurable dead zone, key-repeat filtering, device list, disconnect notices, an input test screen. → [docs/controller-support.md](docs/controller-support.md)
 - **User data:** one documented layout, atomic writes with owner-only permissions, versioned formats, backup and restore from the UI or the command line with full verification before anything is replaced. → [docs/user-data.md](docs/user-data.md)
-- **Diagnostics:** hardware information (CPU, memory, GPUs, displays, audio, storage), rotating logs with a configurable level, redacted diagnostics reports.
-- **Signed updates:** Ed25519-signed bundles with a strict manifest, verified by the UI and again by a root helper that writes the inactive root slot; GRUB boots the new slot on trial and rolls back after three failed boots. Image side implemented, **not verified on a booted image**. → [docs/update-system.md](docs/update-system.md)
-- **Recovery:** GRUB entries for the previous slot, a recovery menu and a maintenance shell; a crash-looping UI falls back to a login. → [docs/recovery.md](docs/recovery.md)
+- **Diagnostics:** hardware information (CPU, memory, GPUs, displays, audio, storage), rotating logs with a configurable level, redacted diagnostics reports (paths, URL credentials, secret-named keys and flags, authorization headers).
+- **Signed updates:** Ed25519-signed bundles with a strict manifest, verified by the UI and again by a root helper that writes the inactive root slot (refused while a trial boot is pending); GRUB boots the new slot on trial and rolls back after three boots in which the UI did not stay up; the result is shown in the UI until you dismiss it. Image side implemented, **not verified on a booted image**. → [docs/update-system.md](docs/update-system.md)
+- **Recovery:** GRUB entries for the previous slot, a recovery menu (including boot-environment repair) and a maintenance shell; a crash-looping UI falls back to a login. → [docs/recovery.md](docs/recovery.md)
 - **Security:** unprivileged UI, two narrow root helpers, no shell commands built from metadata, validated inputs, no network code. → [docs/security.md](docs/security.md)
 - **Release engineering:** CI with formatting, lint, unit/integration/security/system tests, QML lint and documentation checks; reproducible release archives, signing and verification scripts. → [docs/release-process.md](docs/release-process.md)
 
@@ -71,7 +71,7 @@ To build the disk image: `scripts/image/build-image.sh` (Buildroot 2026.02.3, se
 | --- | --- | --- |
 | Move | D-pad, left stick | Arrow keys |
 | Select / open details | South (A) | Enter |
-| Back | East (B) | Esc, Backspace |
+| Back (inside a page: to the tab bar) | East (B) | Esc, Backspace |
 | Previous / next tab | L1 / R1 | Page Up / Page Down |
 | Favorite | North (Y) | F |
 | Search | West (X) | `/`, Ctrl+F |
@@ -79,7 +79,7 @@ To build the disk image: `scripts/image/build-image.sh` (Buildroot 2026.02.3, se
 | System tab | Start | Menu, F1 |
 | Game bar | Guide (no game running) | Ctrl+G |
 | Quick menu over a running game | Guide, or hold Start 1 s | — |
-| Stop the running game | hold Select + Start 1 s | — |
+| Stop the running game | hold Select + Start 1 s (or Stop on the running screen, with confirmation) | Enter on Stop, then confirm |
 
 Buttons are named by position; all non-directional actions can be remapped. → [docs/controller-support.md](docs/controller-support.md)
 
@@ -120,7 +120,7 @@ Buttons are named by position; all non-directional actions can be remapped. → 
 | Build | CMake ≥ 3.22, Ninja, `CMakePresets.json` (`debug`, `release`, `ci`) |
 | Persistence | JSON (settings, emulator definitions, history, manifests), SQLite via Qt Sql (library) |
 | Cryptography | OpenSSL 3 libcrypto (Ed25519, SHA-256) |
-| Processes | `QProcess` with argument lists, `PR_SET_PDEATHSIG` |
+| Processes | `QProcess` with argument lists, one process group per emulator, `PR_SET_PDEATHSIG` |
 | Input | Linux evdev; SDL3 (optional, desktop) |
 | Testing | Qt Test, Qt Quick Test, CTest, shell tests, fake emulator |
 | CI | GitHub Actions on ubuntu-24.04 (`ci.yml`, `buildroot.yml`, `release.yml`) |

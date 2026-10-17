@@ -43,7 +43,7 @@ Extension matching is case-insensitive and uses the text after the **last** dot 
 
 The built-in system catalog (`config/systems/systems.json`, compiled into the application; 19 systems from `nes` to `dos`, see [emulator-integration.md](emulator-integration.md#gaming-systems)) maps extensions to systems. During a scan every file gets its **system candidates** (all systems its extension maps to). If exactly one system matches, it becomes the game's system; extensions such as `.iso`, `.chd` or `.zip` map to several systems, so those games keep an empty system until you choose one in the [game details](#game-details) (stored as `system_override`, kept across rescans). A system is a grouping and filter, not a compatibility claim: launching still requires an emulator that declares the extension.
 
-The **Systems** tab shows one card per system that has games or an emulator (`SystemListModel`: `systemId`, `name`, `shortName`, `gameCount`, `emulatorCount`); games without a system are counted in an "Other" bucket only when there are any. Accept on a card opens the Games tab filtered to that system.
+The **Systems** tab shows one card per system that has games or an emulator (`SystemListModel`: `systemId`, `name`, `shortName`, `gameCount`, `emulatorCount`); games without a system are counted in an "Other" bucket only when there are any. Accept on a card opens the Games tab filtered to that system; the "Other" card filters to the games without a recognised system (`LibraryController.otherSystemFilter`, value `@other`). When only counts change, the model updates its rows in place instead of resetting, so focus is not lost.
 
 ## Scanning
 
@@ -150,14 +150,14 @@ Entries are never deleted by a scan; they are marked not present (`present = 0`)
 In the dashboard:
 
 - **Home tab:** "Continue playing" (recently played), "Favorites", "Recently added" (newest 20 by date added) and "Systems" rows with horizontal navigation, plus status cards (controllers, health summary, update availability); a getting-started panel while the library is empty.
-- **Games tab:** search field (`/`, `Ctrl+F` or the Search button/key; needs a keyboard), grid/list toggle, sort selector, system filter chips, scan progress with Cancel, missing-file badges and the game grid. Accept opens the [game details](#game-details), the Favorite button (north / `F`) toggles the favorite, the Options button (Select / `O`) opens the [launch options](#launch-options). Empty states explain what to do (no folders → open Settings › Library; no games → rescan; no results → clear search).
+- **Games tab:** search field (`/`, `Ctrl+F` or the Search button/key; needs a keyboard), grid/list toggle, sort selector, system filter chips, scan progress with Cancel, missing-file badges and the game grid. When the cards do not fit the available height (large interface scale at 720p) the grid switches to list rows. Accept opens the [game details](#game-details), the Favorite button (north / `F`) toggles the favorite, the Options button (Select / `O`) opens the [launch options](#launch-options). Empty states explain what to do (no folders → open Settings › Library; no games → rescan; no results → clear search).
 - **Favorites** and **Recent** tabs: the same game grid for favorites and recently played games.
 
 Implemented in `LibraryQuery` (pure, unit-tested):
 
 - Missing and removed (hidden) entries are not shown in the normal lists.
 - **Search:** the text is split at whitespace (spaces, tabs); every term must occur (case-insensitive substring) in the displayed title (the edited title if set), the file name or the system's name. Example: `mario usa` matches `Super Mario World (USA).sfc`. The library list is rebuilt 150 ms after the last keystroke.
-- **System filter:** `LibraryController.systemFilter` (a system id; empty = all), set from the chips on the Games tab or a Systems card.
+- **System filter:** `LibraryController.systemFilter` (a system id; empty = all; `@other` = games without a recognised system, `library::UnknownSystemFilter`, never a catalog id), set from the chips on the Games tab or a Systems card. The chips list All systems, every system with games, **Other** when there are games without a system, and the active filter even if it has no games (e.g. opened from an empty system's card).
 - **Filters:** `all`, `favorites`, `recent` (only games launched at least once), `missing` (query API). The `recent` filter always orders by most recently played and keeps the newest 20 entries by default; the `recentGames` list that `LibraryController` exposes to the UI keeps 12. An emulator filter (games whose candidates include an emulator id) exists in the query API.
 - **Sort orders:**
 
@@ -173,7 +173,7 @@ The order comes from `library.sortOrder`. Choosing a sort order on the Games tab
 ## Emulator assignment
 
 - **Candidates:** every enabled emulator that declares the file's extension, in the order the definitions were loaded (sorted by definition file name). Stored per game and refreshed on every scan.
-- **Effective emulator:** the per-game override if it is still a candidate; otherwise the default emulator for the game's system (`emulators.defaultForSystem`, Settings › Emulators) if it is a candidate; otherwise the first candidate. With no candidate the game is shown as "No emulator handles this file type".
+- **Effective emulator:** the per-game override if it is still a candidate; otherwise the default emulator for the game's system (`emulators.defaultForSystem`, Settings › Emulators; rows only for catalog systems with games or a compatible emulator, and only enabled emulators that declare the system can be chosen — `LibraryController.setDefaultEmulator()` validates this again) if it is a candidate; otherwise the first candidate. With no candidate the game is shown as "No emulator handles this file type".
 - **Availability:** a candidate whose executable is missing or not executable is still assigned, but the game is shown as unavailable with the reason.
 - **Override:** chosen in the [game details](#game-details) or the [launch options](#launch-options), stored in `emulator_override` and kept across rescans. Only candidates are accepted (`LibraryController.setGameEmulator()` refuses other emulators: a file is never assumed to work with an emulator that does not declare its extension); an empty choice returns to automatic. An override whose emulator stops declaring the extension is ignored until it does again.
 
@@ -191,7 +191,7 @@ Accept on a game tile (Games, Favorites, Recent, Home rows) opens `GameDetailsSc
 | Change system | chooses among the system candidates or any catalog system (`setGameSystem()`), or back to automatic |
 | Remove from library | confirmation dialog stating "The game file is not deleted", default button Cancel |
 
-The data comes from `LibraryController.gameDetails(id)` (`id, title, originalTitle, path` (redacted), `systemId, systemName, systemCandidates, emulatorId, emulatorName, emulatorCandidates, favorite, playCount, lastPlayed, addedAt, present, notes`). An unknown id shows an error state. Tested: `tst_gamedetails.qml`, `tst_uicontext`.
+The data comes from `LibraryController.gameDetails(id)` (`id, title, originalTitle, path` (redacted), `systemId, systemName, systemCandidates, emulatorId, emulatorName, emulatorCandidates, favorite, playCount, lastPlayed, addedAt, present, notes`). An unknown id shows an error state. Title, notes and every other value are rendered as plain text (markup in a file name or note is shown literally). When saving details, changing the system or removing the game fails, `LibraryController` emits an error notice with the reason (e.g. "Could not save the game details: the game is no longer in the library"); a failed save keeps the editor open with the edits. Tested: `tst_gamedetails.qml`, `tst_uicontext` (`failedEditsEmitNotices`).
 
 ## Removing and restoring entries
 

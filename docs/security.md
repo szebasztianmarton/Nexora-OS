@@ -55,7 +55,7 @@ File names are attacker-controlled text: titles are derived from them, and they 
 - Paths are stored canonicalised; the game path is passed to the emulator as one `QProcess` argument (`apps/emulator-manager/src/EmulatorManager.cpp`), never through a shell.
 - User-edited metadata (title ≤ 200 characters, notes ≤ 2000, no control characters except newline in notes) is validated in `GameDatabase::setMetadata()` (`apps/game-library/src/GameDatabase.cpp`).
 - The launch history stores the game **title** only, never its path (`apps/emulator-manager/src/LaunchHistory.cpp`; tested by `tst_launchhistory`).
-- Not mitigated: QML `Text` items render titles with the default `Text.AutoText` format, so a file name that looks like rich text is shown as styled text (see [known limitations](#known-limitations)).
+- Every QML `Text` item renders plain text (`textFormat: Text.PlainText`), so a file name, edited title, note, release note or update version that looks like HTML is shown literally, never as styled text or a link (fixed during the MVP 4 verification pass; tested for game titles and notes in `tst_gamedetails.qml::test_markupInTitleIsShownLiterally` and for settings rows in `tst_settings_ui.qml`).
 
 ### 3. Malicious emulator definition file
 
@@ -67,7 +67,7 @@ Emulator definitions name an executable and its arguments, so whoever can write 
 
 ### 4. Tampered update bundle
 
-Covered in detail in [update-system.md](update-system.md). In short: signature over exact manifest bytes, strict manifest schema (unknown keys rejected, image file name restricted to `^[A-Za-z0-9._-]+$`, no `/`, no `..`), size + SHA-256 of the image, free-space check, and a second, independent verification by the root helper with a re-hash of the written slot. Tested: `tst_updatemanifest`, `tst_signatureverifier`, `tst_updateservice`, `test_update_tool` (all `security`), `test_update_helper` (label `system`, helper against scratch files).
+Covered in detail in [update-system.md](update-system.md). In short: signature over exact manifest bytes, strict manifest schema (unknown keys rejected, image file name restricted to `^[A-Za-z0-9._-]+$`, no `/`, no `..`), size + SHA-256 of the image, and a second, independent verification by the root helper on a private copy of the manifest and a single open descriptor of the image (symlinks rejected), followed by a re-hash of the written slot. Tested: `tst_updatemanifest`, `tst_signatureverifier`, `tst_updateservice`, `test_update_tool` (all `security`), `test_update_helper` (label `system`, helper against scratch files).
 
 ### 5. Compromised UI process
 
@@ -76,9 +76,10 @@ Assume an attacker controls `nexora-console-ui` (or an emulator, which runs as t
 | Channel | What the attacker can do | What they cannot do |
 | --- | --- | --- |
 | `/run/nexora/power-request` | power off or reboot | anything else: only the exact lines `poweroff` and `reboot` are accepted (`nexora-powerd`) |
-| `/run/nexora/update-request` | ask for a bundle at a path to be installed | install anything not signed by an installed key, not newer than the running version, or for another board; pass a path with `..` or characters outside `[A-Za-z0-9._/ -]`; make the helper execute bundle content (`nexora-updated`) |
+| `/run/nexora/update-request` | ask for a bundle at a path to be installed | install anything not signed by an installed key, not newer than the running version, or for another board; pass a path with `..` or characters outside `[A-Za-z0-9._/ -]`; make the helper execute bundle content; swap the image after it was verified (it is read through one open descriptor); block the helper with a FIFO in place of a bundle file (bounded reads with a watchdog); overwrite the only known-good slot during a trial boot (refused) (`nexora-updated`) |
 | `grubenv`, root slots, ESP | nothing directly: the ESP is mounted root-only, the slot block devices are root-only | change the boot slot or the trial counter |
-| `last-update.json` (user state) | forge the "update completed / rolled back" note shown by its own UI | affect boot behaviour (the helpers do not read it) |
+| `last-update.json` (user state) | forge the "update completed / rolled back" note shown by its own UI | affect boot behaviour (the helpers only write it) |
+| `/run/nexora/update-status` | nothing: it is `root:nexora 0640`, readable but not writable | fake an install result; the UI also accepts only a status written after its request that names the pending version |
 | User data | read, change or delete everything under `/home/nexora` | — (same user; see limitations) |
 
 A flood of bad requests is throttled (1 s pause after each invalid request in both helpers).
@@ -94,7 +95,7 @@ A flood of bad requests is throttled (1 s pause after each invalid request in bo
 ### No shell, explicit arguments
 
 - Every child process is started with `QProcess` and an argument list: emulators (`EmulatorManager`), `amixer` (`apps/system/src/SystemIntegration.cpp`). Nexora never builds a shell command string from metadata or user input.
-- Emulators get `PR_SET_PDEATHSIG(SIGTERM)`, so they do not outlive the UI.
+- Each emulator runs in its own process group (`setpgid(0, 0)` between fork and exec); stop, kill, pause and resume signal the whole group, so wrapper scripts and helper processes an emulator spawns are stopped with it (a paused group gets SIGCONT before SIGTERM; after a requested stop anything left in the group gets SIGKILL). The direct child also gets `PR_SET_PDEATHSIG(SIGTERM)`, so it does not outlive a crashed UI (`apps/emulator-manager/src/EmulatorManager.cpp`, `tst_emulatormanager::stopTerminatesGrandchildren`).
 
 ### Input validation and bounded reads
 
@@ -124,8 +125,26 @@ A flood of bad requests is throttled (1 s pause after each invalid request in bo
 ### Privacy and redaction
 
 - No telemetry and no network code: the application links no Qt Network module and opens no sockets; the image runs no network services.
-- Diagnostic reports and the launch history pass every line through `shared::redact()` (`shared/src/Redaction.cpp`): the home directory becomes `~`, `user:pass@` is stripped from URLs, and values of keys named like `password`, `token`, `secret` or `key` become `***`. Reports are capped at 512 KiB, written 0600, newest 10 kept (`apps/system/src/DiagnosticReport.cpp`). Tested: `tst_redaction`, `tst_diagnosticreport` (both `security`).
+- Diagnostic reports and the launch history pass every line through `shared::redact()` (`shared/src/Redaction.cpp`):
+  - the home directory becomes `~` (whole path components only), and `user:pass@` is stripped from URLs;
+  - values of keys whose name contains `password`, `passwd`, `passphrase`, `token`, `secret`, `credential`, `apikey` or `cookie`, or has one of the words `key`, `keys`, `pass`, `pwd`, `auth`, `authorization`, `session`, `sessionid`, `sid` or `bearer` (split at non-letters and camelCase humps, so `api_key`, `apiKey`, `session_id` and `--auth` match but `monkey`, `author`, `bypass` and `sessions` do not) become `***` in `k=v`, `k: v`, JSON `"k": "v"`, `--flag=v` and `--flag v` forms (quoted flag values keep their quotes);
+  - the whole value of `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` header lines, and `Bearer <token>` anywhere, become `***`.
+
+  This is pattern-based: a secret in a form it does not recognise (for example a bare token with no key name) is not masked. Reports are capped at 512 KiB, written 0600, newest 10 kept (`apps/system/src/DiagnosticReport.cpp`). Tested: `tst_redaction` (incl. the extended key names, command-line flags and headers), `tst_diagnosticreport` (both `security`).
+- The recovery menu's diagnostics export runs the application's redacting export first; its own boot-state file (and the raw-log fallback when the application cannot run) goes through `nexora_mask_secrets` (`nexora-functions`), a `sed` filter for password/token/secret/key/auth/cookie/session-like `k=v`/`k: v` values, URL credentials and bearer tokens, plus `/home/nexora` → `~` ([recovery.md](recovery.md#recovery-menu)). It is coarser than `shared::redact()`.
 - `gameDetails()` returns the game path redacted (`apps/console-ui/src/LibraryController.cpp`, tested in `tst_uicontext`).
+
+### Root helper hardening
+
+`nexora-updated`, `nexora-bootok` and the recovery menu (`rootfs-overlay/usr/libexec/nexora/`):
+
+- **No install during a trial boot.** `nexora-updated` refuses a request while `nexora_try` is set or an update record exists and the running slot is not the confirmed one, so the only known-good slot is never overwritten.
+- **One descriptor for the image.** The image must be a regular file and not a symlink; it is opened once (fd 4) and the verifier and `dd` read it through `/proc/self/fd/4`, so swapping files in the user-writable bundle directory after verification has no effect. The written slot is re-hashed anyway.
+- **Bounded reads.** Every read of a requester-controlled file is bounded in time (open 10 s via a watchdog, manifest copies 10 s, verification 15 min, writing 30 min, re-hash 15 min; `nexora_run_bounded`), so a FIFO or a stalled file system cannot hang the daemon.
+- **Validated grubenv updates.** `grubenv` is replaced via a temporary copy that is checked to be a complete 1024-byte environment block, then renamed, and `grubenv.bak` is refreshed; GRUB and the helpers fall back to `grubenv.bak` if `grubenv` is damaged; the recovery menu can recreate both ("Repair boot environment").
+- **Stricter boot confirmation.** `nexora-bootok` confirms a trial slot only if the UI stayed up for the whole 45 s window, with an unchanged UI start counter and supervisor PID.
+
+Tested on the build host against scratch files only (`test_update_helper`).
 
 ### Removable media and disappearing mounts
 
@@ -140,10 +159,10 @@ A flood of bad requests is throttled (1 s pause after each invalid request in bo
 - **Development root access.** The image's root password is empty and logins on ttyS0 and tty2 are always enabled (by design for recovery); the GRUB menu is not password-protected, so kernel arguments can be edited at boot. Set a root password before distributing an image ([buildroot.md](buildroot.md#start-up-design-and-recovery-access)).
 - **Update keys are only as strong as their storage.** Whoever obtains a release private key can sign updates that every image trusting the matching public key will install. Rotation and revocation require shipping an update signed by a still-trusted key; there is no separate revocation list and no hardware-backed key storage.
 - **UI and emulators run as the same user.** A compromised emulator can read and modify all user data and use both FIFOs exactly as the UI can. Emulators are not sandboxed (no namespaces, seccomp or separate users).
-- **Rich text in titles.** QML `Text` elements use the default `Text.AutoText` format; a game file name that Qt's heuristic treats as rich text (for example one containing HTML tags) is rendered styled. No network is involved, but display spoofing of a title is possible.
 - **Logs on the image are volatile.** The supervisor passes `--log-file /var/log/nexora/console-ui.log`, and `/var/log` is tmpfs, so logs are lost on reboot unless a diagnostics report was exported to the data partition first.
 - **Same-version or downgrade bundles** are refused, but there is no protection against a validly signed, *newer* bundle being installed by anyone with access to the update FIFO (which includes a compromised UI). That is by design: authorization is "signed by the release key", not "requested by the owner".
-- **Unverified on hardware.** The root helpers were tested only on the build host against scratch files; GRUB's boot counting was only syntax-checked with `grub-script-check`.
+- **Redaction is pattern-based.** Secrets in a form the patterns do not recognise are not masked, and the recovery menu's `sed` filter is coarser than the application's redaction; read a report before sharing it.
+- **Unverified on hardware.** The root helpers were tested only on the build host against scratch files; GRUB's boot counting and the `grubenv.bak` fallback were only syntax-checked with `grub-script-check`.
 
 ## Reporting
 

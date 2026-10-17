@@ -31,7 +31,6 @@ These items turn "implemented" into "verified" and are the precondition for a fi
 | Emulator definitions on the image | live on the root slot, so hand-added ones are lost after an update | read additional definitions from the data partition (root-owned or validated) |
 | Data partition | fixed 1 GiB | grow to fill the disk on first boot |
 | Logs on the image | tmpfs | keep a bounded log on the data partition |
-| UI text | default `Text.AutoText` renders rich text from file names | force `Text.PlainText` for user/file-derived text |
 | Security | no Secure Boot, no disk encryption, development root password, emulators share the UI user | signed boot chain; set a root password in release images; emulator sandboxing |
 | Updates | local bundles only; no delta updates; ESP/GRUB never updated | network delivery (would need a network stack and a policy), ESP update path |
 | Audio/display | output selection and display/mode selection are read-only | real device selection where the stack supports it |

@@ -33,7 +33,7 @@ graph TD
     s90 -->|default| session["nexora-session (root)<br/>waits ≤ 10 s for /dev/dri/card*,<br/>runs nexora-console-ui as nexora on tty1"]
     s90 -->|nexora.recovery| recovery["nexora-recovery on tty1"]
     s90 -->|"nexora.noui or NEXORA_AUTOSTART=no"| noui[no UI: console + logins]
-    session --> bootok["<b>S99nexora-bootok</b><br/>confirm trial slot after 45 s if the UI is healthy"]
+    session --> bootok["<b>S99nexora-bootok</b><br/>confirm trial slot if the UI stays up for 45 s"]
     recovery --> bootok
     noui --> bootok
     init -.-> getty["getty on ttyS0 and tty2<br/>(inittab, always)"]
@@ -51,7 +51,8 @@ No step waits indefinitely on optional hardware: the data partition wait is boun
 | Broken preferences | Recovery menu "Reset UI preferences"; or the UI moves an unparsable `settings.json` aside by itself | Partly |
 | Lost or damaged library/settings | Restore a backup (UI, `--restore`, or recovery menu) | No |
 | Data partition missing or unclean | `S01nexora-data` skips it after 10 s or mounts it read-only | Yes (degraded) |
-| Need logs from a failed start | Recovery menu "Export diagnostics", or `/run/nexora-session/session.log` from a shell | No |
+| Need logs from a failed start | copy `/run/nexora-session/session.log` and `/var/log/nexora/console-ui.log` from a shell (recovery menu "Export diagnostics" includes them only when the UI cannot export its own report) | No |
+| `grubenv` damaged (e.g. a power cut while it was rewritten) | GRUB and the helpers fall back to `grubenv.bak`; recovery menu "Repair boot environment" recreates both | Partly |
 
 ## GRUB menu
 
@@ -75,16 +76,19 @@ Shown for 3 seconds at every boot (press an arrow key to stop the countdown):
 | 1) Show slots and versions | running slot, the three grubenv variables, version and build id of both slots (the other slot is mounted read-only to read its `/etc/nexora-release`), whether the data partition is mounted on `/home` |
 | 2) Boot the other (previous) slot | after confirmation sets `nexora_try=<other> nexora_tries=3` and reboots; the other slot becomes the default only after it has started the UI successfully, otherwise the system returns to the current slot |
 | 3) Reset UI preferences | renames `/home/nexora/.config/nexora/settings.json` to `settings.json.reset-<date>`; library, saves and backups untouched |
-| 4) Export diagnostics to /home/nexora | writes `recovery-diagnostics-<timestamp>.txt`: `/etc/nexora-release`, kernel and command line, grubenv, pending update record, mounts, disk usage, last 100 lines of the session and UI logs, last 200 kernel log lines |
+| 4) Export diagnostics to /home/nexora | first runs the console UI's own redacting export as the `nexora` user (`nexora-console-ui --export-diagnostics`, offscreen; the report lands in `/home/nexora/.local/state/nexora/diagnostics/`, see [user-data.md](user-data.md)); then writes `recovery-diagnostics-<timestamp>.txt` with the boot state: `/etc/nexora-release`, kernel and command line, grubenv (or which of `grubenv`/`grubenv.bak` was read), pending update record, mounts, disk usage. Only if the UI's export fails does that file also get the last 100 lines of the session and UI logs and the last 200 kernel log lines. The whole file passes through a masking filter (`nexora_mask_secrets`): values of password/token/secret/key/auth/cookie/session-like fields, credentials in URLs and bearer tokens become `***`, and `/home/nexora` becomes `~` |
 | 5) Restore the latest backup | finds the newest `nexora-backup-*` in `/home/nexora/.local/share/nexora/backups` and runs `nexora-console-ui --restore` on it (offscreen) after confirmation |
-| 6) Reboot | `sync` and reboot |
-| 7) Shell login | `login` (root has no password on the development image) |
+| 6) Repair boot environment | shows the current boot environment (or that `grubenv` and `grubenv.bak` are missing or damaged) and, after confirmation, recreates `grubenv` and `grubenv.bak` from defaults: the running slot becomes the confirmed slot, any pending trial boot is cancelled and the pending update record is removed. Needs a known running slot and the ESP mounted on `/boot/efi` |
+| 7) Reboot | `sync` and reboot |
+| 8) Shell login | `login` (root has no password on the development image) |
 
-Unlike the application's diagnostics export, the recovery export is **not redacted** (it contains raw log lines).
+The masking filter in option 4 is a simple `sed` pattern, weaker than the application's redaction ([security.md](security.md#privacy-and-redaction)); read the file before sharing it. When the UI's export succeeds, its "Recent log" section is the in-memory log of that short headless run only, **not** the log of a failed UI session, and the raw log fallback is skipped; to keep those logs, copy `/var/log/nexora/console-ui.log` and `/run/nexora-session/session.log` to `/home/nexora` from a shell (option 8).
 
 ## Console UI crash loop
 
 `/usr/libexec/nexora/nexora-session` restarts `nexora-console-ui` whenever it exits, with a delay of 1, 2, 4, … up to 30 s; a run of at least 15 s resets the backoff. After **5 consecutive runs shorter than 15 s** it logs the failure and switches to tty2 (`chvt 2`), where a login prompt is waiting. The limits are configurable in `/etc/default/nexora` (`NEXORA_MAX_RAPID_FAILURES`, `NEXORA_RAPID_SECONDS`).
+
+Each restart ("nexora-console-ui exited with status N after Ns; restarting in Ns") and giving up are also written to the kernel log (`/dev/kmsg`), so they appear on the serial console; `scripts/image/qemu-boot-test.sh` watches for them. Before every start the supervisor increments `/run/nexora-session/ui-starts`, which `nexora-bootok` uses to tell a UI that stayed up from one that was restarted.
 
 Where to look:
 
@@ -94,9 +98,9 @@ Where to look:
 | `/var/log/nexora/console-ui.log` | the application log |
 | `/var/log/messages` | syslog: `nexora-session`, `nexora-powerd`, `nexora-updated`, `nexora-bootok`, `nexora-data` |
 
-All three are on tmpfs and are lost at reboot; export diagnostics first (recovery menu option 4, or copy the files to `/home/nexora` from a shell).
+All three are on tmpfs and are lost at reboot; copy the files to `/home/nexora` from a shell first (recovery menu option 4 includes them only when the UI's own export fails; see above).
 
-A crash loop on a slot that is still on trial is not confirmed by `nexora-bootok`, so GRUB rolls back after the remaining tries.
+A crash loop on a slot that is still on trial is not confirmed by `nexora-bootok` (a single restart during its 45 s window is enough to withhold the confirmation), so GRUB rolls back after the remaining tries.
 
 ## Failed update: automatic rollback
 
@@ -104,8 +108,8 @@ See [update-system.md](update-system.md#slots-grubenv-and-boot-counting) for the
 
 1. `nexora-updated` writes the new image to the inactive slot, verifies it, and sets `nexora_try=<new> nexora_tries=3`.
 2. Each boot GRUB decrements the counter before loading the kernel and boots the new slot.
-3. If the UI runs for 45 s, `nexora-bootok` confirms the slot.
-4. If it never does, the fourth boot finds `nexora_tries=0`, clears the trial and boots the confirmed slot; `nexora-bootok` there records "rolled-back" in `last-update.json`, and the UI reports "update to <new> failed and was rolled back to <previous>" (`RecoveryRequired`). Not verified on the image; the recovery menu's slot view and `/var/log/messages` (`nexora-bootok`) show the same information.
+3. If the UI runs for 45 s without being restarted, `nexora-bootok` confirms the slot.
+4. If it never does, the fourth boot finds `nexora_tries=0`, clears the trial and boots the confirmed slot; `nexora-bootok` there records "rolled-back" in `last-update.json`, and the UI reports "The update to <new> did not start correctly, so Nexora OS went back to <previous>" (`RecoveryRequired`; Home card "Update rolled back") until you press **OK** in the update panel. Not verified on the image; the recovery menu's slot view and `/var/log/messages` (`nexora-bootok`) show the same information.
 
 The try is used up as soon as GRUB starts the kernel, so a trial boot that hangs also counts. No hardware watchdog is configured, so a hang needs a manual power cycle.
 
@@ -123,8 +127,13 @@ The try is used up as soon as GRUB starts the kernel, so a trial boot that hangs
 
 ### Preferences make the UI unusable
 
-1. Boot the recovery menu, option 3 (Reset UI preferences), option 6 (Reboot).
+1. Boot the recovery menu, option 3 (Reset UI preferences), option 7 (Reboot).
 2. Alternatively, from a shell: `mv /home/nexora/.config/nexora/settings.json /home/nexora/.config/nexora/settings.json.off`.
+
+### Updates fail with "boot environment (grubenv) not found or damaged"
+
+1. Boot the recovery menu, option 1 to see which slot is running and what the boot environment contains.
+2. Option 6 (Repair boot environment) recreates `grubenv` and `grubenv.bak` with the running slot confirmed and no trial pending; option 7 reboots.
 
 ### Restore user data from a backup
 
@@ -151,6 +160,6 @@ Write a release disk image to the disk again ([installation.md](installation.md)
 - A keyboard is required in the recovery menu and at the GRUB menu; neither works with a controller.
 - No hardware watchdog: a kernel hang during a trial boot needs a manual power cycle (each counts as a try).
 - GRUB and its configuration on the ESP are never updated by bundles; a damaged ESP needs a re-install.
-- The recovery diagnostics export is not redacted; the application's export is.
+- The recovery diagnostics export prefers the application's redacted report; its own boot-state file (and the raw log fallback) is only masked by a `sed` pattern, which is weaker than the application's redaction.
 - Logs are volatile (tmpfs).
 - Nothing on this page has been executed on a booted image; see the verification status at the top.

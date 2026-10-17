@@ -55,7 +55,7 @@ Never commit a private key: the update-keys directory has a `.gitignore`, tests 
 | --- | --- |
 | `nexora-os-VERSION-linux-x86_64.tar.gz` | Release build (`-DBUILD_TESTING=OFF -DNEXORA_BUILD_FAKE_EMULATOR=OFF`) installed with `cmake --install` (prefix `/usr`, shipped relative), plus `README.md` and a `VERSION` file (version and build id) |
 | `nexora-os-VERSION-x86_64-disk.img.xz` | only if a Buildroot image exists in `NEXORA_BR_IMAGES` (default `~/nexora-br/out/images`): the full disk image |
-| `nexora-update-VERSION/` | only with an image: `rootfs.ext4` + generated `manifest.json` (unsigned; notes taken from `docs/release-notes/VERSION.md`, `minimumVersion` from `NEXORA_UPDATE_MINIMUM_VERSION`, default `0.4.0`) |
+| `nexora-update-VERSION/` | only with an image whose `/etc/nexora-release` says `NEXORA_VERSION=VERSION` (otherwise the run fails: "the Buildroot image … is not version VERSION; rebuild it first"): `rootfs.ext4` + generated `manifest.json` (unsigned; notes taken from `docs/release-notes/VERSION.md`, `minimumVersion` from `NEXORA_UPDATE_MINIMUM_VERSION`, default `0.4.0`) |
 | `SHA256SUMS` | SHA-256 of every file produced by that run |
 | `SHA256SUMS.sig` | added by the release workflow (or by hand with `sign-update.sh --file`) |
 
@@ -63,14 +63,15 @@ Never commit a private key: the update-keys directory has a `.gitignore`, tests 
 
 | Script | What it does | Exit status |
 | --- | --- | --- |
-| `scripts/release/make-release.sh VERSION` | Requires a clean work tree (no modified, staged or untracked files) and tag `vVERSION` on `HEAD`; warns if the CMake project version differs. Builds a Release from a `git archive` export of `HEAD` in a fixed work directory (`NEXORA_RELEASE_WORKDIR`, default `/tmp/nexora-os-release`) with `SOURCE_DATE_EPOCH` (default: commit time), `QT_HASH_SEED=0`, `LC_ALL=C`, `TZ=UTC`, `-ffile-prefix-map` and ASLR disabled via `setarch -R` when allowed; writes a deterministic tarball (`tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$SOURCE_DATE_EPOCH`, `gzip -n`), the optional image and bundle, and `SHA256SUMS` | 0 ok, 1 error, 64 usage |
+| `scripts/release/make-release.sh VERSION` | Requires a clean work tree (no modified, staged or untracked files) and tag `vVERSION` on `HEAD`; warns if the CMake project version differs. Builds a Release from a `git archive` export of `HEAD` in a fixed work directory (`NEXORA_RELEASE_WORKDIR`, default `/tmp/nexora-os-release`) with `SOURCE_DATE_EPOCH` (default: commit time), `QT_HASH_SEED=0`, `LC_ALL=C`, `TZ=UTC`, `-ffile-prefix-map` and ASLR disabled via `setarch -R` when allowed; writes a deterministic tarball (`tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$SOURCE_DATE_EPOCH`, `gzip -n`), the optional image and bundle, and `SHA256SUMS`. Before packaging a Buildroot `rootfs.ext4` it runs `check-image-version.sh`, so a stale image is never shipped under a newer version number | 0 ok, 1 error, 64 usage |
+| `scripts/release/check-image-version.sh ROOTFS_EXT4 VERSION` | Reads `/etc/nexora-release` from the ext4 image without mounting it (`debugfs` from e2fsprogs, also looked up in `/sbin` and `/usr/sbin`) and fails unless its `NEXORA_VERSION` equals `VERSION`; also fails when the file or the variable is missing or the file is not ext4 | 0 ok, 1 mismatch or error, 64 usage |
 | `scripts/release/sign-update.sh --key KEY (--bundle DIR \| --file FILE) [--pubkey PEM]` | Signs `DIR/manifest.json` (≤ 64 KiB) → `manifest.json.sig`, or `FILE` → `FILE.sig`, with `openssl pkeyutl -sign -rawin`; checks the key is an Ed25519 PEM private key outside every git work tree (warns if group/others can read it); verifies the 64-byte signature with the derived public key or `--pubkey` before replacing the old signature | 0 ok, 1 error, 64 usage |
 | `scripts/release/verify-release.sh DIR [--pubkey PEM]` | Rejects malformed `SHA256SUMS` lines and unsafe paths (absolute, `..`, `.`), runs `sha256sum --check --strict`; if `SHA256SUMS.sig` exists it must verify with `--pubkey`; a signature without `--pubkey`, or `--pubkey` without a signature, is an error | 0 verified, 1 failed, 64 usage |
 | `scripts/release/check-docs.sh [ROOT]` | Every required document (the 18 MVP 4 documents plus `buildroot.md`, `settings.md`, `development.md`) exists and is non-empty, and every relative Markdown link in `README.md` and `docs/**/*.md` resolves (code blocks, inline code, URLs and in-page anchors are skipped) | 0 ok, 1 problems |
 | `scripts/qmllint.sh BUILD_DIR` | `qmllint` on all QML of the main tree with the build's `qml/` import path; fails on errors only, prints warnings | 0 ok, 1 errors |
 | `scripts/shellcheck.sh` | shellcheck on all shell scripts of the repository (`-s sh` for `#!/bin/sh` scripts) | 0 ok, 1 findings |
 
-`tests/integration/test_release_scripts.sh` (CTest `test_release_scripts`, labels `integration`, `security`) exercises signing a bundle and a `SHA256SUMS` with a throwaway key in `$TMPDIR`, verification, tamper detection, refusal of a key inside a work tree, and `check-docs.sh` on a scratch tree. It does not run `make-release.sh`.
+`tests/integration/test_release_scripts.sh` (CTest `test_release_scripts`, labels `integration`, `security`) exercises signing a bundle and a `SHA256SUMS` with a throwaway key in `$TMPDIR`, verification, tamper detection, refusal of a key inside a work tree, `check-docs.sh` on a scratch tree, and `check-image-version.sh` on scratch ext4 images (matching version, stale version, no `/etc/nexora-release`, not ext4; skipped when `mkfs.ext4`/`debugfs` are missing); it checks that `make-release.sh` calls `check-image-version.sh` but does not run `make-release.sh`.
 
 ## The release workflow
 
@@ -141,7 +142,7 @@ openssl pkeyutl -verify -pubin -inkey nexora-release.pem -rawin -in SHA256SUMS -
 ## Limitations
 
 - No release has been made with this process yet; the workflow has not run on GitHub.
-- The image and update-bundle part of `make-release.sh` is untested (no A/B image existed when it was written).
+- The image and update-bundle part of `make-release.sh` has not been run (no A/B image has been built); only its version check (`check-image-version.sh`, on small scratch ext4 images) is tested in `test_release_scripts`.
 - No package-manager packages (deb/rpm); the tarball is an install tree for `/usr`.
 - `docs/release-notes/` does not exist yet; the first tagged release must add its notes file or the workflow fails.
 - The update bundle is published as an archive of a directory; there is no single-file bundle format.

@@ -100,7 +100,7 @@ None of this has run on a booted image yet <!-- TASK12-RESULT: replace with the 
 | `launch-history.json` | `"version": 1` | moved aside, history starts empty |
 | backup `manifest.json` | `"version": 1` | restore refused |
 | update `manifest.json` | `"format": 1` | bundle rejected |
-| `last-update.json` (written by the image helper) | `"format": 1` | read by `UpdateService::loadPersistedState()` |
+| `last-update.json` (written by the image helper `nexora-bootok`) | `"format": 1` | read at UI start by `UpdateService::loadPersistedState()`; removed only when the user acknowledges the result in the update panel |
 | `systems.json` (built in) | `"version": 1` | catalog load fails |
 
 **Library migration v1 → v2** (`GameDatabase::open()`): before changing anything, the database file is copied (after a WAL checkpoint) to `library.sqlite.v1-backup-<yyyyMMdd-hhmmss>`; then the new columns (`system_id`, `system_override`, `system_candidates`, `title_override`, `notes`, `hidden`) and the version bump are applied in one transaction. If the copy or the transaction fails, `open()` fails, the original database stays usable by the old version and the backup exists. Migrating an already migrated database is a no-op (no second backup). Tested: `tst_librarymigration` (real v1 DDL, favorites and play counts preserved, backup opens as v1, version 99 refused untouched, second open makes no new backup).
