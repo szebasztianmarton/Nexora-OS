@@ -39,6 +39,11 @@ set(NEXORA_QML_FILES
     qml/UpdatePanel.qml
     qml/Backdrop.qml
     qml/GlassSheen.qml
+    qml/GlassSurface.qml
+    qml/GlassEffectFlat.qml
+    qml/GlassEffectGpu.qml
+    qml/GlassGroup.qml
+    qml/GlassGroupBlur.qml
 )
 # Glass theme backdrop glows (scripts/make-glass-glows.py), served next to the QML files.
 set(NEXORA_QML_RESOURCES
