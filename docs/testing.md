@@ -42,14 +42,14 @@ tests/
   qml/                   Qt Quick Test runner (tst_console_qml) + tst_*.qml  (labels integration;GUI)
   system/                image helper checks, registered only when host tools exist (label system)
   support/               UpdateBundleFixture: signed test bundles and keys
-  fixtures/              fake-emulator/, sysroot/ (fake /proc and /sys for hardware info)
+  fixtures/              fake-emulator/, virtual-pad/ (nexora-virtual-pad, uinput profiles), sysroot/ (fake /proc and /sys for hardware info)
 buildroot-external/tests/test-update-helper.sh   run by the system test test_update_helper
 ```
 
 | Label | Tests | Meaning |
 | --- | --- | --- |
 | `unit` | 27 | isolated logic |
-| `integration` | 11 | real processes, databases, QML, shell scripts |
+| `integration` | 12 | real processes, databases, QML, shell scripts, virtual controllers (uinput) |
 | `system` | 3 | image helpers, GRUB script syntax, image shell scripts (need `bash`, `grub-common`, `shellcheck`). `ctest -L system` runs 4, because CTest adds the fixture `tst_updateservice` that writes the bundles for `test_update_helper` |
 | `security` | 9 (also in unit/integration) | path traversal and escapes, redaction, signature/manifest/checksum rejection: `tst_libraryscanner`, `tst_redaction`, `tst_diagnosticreport`, `tst_updatemanifest`, `tst_signatureverifier`, `tst_backupservice`, `tst_updateservice`, `test_update_tool`, `test_release_scripts` |
 
@@ -81,7 +81,7 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | `tst_launchhistory` | 50-record bound newest-first, 4 KiB stderr tail, home path redacted, corrupt file moved aside, only the title stored |
 | `tst_emulatorlistmodel` | model roles, status updates, lookup by id |
 | `tst_systemlistmodel` | per-system game/emulator counts; "Other" bucket only when non-empty; unchanged systems update in place (no model reset) |
-| `tst_gamepadnavigator` | button → action mapping, dead-zone press/release thresholds and clamping, hysteresis, auto-repeat, OS key-repeat ignored for Confirm/Back, Select+Start chord, Start hold (quick menu), per-device state, evdev code mapping |
+| `tst_gamepadnavigator` | button → action mapping, dead-zone press/release thresholds and clamping, hysteresis, auto-repeat, OS key-repeat ignored for Confirm/Back, Select+Start chord, Start hold (quick menu), per-device state, evdev code mapping and layouts (Xbox labels, joystick-class pads) |
 | `tst_inputcontroller` | action → key delivery, suspension, capture, chord and Guide reported while suspended, device list and connect/disconnect signals, test mode (raw events, no navigation, hold Back 2 s to exit) |
 | `tst_buttonmapping` | default mapping, validation, swaps, fallbacks |
 | `tst_libraryquery` | sorting, filters incl. `systemId`, the `@other` filter for games without a system, and `Missing`, search incl. edited titles and system names |
@@ -98,7 +98,7 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | `tst_updatemanifest` (security) | every malformed manifest case (unknown key, path in file name, uppercase/short hash, size 0, format 2, long notes, > 64 KiB, …) |
 | `tst_signatureverifier` (security) | Ed25519 verify, tampered message/signature, wrong size, zero keys fail closed, RSA key rejected, second of two keys |
 
-### Integration (11)
+### Integration (12)
 
 | Test | Covers |
 | --- | --- |
@@ -108,6 +108,7 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | `tst_uicontext` | the real backend graph: settings and library persist across two instances on the same data layout, removed game stays removed after restart, `gameDetails()` keys and redacted path, backup/restore round trip through the controller with settings re-applied, remapping, profiles, game options, missing games, an update record from the boot shown at startup, `start()` creates the update state directory, default emulator validated, failed edits emit notices |
 | `tst_updatecontroller` | `supported` false on desktop / true with `NEXORA_UPDATE_TEST=1`; check → verify → ready; dismissing a rollback with `acknowledgeLastResult()` |
 | `tst_qmlsmoke` | the real `Main.qml` against a real `UiContext`, driven by key events at **1280×720 and 1920×1080**: tutorial, tabs, search/launch/favorite, emulators and profiles, game options, settings volume and remap, game bar, all settings sections with keys only, high contrast + reduced motion, rolled-back update card and its dismissal, default-emulator rows keep focus, modal keys do not leak, Settings action feedback, stop from the running overlay asks first, layout at 150 % scale, "Other" and an empty system in the Games filter, game bar Restart/Power off ask first, lazy hardware probe, Back from a page to the tab bar, a file name with HTML tags shown literally on tiles and in the details; any QML warning fails |
+| `tst_evdevhotplug` | virtual controllers through `/dev/uinput` (profiles shared with `nexora-virtual-pad`): each family of [linux_gamepad_drivers.md](linux_gamepad_drivers.md) hot-plugged into a running evdev backend, every button arrives at its position, D-pad, two pads, replug, keyboard and motion sensor ignored; skipped without a writable `/dev/uinput` (CI enables it) |
 | `tst_backupservice` (security) | backup manifest hashes, restore round trip with `.pre-restore-*`, tampered file refused with nothing changed, `../../etc/passwd` entry refused, saves only on request, listing order, multi-file rollback |
 | `tst_updateservice` (security) | update state machine with a freshly signed 3 MiB bundle: happy path, wrong board, not newer, too old, tampered image, cancel during hashing, no FIFO reader, real FIFO and status file → `RestartRequired`, state directory created by `verify()` and no room needed for the image, stale status ignored, fresh status with the same text accepted, `installing` then `ok`, `ok` for another version fails, install timeout, acknowledging a rollback or a completed update, transition table; writes the fixture bundles for the shell tests |
 | `test_update_tool` (security) | `nexora-update-tool verify` accepts the good bundle, rejects the tampered one |
@@ -136,6 +137,8 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | --- | --- |
 | `tst_configloader::reportsUnreadableFiles` | root can read a `chmod 000` file |
 | `tst_libraryscanner::skipsUnreadableEntries` | root can read unreadable entries |
+
+`tst_evdevhotplug` is skipped as a whole (it passes) wherever `/dev/uinput` is not writable, e.g. in containers.
 
 They pass overall when skipped. GitHub-hosted runners run as a non-root user and execute them; the 2026-10-16 container runs did not.
 

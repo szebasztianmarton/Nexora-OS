@@ -2,7 +2,7 @@
 
 Nexora is meant to be used with a game controller only. This page describes how gamepad input reaches the UI, which controllers are expected to work, how buttons are mapped and remapped, and how to test with real hardware.
 
-**Test status (MVP 4, 0.4.0):** no physical controller has been tested with either backend, on a desktop or on the image. Everything below is implemented and covered by unit and UI tests on the mapping and navigation logic (`tst_gamepadnavigator`, `tst_buttonmapping`, `tst_inputcontroller`, plus `tst_appcontroller`/`tst_uicontext` for the chord, disconnect notice and remapping, and the QML tests `tst_navigation.qml`, `tst_quickmenu.qml` for controller-only operation with synthesized keys), but the device handling of the evdev and SDL3 backends has only been exercised without devices. The SDL3 backend is compiled and its tests run in the `build-sdl3` CI job. Use the [manual test checklist](#manual-test-checklist) when testing real pads.
+**Test status (MVP 4, 0.4.0):** no physical controller has been tested with either backend, on a desktop or on the image. Hotplug and the button layouts of the evdev backend are tested with virtual uinput controllers that reproduce the main driver families (`tst_evdevhotplug`, [Testing without a controller](#testing-without-a-controller)). Everything below is implemented and covered by unit and UI tests on the mapping and navigation logic (`tst_gamepadnavigator`, `tst_buttonmapping`, `tst_inputcontroller`, plus `tst_appcontroller`/`tst_uicontext` for the chord, disconnect notice and remapping, and the QML tests `tst_navigation.qml`, `tst_quickmenu.qml` for controller-only operation with synthesized keys), but the device handling of the evdev and SDL3 backends has only been exercised without devices. The SDL3 backend is compiled and its tests run in the `build-sdl3` CI job. Use the [manual test checklist](#manual-test-checklist) when testing real pads.
 
 Code: `apps/console-ui/src/input/`.
 
@@ -20,6 +20,7 @@ Code: `apps/console-ui/src/input/`.
 - [While an emulator runs](#while-an-emulator-runs)
 - [Multiple controllers and disconnects](#multiple-controllers-and-disconnects)
 - [Known limitations](#known-limitations)
+- [Testing without a controller](#testing-without-a-controller)
 - [Manual test checklist](#manual-test-checklist)
 - [Planned](#planned)
 
@@ -65,7 +66,17 @@ Only one backend runs at a time. The Diagnostics tab shows the backend name, its
 Built whenever `linux/input.h` is available.
 
 - Reads `/dev/input/event*` directly, non-blocking.
-- **Device filter:** only devices advertising `BTN_GAMEPAD` are kept open; keyboards, mice, power buttons and similar are closed again immediately. Joysticks that advertise only `BTN_JOYSTICK`/`BTN_TRIGGER` codes are therefore not used (expected; not tested).
+- **Device filter:** kept open are gamepads (`BTN_GAMEPAD`) and joystick-class devices (numbered buttons `BTN_TRIGGER` … `BTN_BASE4` plus `ABS_X`/`ABS_Y`: generic USB pads, the Logitech Dual Action / RumblePad 2, wheels, flight sticks). Keyboards, mice, touchpads, power buttons and motion sensor nodes (`INPUT_PROP_ACCELEROMETER`) are closed again immediately.
+- **Layout correction:** each device gets a layout from its kernel driver (sysfs) and vendor id, logged on connect (`evdev: <name> [vvvv:pppp] driver <driver>, layout <layout>`):
+
+| Layout | Devices | Effect |
+| --- | --- | --- |
+| `positional` | hid-playstation, hid-sony, hid-nintendo, hid-wiimote, generic HID gamepads (8BitDo, …) | kernel codes as they are |
+| `xbox-labels` | driver `xpad` (all Xbox-compatible USB pads and the Xbox 360 wireless receiver), `hid-steam`, any Microsoft (`045e`) or Valve (`28de`) device | `BTN_X` → `west`, `BTN_Y` → `north` (these drivers report the Xbox X/Y labels, which the kernel defines as `BTN_NORTH`/`BTN_WEST`) |
+| `joystick` | joystick-class devices | button 1 `west`, 2 `south`, 3 `east`, 4 `north`, 5/6 `l1`/`r1`, 9 `select`, 10 `start` (Logitech Dual Action order, from SDL's gamecontrollerdb) |
+| `joystick-playstation` | DragonRise "USB Gamepad" `0079:0006` | button 1 `north`, 2 `east`, 3 `south`, 4 `west`, 5/6 `l1`/`r1`, 9 `select`, 10 `start` |
+
+  Joystick-class pads whose buttons follow another order (cheap SNES/Saturn-style pads, arcade sticks in D-input mode) may have their face buttons in the wrong place; remap from the settings screen.
 - **Not grabbed:** other programs (including a running emulator) receive the same events. This is why navigation is [suspended while an emulator runs](#while-an-emulator-runs).
 - **Codes used** (kernel gamepad codes, see [Button names](#button-names-and-controller-layouts)):
 
@@ -84,7 +95,7 @@ Built whenever `linux/input.h` is available.
 Kernel auto-repeat events (value 2) are ignored; the navigator does its own repeat. After `SYN_DROPPED` the device's state is reset and events are ignored until the next `SYN_REPORT`.
 
 - **Permissions:** the user needs read access to `/dev/input/event*`, normally via the `input` group (`sudo usermod -aG input $USER`, then log in again). If no gamepad could be opened and some nodes were refused, the status reads "No gamepad readable: N of M input devices in /dev/input are not accessible (permission denied). Add your user to the 'input' group …". On the Buildroot image the `nexora` user is in `input` and a udev rule sets `/dev/input/event*` to `root:input 0660` ([buildroot.md](buildroot.md#users-and-permissions)). Nexora refuses to run as root by default.
-- **Hotplug:** `/dev/input` is watched (`QFileSystemWatcher`); changes are debounced by 500 ms and new event nodes are probed. A read error (e.g. `ENODEV` on unplug) closes the device.
+- **Hotplug:** `/dev/input` is watched (`QFileSystemWatcher`); changes are debounced by 500 ms and new event nodes are probed. A freshly created node is `root:root 0600` until udev applies the `input` group, so nodes refused with a permission error are tried again every second, up to 5 times after each change. A read error (e.g. `ENODEV` on unplug) closes the device. On the image the kernel driver is a module that eudev loads by modalias when the controller is plugged in ([which controllers](linux_gamepad_drivers.md#támogatás-a-nexora-os-ben)). Tested with virtual controllers: `tst_evdevhotplug` (below).
 
 ### SDL3 (optional)
 
@@ -114,7 +125,7 @@ Buttons are named by **position**, not by the label printed on them, because lab
 
 So with the default mapping, "confirm" is Cross on PlayStation and **B** on Nintendo-layout pads (the bottom button). 8BitDo pads expose different layouts depending on their mode (X-input, D-input, Switch, macOS); the column above assumes X-input mode, where they appear as an Xbox pad with Nintendo-style labels.
 
-Known risk (unverified): the kernel defines `BTN_NORTH` and `BTN_WEST` as aliases of `BTN_X` and `BTN_Y`. Drivers that report the *label* codes `BTN_X`/`BTN_Y` for the *Xbox* X (left) and Y (top) buttons would make `west` and `north` appear swapped under evdev. SDL3 corrects such differences through its database. If you see this on real hardware, remap `favorite`/`search` or report it.
+The kernel defines `BTN_NORTH` and `BTN_WEST` as aliases of `BTN_X` and `BTN_Y`. `xpad` and `hid-steam` report the *label* codes `BTN_X`/`BTN_Y` for the Xbox X (left) and Y (top) buttons (checked in the Linux 6.12 sources), so the evdev backend swaps them back for these devices (layout `xbox-labels`, [evdev](#evdev-default-on-linux)). SDL3 corrects such differences through its database.
 
 ## Default mapping
 
@@ -250,12 +261,35 @@ Editing a game's title and notes works with the controller through the on-screen
 - No rumble, battery level, LEDs, gyro or touchpad.
 - Triggers, right stick, L3/R3 and paddles are not used.
 - No per-controller mapping; one mapping for all pads.
-- evdev uses the kernel's codes as-is (no correction database): pads with non-standard drivers may have swapped or missing buttons; generic HID pads without `BTN_GAMEPAD` are ignored.
+- evdev corrects only the families in the layout table above (no full correction database): joystick-class pads in a different button order and generic HID pads with unusual button numbering may have swapped or missing buttons.
+- Bluetooth controllers are not supported on the image (no Bluetooth stack or pairing screen); Wii Remotes, Joy-Cons and the Switch Online pads only work over Bluetooth. Out-of-tree drivers (`xone` for the Xbox Wireless Adapter, `xpadneo`, the community T150 driver) are not included.
 - SDL3 is not available on the Buildroot image.
 - The input backend cannot be switched without a restart.
 - The chord and Start-hold durations (1 s) and the repeat timings are fixed; only the dead zone is configurable.
 - Search and library-folder entry need a keyboard; the recovery menu and GRUB menu need a keyboard.
 - Devices are not grabbed while an emulator runs.
+
+## Testing without a controller
+
+`nexora-virtual-pad` (built with the tests, `build/<preset>/bin/`) plugs a virtual controller into the machine through Linux uinput. Its profiles reproduce the families of [linux_gamepad_drivers.md](linux_gamepad_drivers.md) with the ids and key codes their real drivers send: `xbox360`, `xbox-series`, `steam`, `dualsense`, `dualshock4`, `switch-pro`, `8bitdo-pro2`, `dual-action`, `dragonrise`, `wheel` (`--list`). It needs write access to `/dev/uinput`, and the console UI needs read access to the created node:
+
+```sh
+sudo modprobe uinput
+sudo chmod 0666 /dev/uinput            # until the next reboot; or a udev rule
+build/debug/bin/nexora-console-ui --windowed --input-backend evdev &
+build/debug/bin/nexora-virtual-pad --profile dualsense
+```
+
+The pad stays plugged in until stdin closes. Type a button by position (`south`, `east`, `west`, `north`, `l1`, `r1`, `select`, `start`, `guide`), a direction (`up`, `down`, `left`, `right`), `hold`/`release BUTTON` for chords (e.g. `hold select`, `start`, `release select`), `unplug` and `plug` to test hotplug, or `quit`. Whether the user running the UI can read the new node depends on the desktop's udev rules (`input` group); the evdev status on the System tab says when it cannot.
+
+**Automated:** `tst_evdevhotplug` plugs every profile into a running `EvdevGamepadBackend`, presses each button and checks the position that arrives, the D-pad, two pads at once, replugging, and that a keyboard and a motion sensor node are ignored. It is skipped where `/dev/uinput` is not writable; CI loads `uinput` and allows the test's own devices with a udev rule ([ci.yml](../.github/workflows/ci.yml)).
+
+**On the image in QEMU** (not yet run; the A/B image has not been built, see [buildroot.md](buildroot.md#running-in-qemu)): start QEMU with a monitor (`-monitor unix:/tmp/nexora-mon,server,nowait`) and hot-plug the controller while the UI runs:
+
+- a real USB pad: `device_add usb-host,vendorid=0x045e,productid=0x028e,id=pad1` (needs `-device qemu-xhci` and access to the host's `/dev/bus/usb` node); `device_del pad1` unplugs it. The guest sees the real device, so its own driver and layout are used.
+- a virtual pad, no hardware: run `nexora-virtual-pad` on the host, find its node (`/dev/input/by-id/` or the `eventN` under the printed sysfs path), then `device_add virtio-input-host-pci,evdev=/dev/input/eventN,id=pad1`. The guest gets a `virtio_input` device with the same name, ids and codes (needs `CONFIG_VIRTIO_INPUT`, in [`linux.fragment`](../buildroot-external/board/nexora-x86_64/linux.fragment)); the layout is then chosen from the vendor id, as for a Bluetooth pad. Commands typed into `nexora-virtual-pad` arrive in the VM.
+
+Send the monitor commands with `echo 'device_add …' | socat - UNIX-CONNECT:/tmp/nexora-mon`. Check the serial log for `Gamepad connected:` and the `evdev: … layout …` line.
 
 ## Manual test checklist
 
@@ -283,6 +317,7 @@ Run on a desktop with the debug build (`build/debug/bin/nexora-console-ui --wind
 ## Planned
 
 - Testing with real Xbox, PlayStation, Nintendo and 8BitDo pads and recording the results in this document.
-- Optional correction database for evdev, or SDL3 on the image once Buildroot packages it.
+- A fuller correction database for evdev (beyond the layout families above), or SDL3 on the image once Buildroot packages it.
+- Bluetooth: BlueZ on the image and a controller pairing screen.
 - Per-controller mappings, configurable chord and repeat timings.
 - On-screen keyboard for search and folder entry; a folder browser.

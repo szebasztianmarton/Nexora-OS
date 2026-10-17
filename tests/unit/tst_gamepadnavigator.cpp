@@ -65,6 +65,9 @@ private slots:
     void rawEventsAreReportedBeforeThresholds();
 #ifdef NEXORA_HAVE_EVDEV
     void evdevKeyMapping();
+    void evdevLayoutSelection();
+    void evdevXboxLabelsSwapWestAndNorth();
+    void evdevJoystickLayouts();
     void evdevAbsMapping();
     void normalizeAxisValues();
 #endif
@@ -292,6 +295,77 @@ void TestGamepadNavigator::evdevKeyMapping()
     QCOMPARE(evdevKeyToButton(BTN_TL), std::optional(GamepadButton::L1));
     QCOMPARE(evdevKeyToButton(BTN_TR), std::optional(GamepadButton::R1));
     QCOMPARE(evdevKeyToButton(BTN_TL2), std::nullopt);
+}
+
+// Layout per family of docs/linux_gamepad_drivers.md; the driver names are the kernel's
+// (drivers/input/joystick/xpad.c, drivers/hid/hid-*.c).
+void TestGamepadNavigator::evdevLayoutSelection()
+{
+    using nexora::input::EvdevLayout;
+    using nexora::input::evdevLayout;
+    // Xbox family: xpad (any vendor, e.g. PDP 0e6f), Microsoft over Bluetooth, Steam.
+    QCOMPARE(evdevLayout(true, 0x0e6f, 0x0113, QStringLiteral("xpad")), EvdevLayout::XboxLabels);
+    QCOMPARE(evdevLayout(true, 0x045e, 0x0b13, QStringLiteral("hid-generic")), EvdevLayout::XboxLabels);
+    QCOMPARE(evdevLayout(true, 0x045e, 0x028e, QString()), EvdevLayout::XboxLabels); // uinput: no driver
+    QCOMPARE(evdevLayout(true, 0x28de, 0x1102, QStringLiteral("hid-steam")), EvdevLayout::XboxLabels);
+    // Drivers that already report positions.
+    QCOMPARE(evdevLayout(true, 0x054c, 0x0ce6, QStringLiteral("playstation")), EvdevLayout::Positional);
+    QCOMPARE(evdevLayout(true, 0x054c, 0x0268, QStringLiteral("sony")), EvdevLayout::Positional);
+    QCOMPARE(evdevLayout(true, 0x057e, 0x2009, QStringLiteral("nintendo")), EvdevLayout::Positional);
+    QCOMPARE(evdevLayout(true, 0x2dc8, 0x6101, QStringLiteral("hid-generic")), EvdevLayout::Positional);
+    // No BTN_GAMEPAD: numbered buttons.
+    QCOMPARE(evdevLayout(false, 0x046d, 0xc216, QStringLiteral("logitech")), EvdevLayout::Joystick);
+    QCOMPARE(evdevLayout(false, 0x044f, 0xb10a, QStringLiteral("thrustmaster")), EvdevLayout::Joystick);
+    QCOMPARE(evdevLayout(false, 0x0079, 0x0006, QStringLiteral("dragonrise")), EvdevLayout::JoystickPlayStation);
+    QCOMPARE(evdevLayout(false, 0x0079, 0x0011, QStringLiteral("hid-generic")), EvdevLayout::Joystick);
+}
+
+// xpad reports the Xbox X (left) button as BTN_X, which the kernel defines as BTN_NORTH.
+void TestGamepadNavigator::evdevXboxLabelsSwapWestAndNorth()
+{
+    using nexora::input::evdevKeyToButton;
+    using nexora::input::EvdevLayout;
+    QCOMPARE(evdevKeyToButton(BTN_X, EvdevLayout::XboxLabels), std::optional(GamepadButton::West));
+    QCOMPARE(evdevKeyToButton(BTN_Y, EvdevLayout::XboxLabels), std::optional(GamepadButton::North));
+    QCOMPARE(evdevKeyToButton(BTN_A, EvdevLayout::XboxLabels), std::optional(GamepadButton::South));
+    QCOMPARE(evdevKeyToButton(BTN_B, EvdevLayout::XboxLabels), std::optional(GamepadButton::East));
+    QCOMPARE(evdevKeyToButton(BTN_MODE, EvdevLayout::XboxLabels), std::optional(GamepadButton::Guide));
+    QCOMPARE(evdevKeyToButton(BTN_TL, EvdevLayout::XboxLabels), std::optional(GamepadButton::L1));
+    // Positional drivers keep the kernel meaning.
+    QCOMPARE(evdevKeyToButton(BTN_NORTH, EvdevLayout::Positional), std::optional(GamepadButton::North));
+    QCOMPARE(evdevKeyToButton(BTN_WEST, EvdevLayout::Positional), std::optional(GamepadButton::West));
+}
+
+// Numbered buttons, after SDL's gamecontrollerdb: Logitech Dual Action (x:b0 a:b1 b:b2 y:b3)
+// and DragonRise "USB Gamepad" (y:b0 b:b1 a:b2 x:b3); both 5/6 shoulders, 9 back, 10 start.
+void TestGamepadNavigator::evdevJoystickLayouts()
+{
+    using nexora::input::evdevKeyToButton;
+    using nexora::input::EvdevLayout;
+    const auto pc = EvdevLayout::Joystick;
+    QCOMPARE(evdevKeyToButton(BTN_TRIGGER, pc), std::optional(GamepadButton::West));
+    QCOMPARE(evdevKeyToButton(BTN_THUMB, pc), std::optional(GamepadButton::South));
+    QCOMPARE(evdevKeyToButton(BTN_THUMB2, pc), std::optional(GamepadButton::East));
+    QCOMPARE(evdevKeyToButton(BTN_TOP, pc), std::optional(GamepadButton::North));
+    QCOMPARE(evdevKeyToButton(BTN_TOP2, pc), std::optional(GamepadButton::L1));
+    QCOMPARE(evdevKeyToButton(BTN_PINKIE, pc), std::optional(GamepadButton::R1));
+    QCOMPARE(evdevKeyToButton(BTN_BASE, pc), std::nullopt); // left trigger
+    QCOMPARE(evdevKeyToButton(BTN_BASE2, pc), std::nullopt); // right trigger
+    QCOMPARE(evdevKeyToButton(BTN_BASE3, pc), std::optional(GamepadButton::Select));
+    QCOMPARE(evdevKeyToButton(BTN_BASE4, pc), std::optional(GamepadButton::Start));
+    QCOMPARE(evdevKeyToButton(BTN_BASE5, pc), std::nullopt);
+
+    const auto ps = EvdevLayout::JoystickPlayStation;
+    QCOMPARE(evdevKeyToButton(BTN_TRIGGER, ps), std::optional(GamepadButton::North));
+    QCOMPARE(evdevKeyToButton(BTN_THUMB, ps), std::optional(GamepadButton::East));
+    QCOMPARE(evdevKeyToButton(BTN_THUMB2, ps), std::optional(GamepadButton::South));
+    QCOMPARE(evdevKeyToButton(BTN_TOP, ps), std::optional(GamepadButton::West));
+    QCOMPARE(evdevKeyToButton(BTN_TOP2, ps), std::optional(GamepadButton::L1));
+    QCOMPARE(evdevKeyToButton(BTN_BASE4, ps), std::optional(GamepadButton::Start));
+
+    // Joystick buttons mean nothing to gamepad layouts.
+    QCOMPARE(evdevKeyToButton(BTN_TRIGGER, EvdevLayout::Positional), std::nullopt);
+    QCOMPARE(evdevKeyToButton(BTN_TRIGGER, EvdevLayout::XboxLabels), std::nullopt);
 }
 
 void TestGamepadNavigator::evdevAbsMapping()

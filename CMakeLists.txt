@@ -89,6 +89,14 @@ if(NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING)
     add_subdirectory(tests/fixtures/fake-emulator)
 endif()
 
+if((NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING) AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include(CheckIncludeFileCXX)
+    check_include_file_cxx(linux/uinput.h NEXORA_HAVE_LINUX_UINPUT_H)
+    if(NEXORA_HAVE_LINUX_UINPUT_H)
+        add_subdirectory(tests/fixtures/virtual-pad)
+    endif()
+endif()
+
 configure_file(config/emulators/example.json ${NEXORA_BUILD_CONFIG_DIR}/example.json COPYONLY)
 install(FILES config/emulators/example.json
         DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)

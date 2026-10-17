@@ -2,6 +2,29 @@
 
 > **Megjegyzés:** Nincs hivatalos, globális „top 100 leggyakoribb gamepad” rangsor. Ez a lista a Linuxon leggyakrabban használt, széles körben elterjedt kontrollereket tartalmazza. A legtöbb modern gamepad HID-eszköz, ezért sok modell a beépített `hid-generic` driverrel is működik.
 
+## Támogatás a Nexora OS-ben
+
+A Nexora image kernele ([`linux.fragment`](../buildroot-external/board/nexora-x86_64/linux.fragment)) a lista összes kernelben lévő USB-s driverét modulként tartalmazza. Bedugáskor az eudev a modalias alapján betölti a megfelelő modult, a konzol UI pedig a `/dev/input` figyelésével kb. egy másodpercen belül felismeri a kontrollert, és kihúzáskor el is engedi ([controller-support.md](controller-support.md#evdev-default-on-linux)). A gombok helyét driverenként javítja (pl. az `xpad` X/Y cseréjét).
+
+| Csoport (sorszám) | USB-s bedugás után | Megjegyzés |
+|---|---|---|
+| Xbox-kompatibilis, `xpad` (1–12, 14–20) | működik | gombkiosztás: `xbox-labels`; az Xbox One/Series padok Bluetooth-on nem |
+| Xbox Wireless Adapter, `xone` (13) | nem | kernelen kívüli driver, nincs az image-ben |
+| PlayStation, `hid-sony` / `hid-playstation` (21, 23–27) | működik | DualShock 3: csak USB-n; Bluetooth-on nem |
+| PS Move (28–29) | részben | csak USB-n, navigációra nem tesztelt |
+| Hori / Nacon / Razer, `hid-generic` (22, 30–35) | működik, ha gamepadként jelentkezik | a „joystick” módú eszközök gombjai eltérhetnek; átállítható a beállításokban |
+| Wii, `hid-wiimote` (36–39) | nem | csak Bluetooth-on csatlakoznak |
+| Switch Pro, `hid-nintendo` (40) | működik | |
+| Joy-Con, Switch Online kontrollerek (41–46) | nem | csak Bluetooth-on csatlakoznak |
+| GameCube-adapter, Hori Switch padok (47–50) | működik | Mayflash adapter: `hid-mf` |
+| Steam Controller / Steam Deck, `hid-steam` (51–52) | működik | kiosztás: `xbox-labels` |
+| Logitech padok, kormányok, botok (53–65) | működik | Dual Action / RumblePad 2: `joystick` kiosztás; F310/F710 X módban `xpad` |
+| Thrustmaster (66–75) | működik (alap funkciók) | T150: a teljes force feedbackhez közösségi driver kellene, nincs az image-ben |
+| 8BitDo, fightstickek, egyéb (76–99) | működik | X-input módban `xpad`, D-input módban `hid-generic` |
+| Generikus USB HID gamepad (100) | működik | DragonRise „USB Gamepad” (0079:0006): `joystick-playstation` kiosztás |
+
+Bluetooth-támogatás (BlueZ és párosító képernyő) még nincs az image-ben. Valódi kontrollert eddig egyik csoportból sem teszteltünk; a bedugást és a gombkiosztást virtuális kontrollerekkel teszteljük (`tst_evdevhotplug`). Hardver nélküli kipróbálás, akár QEMU-ban futó image-en is: [controller-support.md](controller-support.md#testing-without-a-controller).
+
 ## Xbox-kompatibilis kontrollerek
 
 | # | Kontroller | Linux driver | Linux driver link |

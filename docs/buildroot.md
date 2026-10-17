@@ -183,7 +183,7 @@ Requirements: an x86-64 PC booting in **UEFI** mode (legacy BIOS/CSM boot is not
 | Qt | Qt 6.9.1: `qt6base` (GUI, EGLFS, OpenGL ES 2, fontconfig, HarfBuzz, PNG, SQL + SQLite), `qt6declarative` (Quick, QuickControls2), `qt6shadertools`; default QPA `eglfs`, used with the `eglfs_kms` integration |
 | Fonts | DejaVu (all variants) via fontconfig |
 | Firmware | `linux-firmware`: i915, xe, amdgpu |
-| Kernel drivers | DRM: simpledrm (built in, boot framebuffer), i915, xe, amdgpu (+DC), virtio-gpu, bochs (modules). Input: evdev, USB HID, hid-generic, xpad, hid-sony, hid-playstation, hid-nintendo, hid-microsoft. USB: xHCI/EHCI/OHCI/UHCI, usb-storage, UAS. Storage: AHCI, NVMe, virtio-blk/scsi. Sound: snd-hda-intel (+ Realtek/HDMI/generic codecs), snd-usb-audio (modules). Serial 8250 console. |
+| Kernel drivers | DRM: simpledrm (built in, boot framebuffer), i915, xe, amdgpu (+DC), virtio-gpu, bochs (modules). Input: evdev, joydev, USB HID, hid-generic, xpad, hid-sony, hid-playstation, hid-nintendo, hid-microsoft, hid-steam, hid-logitech (+ hid-logitech-hidpp, wheels), hid-thrustmaster + hid-tmff, hid-dr, hid-gaff, hid-sjoy, hid-pl, hid-zpff, hid-betopff, hid-google-stadiaff, hid-mf, virtio-input (modules, loaded on plug-in; [controller list](linux_gamepad_drivers.md#támogatás-a-nexora-os-ben)). USB: xHCI/EHCI/OHCI/UHCI, usb-storage, UAS. Storage: AHCI, NVMe, virtio-blk/scsi. Sound: snd-hda-intel (+ Realtek/HDMI/generic codecs), snd-usb-audio (modules). Serial 8250 console. |
 | Audio user space | alsa-lib, alsa-utils (`amixer`, `aplay`) |
 
 GPU drivers are modules on purpose: built-in amdgpu/i915 would request their firmware before the root filesystem is mounted. eudev loads them during `S10udevd`, and `S90nexora` waits up to 10 s for `/dev/dri/card*`.

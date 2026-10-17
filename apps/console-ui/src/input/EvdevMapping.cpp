@@ -6,8 +6,67 @@
 
 namespace nexora::input {
 
-std::optional<GamepadButton> evdevKeyToButton(quint16 code)
+namespace {
+
+constexpr quint16 kVendorMicrosoft = 0x045e;
+constexpr quint16 kVendorValve = 0x28de;
+constexpr quint16 kVendorDragonRise = 0x0079;
+constexpr quint16 kProductDragonRiseGamepad = 0x0006;
+
+// Joystick-class pads, after SDL's gamecontrollerdb (Linux entries): buttons 1-4 are the
+// face buttons, 5/6 the shoulders, 7/8 the triggers (unused), 9 Select and 10 Start.
+std::optional<GamepadButton> joystickButton(quint16 code, bool playStationOrder)
 {
+    switch (code) {
+    case BTN_TRIGGER: return playStationOrder ? GamepadButton::North : GamepadButton::West;
+    case BTN_THUMB: return playStationOrder ? GamepadButton::East : GamepadButton::South;
+    case BTN_THUMB2: return playStationOrder ? GamepadButton::South : GamepadButton::East;
+    case BTN_TOP: return playStationOrder ? GamepadButton::West : GamepadButton::North;
+    case BTN_TOP2: return GamepadButton::L1;
+    case BTN_PINKIE: return GamepadButton::R1;
+    case BTN_BASE3: return GamepadButton::Select;
+    case BTN_BASE4: return GamepadButton::Start;
+    default: return std::nullopt;
+    }
+}
+
+} // namespace
+
+EvdevLayout evdevLayout(bool gamepad, quint16 vendor, quint16 product, const QString &driver)
+{
+    if (!gamepad) {
+        return vendor == kVendorDragonRise && product == kProductDragonRiseGamepad ? EvdevLayout::JoystickPlayStation
+                                                                                   : EvdevLayout::Joystick;
+    }
+    if (driver == QLatin1String("xpad") || driver == QLatin1String("hid-steam") || vendor == kVendorMicrosoft
+        || vendor == kVendorValve)
+        return EvdevLayout::XboxLabels;
+    return EvdevLayout::Positional;
+}
+
+QString evdevLayoutName(EvdevLayout layout)
+{
+    switch (layout) {
+    case EvdevLayout::Positional: return QStringLiteral("positional");
+    case EvdevLayout::XboxLabels: return QStringLiteral("xbox-labels");
+    case EvdevLayout::Joystick: return QStringLiteral("joystick");
+    case EvdevLayout::JoystickPlayStation: return QStringLiteral("joystick-playstation");
+    }
+    return {};
+}
+
+std::optional<GamepadButton> evdevKeyToButton(quint16 code, EvdevLayout layout)
+{
+    if (layout == EvdevLayout::Joystick || layout == EvdevLayout::JoystickPlayStation) {
+        if (const auto button = joystickButton(code, layout == EvdevLayout::JoystickPlayStation))
+            return button;
+    } else if (layout == EvdevLayout::XboxLabels) {
+        if (code == BTN_X)
+            return GamepadButton::West;
+        if (code == BTN_Y)
+            return GamepadButton::North;
+    }
+
     switch (code) {
     case BTN_SOUTH: return GamepadButton::South; // == BTN_A
     case BTN_EAST: return GamepadButton::East; // == BTN_B
