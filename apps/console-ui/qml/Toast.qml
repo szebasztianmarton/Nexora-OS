@@ -21,7 +21,8 @@ Rectangle {
     width: Math.min(label.implicitWidth + 56, parent ? parent.width - 64 : 800)
     height: Math.max(48, label.implicitHeight + 24)
     radius: 12
-    color: Theme.surfaceRaised
+    color: Theme.surfaceFloating
+    GlassSheen {}
     border.color: isError ? Theme.danger : Theme.accent
     border.width: 1
     opacity: 0

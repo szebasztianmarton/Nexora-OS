@@ -95,7 +95,8 @@ FocusScope {
         width: Math.min(tutorial.width - Theme.spacing * 4, 760)
         height: content.implicitHeight + Theme.spacing * 4
         radius: Theme.radius * 1.5
-        color: Theme.surface
+        color: Theme.surfaceFloating
+        GlassSheen {}
         border.color: Theme.border
 
         Column {

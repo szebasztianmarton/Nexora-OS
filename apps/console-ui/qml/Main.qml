@@ -27,6 +27,7 @@ ApplicationWindow {
     visible: true
     title: "Nexora OS"
     color: Theme.background
+    background: Backdrop { objectName: "backdrop" }
 
     // Only implemented capabilities get a tab (no Downloads / Imports).
     readonly property var tabs: [{ key: "home", title: "Home" },
@@ -567,12 +568,13 @@ ApplicationWindow {
 
     Component.onCompleted: {
         // Every screen reads these back off Theme; binding them once here keeps the
-        // accessibility settings (high contrast, UI scale, reduced motion) wired to the
+        // look and accessibility settings (theme, UI scale, reduced motion) wired to the
         // whole interface without each screen having to know about SettingsController.
         Theme.userScale = Qt.binding(() => window.settings.uiScale / 100)
         // The layout is designed for 1280x720; larger windows scale up (never down).
         Theme.resolutionScale = Qt.binding(() => Math.max(1, Math.min(window.width / 1280, window.height / 720)))
         Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
+        Theme.glass = Qt.binding(() => window.settings.theme === "glass")
         Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
         // Settings › General › Start screen.
         if (window.settings.startScreen === "games")

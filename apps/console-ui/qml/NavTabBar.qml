@@ -41,7 +41,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: Theme.glassActive ? Theme.surface : Theme.background
     }
     Rectangle {
         anchors.left: parent.left

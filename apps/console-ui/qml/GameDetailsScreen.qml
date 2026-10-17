@@ -114,7 +114,7 @@ FocusScope {
         function onContentChanged() { details.reload() }
     }
 
-    Rectangle { anchors.fill: parent; color: Theme.background }
+    Backdrop { anchors.fill: parent }
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
     // --- Error state: the game is gone (removed elsewhere, library reopened) -------------------

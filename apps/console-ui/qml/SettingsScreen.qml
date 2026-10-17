@@ -307,11 +307,14 @@ FocusScope {
             SettingRow {
                 objectName: "settingTheme"
                 label: "Theme"
-                description: "High contrast uses a pure black background and a yellow focus ring"
-                value: screen.settings.theme === "highContrast" ? "High contrast" : "Dark"
+                description: "Glass: translucent panels over soft light. Dark: solid panels. High contrast: pure black background and a yellow focus ring"
+                readonly property var themes: ["glass", "dark", "highContrast"]
+                readonly property var themeNames: ["Glass", "Dark", "High contrast"]
+                readonly property int themeIndex: Math.max(0, themes.indexOf(screen.settings.theme))
+                value: themeNames[themeIndex]
                 adjustable: true
-                onDecrement: screen.settings.theme = screen.settings.theme === "highContrast" ? "dark" : "highContrast"
-                onIncrement: screen.settings.theme = screen.settings.theme === "highContrast" ? "dark" : "highContrast"
+                onDecrement: screen.settings.theme = themes[(themeIndex + themes.length - 1) % themes.length]
+                onIncrement: screen.settings.theme = themes[(themeIndex + 1) % themes.length]
             }
             SettingRow {
                 objectName: "settingUiScale"

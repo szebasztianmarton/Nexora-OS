@@ -12,6 +12,10 @@ import QtQuick
 //                  1080p screen draws everything 1.5x instead of with 720p-sized text.
 //   scale          userScale x resolutionScale (read-only). Multiplies spacing, typography,
 //                  radii, icon sizes and the game/emulator card grid.
+//   glass          Theme.glass (= settings.theme === "glass", the default). Translucent "glass"
+//                  surfaces over the Backdrop's soft light glows; floating panels (dialogs,
+//                  keyboard, toasts) use the denser surfaceFloating so whatever lies behind them
+//                  never competes with their text. High contrast always wins over glass.
 //   highContrast   Theme.highContrast (= settings.theme === "highContrast"). Swaps the whole
 //                  palette for a pure-black-background / white-text / yellow-focus-ring one;
 //                  every colour that can appear as text keeps a contrast ratio of at least
@@ -26,23 +30,31 @@ QtObject {
     property real resolutionScale: 1.0
     readonly property real scale: userScale * resolutionScale
     property bool highContrast: false
+    property bool glass: false
     property bool reducedMotion: false
+    // Glass look in effect (high contrast replaces it).
+    readonly property bool glassActive: glass && !highContrast
 
     // --- Palette -----------------------------------------------------------------------------
-    readonly property color background: highContrast ? "#000000" : "#0b0d13"
-    readonly property color surface: highContrast ? "#000000" : "#141821"
-    readonly property color surfaceRaised: highContrast ? "#141414" : "#1d2230"
-    readonly property color surfaceHover: highContrast ? "#262626" : "#252b3c"
-    readonly property color border: highContrast ? "#ffffff" : "#2c3244"
-    readonly property color accent: highContrast ? "#ffd400" : "#5b8cff"
-    readonly property color accentSoft: highContrast ? "#4a3d00" : "#263a6b"
+    readonly property color background: highContrast ? "#000000" : glass ? "#070a14" : "#0b0d13"
+    readonly property color surface: highContrast ? "#000000" : glass ? Qt.rgba(1, 1, 1, 0.06) : "#141821"
+    readonly property color surfaceRaised: highContrast ? "#141414" : glass ? Qt.rgba(1, 1, 1, 0.09) : "#1d2230"
+    readonly property color surfaceHover: highContrast ? "#262626" : glass ? Qt.rgba(1, 1, 1, 0.15) : "#252b3c"
+    // Panels that float over other content (dialogs, on-screen keyboard, toasts, update panel):
+    // in glass a dense tinted glass, otherwise the plain surface.
+    readonly property color surfaceFloating: highContrast ? "#000000" : glass ? Qt.rgba(0.10, 0.12, 0.19, 0.90) : "#141821"
+    readonly property color border: highContrast ? "#ffffff" : glass ? Qt.rgba(1, 1, 1, 0.16) : "#2c3244"
+    readonly property color accent: highContrast ? "#ffd400" : glass ? "#6f9bff" : "#5b8cff"
+    readonly property color accentSoft: highContrast ? "#4a3d00" : glass ? Qt.rgba(0.44, 0.61, 1, 0.30) : "#263a6b"
     readonly property color text: highContrast ? "#ffffff" : "#eef1f7"
-    readonly property color textMuted: highContrast ? "#cfcfcf" : "#a2a9bc"
-    readonly property color textFaint: highContrast ? "#b5b5b5" : "#6f778c"
+    readonly property color textMuted: highContrast ? "#cfcfcf" : glass ? "#b6bdce" : "#a2a9bc"
+    readonly property color textFaint: highContrast ? "#b5b5b5" : glass ? "#8c94aa" : "#6f778c"
     readonly property color success: highContrast ? "#00ff6a" : "#3ecf8e"
     readonly property color warning: highContrast ? "#ffa500" : "#f2b84b"
     readonly property color danger: highContrast ? "#ff3b3b" : "#ff6372"
     readonly property color favorite: highContrast ? "#ffd400" : "#ffc94d"
+    // Glass sheen along the top edge of panels and cards (transparent outside glass).
+    readonly property color glassSheen: glassActive ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
     // Dedicated focus-ring colour: equal to accent in the normal theme, but kept separate so
     // a future palette can tune focus visibility without touching the accent colour itself.
     readonly property color focusRing: highContrast ? "#ffd400" : accent
@@ -50,13 +62,13 @@ QtObject {
     // Game bar / quick menu palette: neutral graphite surfaces with light selected buttons in
     // the normal theme, the same black/white/yellow scheme as everything else in high contrast.
     readonly property color overlayScrim: "#000000"
-    readonly property color overlaySurface: highContrast ? "#000000" : "#2a2c30"
-    readonly property color overlayFooter: highContrast ? "#000000" : "#101114"
-    readonly property color overlayTile: highContrast ? "#141414" : "#3c3e42"
-    readonly property color overlayTileHover: highContrast ? "#262626" : "#4a4d53"
+    readonly property color overlaySurface: highContrast ? "#000000" : glass ? Qt.rgba(0.11, 0.12, 0.16, 0.86) : "#2a2c30"
+    readonly property color overlayFooter: highContrast ? "#000000" : glass ? Qt.rgba(0.04, 0.05, 0.08, 0.92) : "#101114"
+    readonly property color overlayTile: highContrast ? "#141414" : glass ? Qt.rgba(1, 1, 1, 0.09) : "#3c3e42"
+    readonly property color overlayTileHover: highContrast ? "#262626" : glass ? Qt.rgba(1, 1, 1, 0.16) : "#4a4d53"
     readonly property color overlaySelected: highContrast ? "#ffd400" : "#e6e6e6"
     readonly property color overlayInk: highContrast ? "#000000" : "#1b1b1b"
-    readonly property color overlayLine: highContrast ? "#ffffff" : "#45484e"
+    readonly property color overlayLine: highContrast ? "#ffffff" : glass ? Qt.rgba(1, 1, 1, 0.16) : "#45484e"
     readonly property color overlayText: "#ffffff"
     readonly property color overlayFocus: highContrast ? "#ffd400" : "#ffffff"
     readonly property color overlayTextSoft: highContrast ? "#ffffff" : "#e6e6e6"
@@ -69,7 +81,7 @@ QtObject {
     readonly property color overlayDanger: highContrast ? "#ff3b3b" : "#a4262c"
     readonly property color overlayDangerSoft: highContrast ? "#ff3b3b" : "#ff99a4"
     readonly property color overlayArmed: highContrast ? "#4a0000" : "#6b1015"
-    readonly property color overlayArtEmpty: highContrast ? "#000000" : "#0d0f14"
+    readonly property color overlayArtEmpty: highContrast ? "#000000" : glass ? Qt.rgba(0, 0, 0, 0.35) : "#0d0f14"
     // Translucent tints for warning panels and badges over artwork.
     readonly property color dangerTint: highContrast ? "#000000" : Qt.rgba(1, 0.39, 0.45, 0.10)
     readonly property color badgeScrim: highContrast ? "#000000" : Qt.rgba(0, 0, 0, 0.6)

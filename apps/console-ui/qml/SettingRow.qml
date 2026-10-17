@@ -44,6 +44,7 @@ Rectangle {
     width: parent ? parent.width : 600
     implicitHeight: Math.max(Theme.rowHeight, texts.implicitHeight + Theme.space5)
     radius: Theme.radiusSmall
+    GlassSheen {}
     color: activeFocus ? Theme.surfaceHover : (mouse.containsMouse ? Theme.surfaceRaised : Theme.surface)
     border.width: activeFocus ? Theme.focusWidth : 1
     border.color: activeFocus ? (armed ? Theme.danger : Theme.focusRing) : Theme.border

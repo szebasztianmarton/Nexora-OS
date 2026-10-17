@@ -245,7 +245,7 @@ private slots:
         QTemporaryDir dir;
         Settings s({{}, dir.filePath(QStringLiteral("user/settings.json"))});
         QVERIFY(s.load());
-        QCOMPARE(s.stringValue(Settings::UiTheme), QStringLiteral("dark"));
+        QCOMPARE(s.stringValue(Settings::UiTheme), QStringLiteral("glass"));
         QCOMPARE(s.intValue(Settings::UiScale), 100);
         QCOMPARE(s.boolValue(Settings::UiReducedMotion), false);
         QCOMPARE(s.stringValue(Settings::UiStartScreen), QStringLiteral("home"));

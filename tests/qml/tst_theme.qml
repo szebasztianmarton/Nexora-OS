@@ -19,6 +19,7 @@ Item {
         }
         return null
     }
+    Backdrop { id: backdrop; anchors.fill: parent; z: -1 }
     Row {
         NxButton { id: primary; kind: "primary"; text: "Play" }
         NxButton { id: normal; text: "Other" }
@@ -33,6 +34,7 @@ Item {
             Theme.userScale = 1.0
             Theme.resolutionScale = 1.0
             Theme.highContrast = false
+            Theme.glass = false
             Theme.reducedMotion = false
         }
 
@@ -79,6 +81,41 @@ Item {
             compare(Theme.background, "#000000")
             compare(Theme.text, "#ffffff")
             compare(Theme.focusRing, "#ffd400")
+        }
+
+        // Glass: translucent surfaces and a dense floating-panel tint; high contrast replaces
+        // it completely (opaque black surfaces, no glows or sheen).
+        function test_glassPaletteIsTranslucentAndYieldsToHighContrast() {
+            compare(Theme.surface.a, 1.0)
+            compare(Theme.glassActive, false)
+            compare(String(Theme.glassSheen), String(Qt.rgba(0, 0, 0, 0)))
+            Theme.glass = true
+            verify(Theme.glassActive)
+            verify(Theme.surface.a < 0.2)
+            verify(Theme.surfaceRaised.a > Theme.surface.a)
+            verify(Theme.surfaceHover.a > Theme.surfaceRaised.a)
+            verify(Theme.surfaceFloating.a >= 0.85)
+            verify(Theme.overlaySurface.a >= 0.8)
+            verify(Theme.glassSheen.a > 0)
+            Theme.highContrast = true
+            verify(!Theme.glassActive)
+            compare(Theme.surface, "#000000")
+            compare(Theme.surfaceFloating, "#000000")
+            compare(Theme.overlaySurface, "#000000")
+            compare(Theme.glassSheen.a, 0)
+        }
+
+        function test_backdropShowsGlowsOnlyInGlass() {
+            const glows = backdrop.children[0]
+            verify(!glows.visible)
+            Theme.glass = true
+            verify(glows.visible)
+            compare(glows.children.length, 4) // three glows + vignette
+            for (let i = 0; i < 3; ++i)
+                tryCompare(glows.children[i], "status", Image.Ready)
+            Theme.highContrast = true
+            verify(!glows.visible)
+            compare(backdrop.color, Theme.background)
         }
 
         function test_reducedMotionZeroesAnimationTokens() {

@@ -73,7 +73,7 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | --- | --- | --- | --- | --- | --- |
 | `ui.language` | string | `"en"` | `"en"` | Interface language. Only English exists; there are no translations. | Stored only. |
 | `ui.showHints` | bool | `true` | `true`, `false` | Show the control hint bar. | Immediately: the hint bar at the bottom of the dashboard is shown only while this is `true`. |
-| `ui.theme` | string | `"dark"` | `"dark"`, `"highContrast"` | Colour theme ([design-system.md](design-system.md#accessibility-inputs)). | Immediately. |
+| `ui.theme` | string | `"glass"` | `"glass"`, `"dark"`, `"highContrast"` | Colour theme: translucent glass (default), solid dark, or high contrast ([design-system.md](design-system.md#accessibility-inputs)). | Immediately. |
 | `ui.scale` | int | `100` | 75–150 (percent) | Interface scale: multiplies spacing, fonts, radii, icons and cards, on top of the automatic resolution factor `max(1, min(width / 1280, height / 720))` (so 150 % on a 1080p screen is 2.25 × the 720p sizes; see [design-system.md](design-system.md#accessibility-inputs)). | Immediately. |
 | `ui.reducedMotion` | bool | `false` | `true`, `false` | Turns animation durations to 0 and stops ambient animations. | Immediately. |
 | `ui.startScreen` | string | `"home"` | `"home"`, `"games"` | Tab shown at start-up. | At the next start. |

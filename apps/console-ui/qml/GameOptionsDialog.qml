@@ -116,7 +116,8 @@ FocusScope {
         width: Math.min(parent.width - 64, 620)
         height: Math.min(parent.height - 48, column.implicitHeight + Theme.spacing * 3)
         radius: Theme.radius
-        color: Theme.surface
+        color: Theme.surfaceFloating
+        GlassSheen {}
         border.color: Theme.border
         MouseArea { anchors.fill: parent } // keep clicks inside
 
