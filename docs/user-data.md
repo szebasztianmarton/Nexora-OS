@@ -24,10 +24,11 @@ Code: `shared/include/nexora/shared/DataLayout.h` (all directories in one place)
 | User configuration | `$XDG_CONFIG_HOME/nexora` (`~/.config/nexora`) | `settings.json` ([settings.md](settings.md)) | Only to reset preferences |
 | Game-library metadata | `$XDG_DATA_HOME/nexora` (`~/.local/share/nexora`) | `library.sqlite` (+ `-wal`, `-shm`), migration backups `library.sqlite.v1-backup-*` | No: favorites, play history, edited titles and notes live here |
 | Save files | `<data>/saves` | reserved for emulator saves (see [limitations](#limitations)); included in a backup only on request | No |
+| Quick Resume states | `<data>/states` | one directory per saved session: state files + `meta.json` ([quick-resume.md](quick-resume.md#files)); not included in backups | Only through Home › Quick Resume › Remove (deleting by hand loses the saved game state) |
 | Emulator configuration | `<data>/emulators` | reserved for per-emulator configuration; not read by the UI yet | — |
 | Backups | `<data>/backups` | `nexora-backup-<yyyyMMdd-hhmmss>/` | Yes, old ones |
 | Artwork cache | `$XDG_CACHE_HOME/nexora` (`~/.cache/nexora`) | the only directory "Clear artwork cache" removes; nothing is downloaded today | Yes |
-| State | `$XDG_STATE_HOME/nexora` (`~/.local/state/nexora`) | `launch-history.json`, `update/last-update.json` | Yes (history is lost) |
+| State | `$XDG_STATE_HOME/nexora` (`~/.local/state/nexora`) | `launch-history.json`, `notifications.json`, `update/last-update.json` | Yes (history is lost) |
 | Logs | `<state>/logs`, `<state>/emulator-logs` | `console-ui.log` (embedded default when `--log-file` is not given), per-emulator output logs `<id>.log`, `<id>.log.1` | Yes |
 | Diagnostic reports | `<state>/diagnostics` | `diagnostics-<timestamp>.txt` (newest 10 kept) | Yes |
 | System files | `/usr/share/nexora/` (image) or `<prefix>/share/nexora/` | emulator definitions, `systems.json` is compiled in, `update-keys/`, `build-info` | Not user data; replaced by updates |
@@ -44,6 +45,7 @@ graph TD
         cfg["~/.config/nexora<br/>settings.json"]
         data["~/.local/share/nexora<br/>library.sqlite (+ v1 backups)"]
         saves["~/.local/share/nexora/saves"]
+        states["~/.local/share/nexora/states<br/>Quick Resume: &lt;session&gt;/meta.json + state files"]
         backups["~/.local/share/nexora/backups<br/>nexora-backup-*/manifest.json"]
         state["~/.local/state/nexora<br/>launch-history.json, update/last-update.json"]
         logs["~/.local/state/nexora/logs, emulator-logs"]
@@ -52,6 +54,7 @@ graph TD
     end
     ui([nexora-console-ui]) --> cfg
     ui --> data
+    ui -- "suspend / resume" --> states
     ui --> state
     ui --> logs
     ui --> diag
@@ -98,6 +101,8 @@ None of this has run on a booted image yet <!-- TASK12-RESULT: replace with the 
 | `settings.json` | `"version": 1` | treated as unusable and moved aside ([settings.md](settings.md#validation-and-recovery)) |
 | `library.sqlite` | `PRAGMA user_version` = 2 | a newer schema is refused and left byte-identical; the library is disabled for that run |
 | `launch-history.json` | `"version": 1` | moved aside, history starts empty |
+| `notifications.json` | `"version": 1` | moved aside, history starts empty ([notifications.md](notifications.md#history)) |
+| Quick Resume `meta.json` | `"version": 1` | moved aside (`meta.json.corrupt-*`); the session's state files are kept ([quick-resume.md](quick-resume.md#files)) |
 | backup `manifest.json` | `"version": 1` | restore refused |
 | update `manifest.json` | `"format": 1` | bundle rejected |
 | `last-update.json` (written by the image helper `nexora-bootok`) | `"format": 1` | read at UI start by `UpdateService::loadPersistedState()`; removed only when the user acknowledges the result in the update panel |
@@ -117,7 +122,7 @@ state/launch-history.json    if present
 saves/...                    only when "include saves" was chosen (bounded to 4 GiB)
 ```
 
-Logs, cache, diagnostics and the update record are never included.
+Logs, cache, diagnostics, the update record and Quick Resume states (`<data>/states`) are never included.
 
 ### Creating a backup
 

@@ -77,6 +77,15 @@ UiContext::UiContext(const Options &options, input::InputController *input, QObj
     m_notifications = std::make_unique<NotificationService>(m_layout.stateDir + QStringLiteral("/notifications.json"));
     wireNotifications();
 
+    GameSessionManager::Dependencies sessionDeps;
+    sessionDeps.app = m_app.get();
+    sessionDeps.settings = &m_settings;
+    sessionDeps.notifications = m_notifications.get();
+    sessionDeps.statesDir = m_layout.statesDir;
+    m_sessions = std::make_unique<GameSessionManager>(sessionDeps);
+    m_libraryController->setSessions(m_sessions.get());
+    m_systemController->setSessions(m_sessions.get());
+
     connect(&m_settings, &shared::Settings::valueChanged, this, [this](const QString &key, const QVariant &value) {
         if (key == shared::Settings::EmulatorDefaultProfiles)
             m_app->setDefaultProfiles(value.toMap());
@@ -132,6 +141,7 @@ void UiContext::start()
     }
     m_settingsController->applyAll();
     m_notifications->loadHistory();
+    m_sessions->load();
     if (!m_library.open(m_databasePath))
         qCCritical(lcLibrary).noquote() << "Game library disabled:" << m_library.lastError();
     // Only rescans when directories/extensions changed since the last completed scan.
@@ -140,6 +150,8 @@ void UiContext::start()
 
 void UiContext::shutdown()
 {
+    if (m_sessions)
+        m_sessions->shutdown();
     if (m_app)
         m_app->manager()->shutdown();
     m_library.cancelScan(); // do not walk a large/slow library while quitting

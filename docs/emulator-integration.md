@@ -180,7 +180,7 @@ What an emulator can do beyond being started and stopped. Optional; a definition
 
 A malformed `capabilities` block does **not** make the definition invalid: the broken capability is dropped, a warning is reported (`--check-config`, System tab), and the emulator stays usable without it. Unknown keys inside it are warnings. Placeholders are substituted into explicit argument lists; nothing passes through a shell. The adapter's arguments are appended after the emulator's (or profile's) arguments and the game path.
 
-Save states are used by Quick Resume (game sessions, [console-experience.md](console-experience.md#dependency-aware-plan) step 3); the adapters are `nexora::emulator::SaveStateAdapter` (`apps/emulator-manager/include/nexora/emulator/SaveStateAdapter.h`).
+Save states are used by [Quick Resume](quick-resume.md); the adapters are `nexora::emulator::SaveStateAdapter` (`apps/emulator-manager/include/nexora/emulator/SaveStateAdapter.h`).
 
 ### control-socket adapter
 
@@ -210,7 +210,7 @@ A save succeeds only when the answer arrives within `timeoutMs` and the file is 
 - Quick menu › Exit game (confirmation: unsaved progress may be lost), the running overlay's Stop (same confirmation, default Cancel), the game bar's Stop emulator (second press), or holding **Select + Start** for 1 s (no confirmation; [controller-support.md](controller-support.md)).
 - The emulator is started as the leader of its own **process group** (`setpgid(0, 0)` between fork and exec), and every signal goes to the whole group (falling back to the direct child if the group is gone), so wrapper scripts and helper processes it spawns are stopped, paused and resumed with it.
 - `stop()` sends SIGTERM to the group and arms a timer with the emulator's `stopTimeoutMs`; if the process is still alive, SIGKILL to the group. A `stop()` during `Starting`, before the pid is known, sends SIGTERM as soon as the process has started instead of waiting for the kill timer. When the emulator exits after a requested stop, anything left in its group (e.g. a helper that ignores SIGTERM) gets SIGKILL. Tested: `tst_emulatormanager::stopTerminatesGrandchildren`, `stopDuringStartingIsFast` (fake emulator `--spawn-child`).
-- On application exit `shutdown()` kills the running emulator's group and waits up to 2 s; `PR_SET_PDEATHSIG` sends SIGTERM to the direct child if the UI dies (grandchildren are not covered by that).
+- On application exit the session manager first saves the running game for [Quick Resume](quick-resume.md#shutdown-and-power) when its emulator supports it; then `shutdown()` sends SIGTERM to the emulator's group and SIGKILL only if it is still running after min(`stopTimeoutMs`, 3 s) (`tst_emulatormanager::shutdownTerminatesBeforeKilling`). `PR_SET_PDEATHSIG` sends SIGTERM to the direct child if the UI dies (grandchildren are not covered by that).
 
 ## Launch history and output logs
 

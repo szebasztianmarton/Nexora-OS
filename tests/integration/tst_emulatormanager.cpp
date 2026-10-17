@@ -297,6 +297,40 @@ private slots:
         QVERIFY(manager.lastOutcome().killed);
     }
 
+    // Application exit: SIGTERM first (the emulator may write its own saves), SIGKILL only
+    // for one that ignores it.
+    void shutdownTerminatesBeforeKilling_data()
+    {
+        QTest::addColumn<bool>("ignoreSigterm");
+        QTest::addColumn<QString>("footer");
+        QTest::newRow("exits on SIGTERM") << false << QStringLiteral("process stopped");
+        QTest::newRow("ignores SIGTERM") << true << QStringLiteral("killed after SIGTERM timed out");
+    }
+
+    void shutdownTerminatesBeforeKilling()
+    {
+        QFETCH(bool, ignoreSigterm);
+        QFETCH(QString, footer);
+        QTemporaryDir logs;
+        EmulatorManager manager;
+        manager.setOutputLogDirectory(logs.path());
+        manager.setStopTimeout(300ms);
+        QStringList args{QStringLiteral("--sleep-ms"), QStringLiteral("30000")};
+        if (ignoreSigterm)
+            args.prepend(QStringLiteral("--ignore-sigterm"));
+        QVERIFY(manager.launch(fake(args)).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        const qint64 pid = manager.activePid();
+        QElapsedTimer clock;
+        clock.start();
+        manager.shutdown();
+        QVERIFY(clock.elapsed() < 3000);
+        QVERIFY(!QFileInfo::exists(QStringLiteral("/proc/%1/stat").arg(pid)));
+        QFile log(manager.outputLogPath());
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QVERIFY2(QString::fromUtf8(log.readAll()).contains(footer), qPrintable(footer));
+    }
+
     void rejectsSecondLaunchWhileActive()
     {
         EmulatorManager manager;

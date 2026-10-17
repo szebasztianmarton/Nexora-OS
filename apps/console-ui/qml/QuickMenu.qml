@@ -3,9 +3,11 @@ import Nexora.Console
 
 // In-game quick menu: opens over a running emulator with the controller's Guide button or by
 // holding Start for a second (GameBarController.quickMenuOpen), or Menu / F1 on the running
-// overlay from a keyboard. Items: Return to game, Pause / Resume (only when the emulator
-// supports it), controller status, volume and mute, a Display settings page, a System info
-// page and Exit game (asks for confirmation first: unsaved emulator progress may be lost).
+// overlay from a keyboard. Items: Return to game, Suspend and go Home (Quick Resume: saves
+// a state through the emulator's save-state adapter, then closes it; explains why when it
+// is not possible), Pause / Resume (only when the emulator supports it), controller status,
+// volume and mute, a Display settings page, a System info page and Exit game (asks for
+// confirmation first: unsaved emulator progress may be lost).
 //
 // On EGLFS the emulator owns the display; the menu becomes visible as soon as the shell gets
 // the screen back (Main.qml raises the window when the menu opens, like the game bar).
@@ -16,6 +18,9 @@ FocusScope {
     required property AppController app
     required property SettingsController settings
     required property SystemController system
+    property GameSessionManager sessions: null
+    readonly property bool sessionActive: sessions !== null && sessions.active.id !== undefined
+    readonly property bool sessionWorking: sessions !== null && sessions.working
 
     property string page: "main" // main, display, info
     readonly property bool confirmOpen: confirmExit.visible
@@ -141,9 +146,13 @@ FocusScope {
                 }
                 Text {
                     textFormat: Text.PlainText
+                    objectName: "quickMenuState"
                     width: parent.width
-                    text: menu.app.paused ? "Paused" : Theme.capitalize(menu.app.state)
-                    color: menu.app.paused ? Theme.warning : Theme.statusColor(menu.app.state)
+                    text: menu.sessionActive && menu.sessions.active.state === "savingState" ? "Saving for Quick Resume…"
+                          : menu.sessionActive && menu.sessions.active.state === "closing" ? "Saved — closing the emulator…"
+                          : menu.app.paused ? "Paused" : Theme.capitalize(menu.app.state)
+                    color: menu.sessionWorking ? Theme.accent
+                           : menu.app.paused ? Theme.warning : Theme.statusColor(menu.app.state)
                     font.pixelSize: Theme.fontBody
                 }
 
@@ -161,6 +170,19 @@ FocusScope {
                         description: menu.app.paused ? "Resumes the paused emulator" : ""
                         actionText: "Resume play"
                         onAccepted: menu.returnToGame()
+                    }
+                    SettingRow {
+                        objectName: "quickSuspend"
+                        visible: menu.sessionActive
+                        label: "Suspend and go Home"
+                        description: menu.sessionWorking ? "Please wait…"
+                                     : menu.sessions && menu.sessions.canSuspend
+                                       ? "Saves the game for Quick Resume and closes the emulator"
+                                       : (menu.sessions ? menu.sessions.suspendUnavailableReason : "")
+                        descriptionColor: menu.sessions && (menu.sessions.canSuspend || menu.sessionWorking)
+                                          ? Theme.textMuted : Theme.warning
+                        actionText: menu.sessions && menu.sessions.canSuspend && !menu.sessionWorking ? "Suspend" : ""
+                        onAccepted: if (menu.sessions && menu.sessions.canSuspend && !menu.sessionWorking) menu.sessions.suspendToHome()
                     }
                     SettingRow {
                         objectName: "quickPause"

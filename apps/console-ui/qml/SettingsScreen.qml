@@ -843,7 +843,7 @@ FocusScope {
     ConfirmDialog {
         id: confirmRestart
         title: "Restart Nexora?"
-        message: "The system will restart immediately. Any running emulator will be stopped."
+        message: "The system will restart. A running game is saved for Quick Resume first when its emulator supports it; otherwise it is closed and unsaved progress may be lost."
         confirmText: "Restart"
         dangerous: true
         onConfirmed: screen.system.reboot()
@@ -851,7 +851,7 @@ FocusScope {
     ConfirmDialog {
         id: confirmPowerOff
         title: "Power off?"
-        message: "The system will shut down immediately. Any running emulator will be stopped."
+        message: "The system will shut down. A running game is saved for Quick Resume first when its emulator supports it; otherwise it is closed and unsaved progress may be lost."
         confirmText: "Power off"
         dangerous: true
         onConfirmed: screen.system.powerOff()

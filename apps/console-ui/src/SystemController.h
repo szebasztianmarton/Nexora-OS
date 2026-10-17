@@ -11,6 +11,7 @@
 namespace nexora::system {
 class SystemIntegration;
 class BackupService;
+enum class PowerAction;
 } // namespace nexora::system
 namespace nexora::library {
 class GameLibrary;
@@ -23,6 +24,8 @@ class LaunchHistory;
 }
 
 namespace nexora::ui {
+
+class GameSessionManager;
 
 class AppController;
 class LibraryController;
@@ -85,8 +88,12 @@ public:
     // Screens call this when they become current, so the synchronous probe neither runs on
     // the start-up path nor on every tab switch.
     Q_INVOKABLE bool refreshIfStale(int maxAgeMs);
+    // While a game runs, the session manager first saves it for Quick Resume (or closes it,
+    // if it cannot be saved); the request is sent once no emulator runs, or dropped if the
+    // save failed (the game then keeps running). Returns false only on an immediate failure.
     Q_INVOKABLE bool powerOff();
     Q_INVOKABLE bool reboot();
+    void setSessions(GameSessionManager *sessions) { m_sessions = sessions; }
     // Writes a diagnostics text bundle and returns its path, or "" on failure (lastError()
     // explains why).
     Q_INVOKABLE QString exportDiagnostics();
@@ -108,8 +115,10 @@ signals:
 
 private:
     void refreshStatus();
+    bool requestPower(system::PowerAction action);
 
     Dependencies m_deps;
+    GameSessionManager *m_sessions = nullptr;
     QStringList m_lines;
     QString m_lastError;
     QVariantMap m_hardware;

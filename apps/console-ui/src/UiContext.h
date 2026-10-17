@@ -2,6 +2,7 @@
 
 #include "AppController.h"
 #include "GameBarController.h"
+#include "GameSessionManager.h"
 #include "LibraryController.h"
 #include "NotificationService.h"
 #include "SettingsController.h"
@@ -64,12 +65,14 @@ public:
     GameBarController *gameBar() { return m_gameBarController.get(); }
     UpdateController *updates() { return m_updateController.get(); }
     NotificationService *notifications() { return m_notifications.get(); }
+    GameSessionManager *sessions() { return m_sessions.get(); }
 
     // Startup: create the data directories (incl. the update state directory), load
     // settings, open the library, apply preferences, scan if needed.
     void start();
-    // Shutdown: stop the emulator and wait for a running scan. Settings need no flush: every
-    // change is saved when it is made.
+    // Shutdown: save the running game for Quick Resume when possible, stop the emulator
+    // (SIGTERM first) and wait for a running scan. Settings need no flush: every change is
+    // saved when it is made.
     void shutdown();
 
 private:
@@ -91,6 +94,7 @@ private:
     std::unique_ptr<GameBarController> m_gameBarController;
     std::unique_ptr<UpdateController> m_updateController;
     std::unique_ptr<NotificationService> m_notifications;
+    std::unique_ptr<GameSessionManager> m_sessions;
     input::InputController *m_input;
     QString m_databasePath;
     QString m_updateStateDir;

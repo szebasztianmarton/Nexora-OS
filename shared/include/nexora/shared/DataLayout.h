@@ -10,6 +10,7 @@ namespace nexora::shared {
 //   configDir          settings.json, emulator overrides      $XDG_CONFIG_HOME/nexora
 //   dataDir            library.sqlite                         $XDG_DATA_HOME/nexora
 //   savesDir           emulator save files (never cleaned)    dataDir/saves
+//   statesDir          Quick Resume save states               dataDir/states
 //   emulatorConfigDir  per-emulator configuration             dataDir/emulators
 //   cacheDir           artwork cache (safe to delete)         $XDG_CACHE_HOME/nexora
 //   stateDir           launch history, update state           $XDG_STATE_HOME/nexora
@@ -24,6 +25,7 @@ struct DataLayout
     QString configDir;
     QString dataDir;
     QString savesDir;
+    QString statesDir; // Quick Resume save states (docs/quick-resume.md)
     QString emulatorConfigDir;
     QString cacheDir;
     QString stateDir;

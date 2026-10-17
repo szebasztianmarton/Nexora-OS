@@ -1,6 +1,7 @@
 #include "LibraryController.h"
 
 #include "AppController.h"
+#include "GameSessionManager.h"
 
 #include "nexora/shared/Logging.h"
 #include "nexora/shared/Redaction.h"
@@ -263,6 +264,11 @@ bool LibraryController::launchEntry(qint64 gameId, const QString &profileId, boo
         emit notice(QStringLiteral("This game is no longer in the library"), true);
         return false;
     }
+    if (m_sessions) {
+        // A plain launch resumes a saved Quick Resume state; an explicit profile starts fresh.
+        const bool preferResume = profileId.isEmpty() && applyDefaultProfile;
+        return m_sessions->startGame(*entry, effectiveEmulatorId(*entry), profileId, applyDefaultProfile, preferResume);
+    }
     m_pendingLaunch = gameId;
     if (!m_app->launchGame(effectiveEmulatorId(*entry), entry->path, entry->displayTitle(), profileId,
                            applyDefaultProfile)) {
@@ -270,6 +276,16 @@ bool LibraryController::launchEntry(qint64 gameId, const QString &profileId, boo
         return false;
     }
     return true;
+}
+
+void LibraryController::setSessions(GameSessionManager *sessions)
+{
+    if (m_sessions)
+        m_sessions->disconnect(this);
+    m_sessions = sessions;
+    if (m_sessions)
+        connect(m_sessions, &GameSessionManager::launchAccepted, this,
+                [this](qint64 gameId) { m_pendingLaunch = gameId; });
 }
 
 bool LibraryController::toggleFavorite(qint64 gameId)

@@ -201,7 +201,7 @@ Pressing Start or Select also triggers their normal action (by default `menu` an
 | Hold Start 1 s (Select not held) | — | opens the quick menu |
 | Ctrl+G (keyboard) | toggles the game bar | toggles the game bar |
 
-While either overlay is open, controller input flows to the shell even though an emulator runs. Quick menu items: Return to game (resumes the emulator first if it is paused), Pause/Resume emulator (only when the emulator definition is `pausable`), controller status, Volume and Mute, Display settings (display mode, resolution, interface scale), System info, Exit game (confirmation "Unsaved progress in the emulator may be lost"; default button Cancel). Tested: `tst_quickmenu.qml`, `tst_appcontroller`.
+While either overlay is open, controller input flows to the shell even though an emulator runs. Quick menu items: Return to game (resumes the emulator first if it is paused), Suspend and go Home (saves the game for [Quick Resume](quick-resume.md) and closes the emulator; shows why when not possible), Pause/Resume emulator (only when the emulator definition is `pausable`), controller status, Volume and Mute, Display settings (display mode, resolution, interface scale), System info, Exit game (confirmation "Unsaved progress in the emulator may be lost"; default button Cancel). Tested: `tst_quickmenu.qml`, `tst_appcontroller`, `tst_qmlsmoke::quickResumeFromQuickMenuAndHome`.
 
 On the image the emulator owns the display (EGLFS/KMS), so the quick menu becomes visible when the shell regains it; this hand-over has not been tested on the image.
 

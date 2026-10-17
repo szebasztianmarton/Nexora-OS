@@ -104,8 +104,10 @@ public:
     qint64 activePid() const { return m_pid; }
     QDateTime startedAt() const { return m_startedAt; }
 
-    // Kills any active process and waits (bounded) for it. Use only at application exit.
+    // Application exit: SIGTERM to the process group, SIGKILL if it is still running after
+    // min(stop timeout, ShutdownGraceLimit). Blocks (bounded); emits nothing.
     void shutdown();
+    static constexpr std::chrono::milliseconds ShutdownGraceLimit{3000};
 
     ProcessState state() const { return m_state; }
     bool isActive() const { return emulator::isActive(m_state); }

@@ -94,6 +94,10 @@ All keys, their built-in defaults and validation rules (`Settings::specs()`):
 | `notifications.quiet` | bool | `false` | `true`, `false` | Quiet mode: info notifications go to the history without a toast ([notifications.md](notifications.md)). Settings › General › "Quiet notifications". | Immediately. |
 | `notifications.durationMs` | int | `3500` | 2000–15000 | Display time of an info notification; warnings show twice, criticals three times as long. Settings › General › "Notification time" (2–15 s). | Immediately (next notification). |
 | `notifications.hiddenCategories` | string array | `[]` | `controller`, `game`, `saveState`, `library`, `storage`, `update`, `system`, `recovery` | Categories whose info and warning notifications go to the history without a toast; criticals always show. No UI row yet. | Immediately. |
+| `sessions.maxCount` | int | `5` | 1–20 | Most games kept for [Quick Resume](quick-resume.md#limits-and-removal); suspending another game is refused, nothing is deleted. | Immediately (next suspend). |
+| `sessions.maxMegabytes` | int | `512` | 64–16384 (MiB) | Most disk space for Quick Resume states; suspending is refused when other games already use it. | Immediately (next suspend). |
+| `sessions.maxAgeDays` | int | `30` | 0–365 (0 = off) | Saved sessions older than this are marked on Home and offered for removal; never removed automatically. | Immediately. |
+| `sessions.excludedGames` | string array | `[]` | game ids as decimal strings (`"12"`), at most 10000 | Games that never use Quick Resume (Game options › Quick Resume). | Immediately. |
 | `emulators.defaultProfiles` | object | `{}` | emulator id → profile id; both must match `^[a-z0-9][a-z0-9_-]{0,63}$` | Launch profile used when an emulator or a game is started without an explicit profile. Set from the Emulators tab's profile picker (Y / F on a profile). | Immediately. A profile that does not exist or is disabled is ignored at launch time (the emulator's own arguments are used). |
 
 Default `input.mapping`:

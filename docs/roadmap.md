@@ -27,6 +27,7 @@ These items turn "implemented" into "verified" and are the precondition for a fi
 | --- | --- | --- |
 | Controller-first | search and library-folder entry need a keyboard; GRUB and the recovery menu need a keyboard | extend the on-screen keyboard; add a folder browser; a controller-driven recovery screen |
 | Getting content onto the image | no automounter, no file manager, no network | automount removable media read-only under `/media`; an import screen |
+| Console experience (MVP 4 brief) | steps 1–3 done: notifications, emulator capabilities and save-state adapters, Quick Resume with graceful shutdown ([console-experience.md](console-experience.md), [quick-resume.md](quick-resume.md)); collections, dashboard layout, per-game profiles, save-data manager and the rest are planned there | Quick Resume is verified only with the fake emulator |
 | Emulators | none packaged | the separate (Hungarian) plan for RetroArch with libretro cores and PPSSPP: [emulator-integracio.md](emulator-integracio.md); per-emulator save directories under `<data>/saves` |
 | Emulator definitions on the image | live on the root slot, so hand-added ones are lost after an update | read additional definitions from the data partition (root-owned or validated) |
 | Data partition | fixed 1 GiB | grow to fill the disk on first boot |

@@ -16,7 +16,7 @@ Status of the "MVP 4 Enhanced Console Experience" brief against the code on `mai
 
 Nexora already has a solid single-session console core: one emulator at a time with a validated launch path, SIGSTOP/SIGCONT pause for emulators declared `pausable`, a Quick Menu and Game Bar reachable from the controller while a game runs, a SQLite library with favorites, recents, systems, search, overrides and soft removal, verified backup/restore of settings, library, history and saves, signed A/B updates with rollback, a supervised session with a recovery menu, and controller remapping, dead zone, high contrast, UI scale and reduced motion.
 
-The brief's biggest gaps are the things a console adds on top of that core: a session model that can hold more than one game (Quick Resume), any emulator save-state integration, user-defined collections and a customisable Home, per-game profiles beyond the emulator choice, a save-data manager, a notification service, screenshots, and graceful handling of a running game at shutdown (today it is SIGKILLed).
+The brief's biggest gaps are the things a console adds on top of that core: a session model that can hold more than one game (Quick Resume), any emulator save-state integration, user-defined collections and a customisable Home, per-game profiles beyond the emulator choice, a save-data manager, a notification service, screenshots, and graceful handling of a running game at shutdown. Steps 1–3 below (notifications, emulator capabilities, Quick Resume with graceful shutdown) are implemented; see the status column.
 
 ## Constraints that shape every feature
 
@@ -34,15 +34,15 @@ The brief's biggest gaps are the things a console adds on top of that core: a se
 | # | Feature (brief §) | Status | What exists (owner) | What is missing |
 | --- | --- | --- | --- | --- |
 | 1 | Quick Menu (§5) | partial | `QuickMenu.qml`, `GameBar.qml`, `GameBarController`: return/resume, pause/resume (pausable only), close with confirmation, volume/mute, display page, system info; opened by Guide or holding Start 1 s; tested (`tst_quickmenu.qml`, smoke) | switch game, controller battery/settings, accessibility page, captures, performance, save/load state, per-game config, sleep; customisation (entries, order, shortcut, dim); entries are hard-coded |
-| 2 | Quick Resume / sessions (§4) | partial | `EmulatorManager` (one process, states Idle/Starting/Running/Stopping/Exited/Failed), SIGSTOP pause, launch history (last 50) | session objects/ids, more than one session, persisted session metadata, the brief's state machine, in-memory suspend of a *backgrounded* game while another runs, persistent save states, limits and eviction, per-game policy |
+| 2 | Quick Resume / sessions (§4) | **implemented (step 3)**, fake emulator only | `GameSessionManager` with save-state adapters: suspend/resume through verified persistent states, session records (`meta.json`), limits that refuse instead of deleting, per-game exclusion, Home row, Quick Menu entry ([quick-resume.md](quick-resume.md)) | real emulator support (no emulator packaged; RetroArch adapter unverified), in-memory suspend of a backgrounded game while another runs (ADR-001: one process) |
 | 3 | Collections and dashboard (§6, §7) | partial | fixed Home sections (continue playing, favorites, recently added, systems, status cards); Favorites/Recent/Systems tabs; search, system filter, sorts, missing filter, soft removal | user collections (none in the DB), pinning, add/remove/reorder/resize widgets, persisted layout, suspended-session/save-state/capture/storage widgets, play time, content duplicates; game id is tied to the file path |
 | 4 | Per-game profiles (§8) | partial | per-game emulator and system override, title/notes; launch profiles per emulator, default profile per emulator (setting) | per-game launch profile, aspect/scaling/shader/audio/mapping/dead zone/hotkeys/Quick Resume policy, precedence chain, import/export, validation against an emulator capability schema |
 | 5 | Save states and backups (§9) | partial | `BackupService`: verified backup/restore (SHA-256 manifest, rollback) of settings, library, history, `saves/`; local destination only | save-state files, slots, states directory, per-game save tracking, a save-path placeholder for emulators, retention, removable destinations, a backups page with verification status |
 | 6 | Controller center (§10) | partial | device list (name, id), input test, remapping of 9 actions to 9 buttons, dead zone, backend choice, hotplug and layout correction (`tst_evdevhotplug`) | battery/charging/connection type, axis inversion, vibration, per-controller profiles and ordering, screenshot/save-state actions, a mapping-only reset |
 | 7 | Library history, favorites, search (§7) | exists, small gaps | favorites, recents, play count, last played, search, filters | play time, game id in launch history |
 | 8 | Storage manager (§17) | partial | free/total for data dir and `/`, library directories setting, artwork cache clear | per-type breakdown, external discovery (no automounter), missing-drive warnings, folder browser |
-| 9 | Notifications (§15) | partial | one `Toast` (info/error, overwrites, auto-hide) | central service, categories, queue, dedup, history, quiet mode, per-category settings, controller connect/disconnect events |
-| 10 | Startup, shutdown, suspend, recovery (§14) | partial | supervised session with backoff/give-up, recovery menu, boot counting, power requests via `nexora-powerd` | graceful emulator stop/save at shutdown (SIGKILL today), suspend-to-RAM, display sleep, idle timeout, persistent logs |
+| 9 | Notifications (§15) | **implemented (step 1)** | `NotificationService`: categories, severities, queue, dedup, history (warnings/criticals persisted), quiet mode, hidden categories, controller/game/library/Quick Resume events ([notifications.md](notifications.md)) | UI row for hidden categories, history filtering |
+| 10 | Startup, shutdown, suspend, recovery (§14) | partial | supervised session with backoff/give-up, recovery menu, boot counting, power requests via `nexora-powerd` | suspend-to-RAM, display sleep, idle timeout, persistent logs (graceful stop and Quick Resume save at shutdown/power: done in step 3) |
 
 ## P1 gap report
 
@@ -66,9 +66,9 @@ Each step is a separately reviewable PR with its own tests and docs; later steps
 
 | Step | Scope | Depends on | Size |
 | --- | --- | --- | --- |
-| 1 | **Notification service** (C++ `NotificationService`, categories, dedup, queue, history, quiet mode; Toast becomes its view; controller connect/disconnect, launch, failure events) | — | M |
-| 2 | **Emulator capability model** (definition fields for capabilities, adapter interface, fake-emulator adapter with save/load state through a test protocol; RetroArch network-command adapter, marked unverified) | — | M |
-| 3 | **Game session manager**: session ids and the brief's state machine on top of `EmulatorManager`; graceful stop at shutdown (save state when supported, then SIGTERM, never silent SIGKILL); in-memory suspend of the current game; persistent state through adapters; limits, per-game Quick Resume policy; session metadata file (atomic, checksummed) | 1, 2 | L |
+| 1 ✅ | **Notification service** (C++ `NotificationService`, categories, dedup, queue, history, quiet mode; Toast becomes its view; controller connect/disconnect, launch, failure events) | — | M |
+| 2 ✅ | **Emulator capability model** (definition fields for capabilities, adapter interface, fake-emulator adapter with save/load state through a test protocol; RetroArch network-command adapter, marked unverified) | — | M |
+| 3 ✅ | **Game session manager**: session ids and the brief's state machine on top of `EmulatorManager`; graceful stop at shutdown (save state when supported, then SIGTERM, never silent SIGKILL); in-memory suspend of the current game; persistent state through adapters; limits, per-game Quick Resume policy; session metadata file (atomic, checksummed) | 1, 2 | L |
 | 4 | **Library schema v3**: collections (many-to-many, stable ids), pinned games, play time, game id in launch history; migration with backup | — | M |
 | 5 | **Dashboard layout service** + Home widgets (suspended sessions, collections, storage), add/remove/reorder, persisted layout with validation and reset | 3, 4 | M |
 | 6 | **Per-game profiles** with precedence (game → emulator → global → defaults), validated against capabilities, import/export | 2, 4 | M |
@@ -83,5 +83,4 @@ Documentation listed in brief §24 is written with the step that implements each
 
 ## Open questions
 
-- Which sub-project goes first (the plan above starts with notifications, capabilities and sessions because Quick Resume and a safe shutdown depend on them).
-- Whether a real emulator (RetroArch) should be integrated before or alongside step 2, so that adapters are verified against real software.
+- Whether a real emulator (RetroArch) should be integrated next, so that the retroarch save-state adapter and Quick Resume are verified against real software.

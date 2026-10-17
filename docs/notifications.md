@@ -54,8 +54,7 @@ See [settings.md](settings.md#keys).
 | Game launch or emulator error (`AppController` status with error flag) | game, warning | `UiContext::wireNotifications()` |
 | Library notices (scan results, errors) | library, info / warning | `Main.qml` → `postMessage()` |
 | Settings notices | system, info / warning | `Main.qml` → `postMessage()` |
-
-Save-state and recovery notifications are added with Quick Resume ([console-experience.md](console-experience.md#dependency-aware-plan), step 3).
+| Quick Resume: saved, save failed (game keeps running), stopped while saving, state removed, Quick Resume full/over its size limit, unreadable `meta.json`, power request cancelled | saveState / storage / recovery / system; info, warning, critical | `GameSessionManager` ([quick-resume.md](quick-resume.md#errors)) |
 
 ## Limitations
 

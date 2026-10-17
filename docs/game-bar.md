@@ -43,7 +43,7 @@ Performance figures come from `/proc/stat` and `/proc/meminfo`, status icons fro
 
 ## Over a running emulator
 
-Since MVP 4, **Guide opens the quick menu instead of the bar while a game runs** (holding Start for 1 s does too); the quick menu has Return to game, Pause/Resume, controller status, audio, display settings, system info and Exit game ([controller-support.md](controller-support.md#quick-menu-and-game-bar)). The bar itself is still available over a running game with Ctrl+G.
+Since MVP 4, **Guide opens the quick menu instead of the bar while a game runs** (holding Start for 1 s does too); the quick menu has Return to game, Suspend and go Home ([Quick Resume](quick-resume.md)), Pause/Resume, controller status, audio, display settings, system info and Exit game ([controller-support.md](controller-support.md#quick-menu-and-game-bar)). The bar itself is still available over a running game with Ctrl+G.
 
 Controller navigation of the launcher is normally suspended while an emulator runs, because the pad is not grabbed and the emulator should get it. Guide and the Start hold are the exceptions: they are reported even while suspended (`InputController::gameBarRequested`, `quickMenuRequested`). Opening the bar or the quick menu then:
 
