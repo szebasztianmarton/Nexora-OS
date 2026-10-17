@@ -117,7 +117,7 @@ bool AppController::launchProfile(const QString &emulatorId, const QString &prof
         setStatusMessage(QStringLiteral("Unknown emulator \"%1\"").arg(emulatorId), true);
         return false;
     }
-    return startLaunch({*config, profileId, {}, {}});
+    return startLaunch({*config, profileId, {}, {}, {}});
 }
 
 bool AppController::launchGame(const QString &emulatorId, const QString &gamePath, const QString &title,
@@ -139,7 +139,7 @@ bool AppController::launchGame(const QString &emulatorId, const QString &gamePat
             profile.clear();
     }
     const QString display = QStringLiteral("%1 (%2)").arg(title, config->name);
-    return startLaunch({*config, profile, gamePath, display});
+    return startLaunch({*config, profile, gamePath, display, {}});
 }
 
 QString AppController::unavailableReason(const QString &emulatorId) const

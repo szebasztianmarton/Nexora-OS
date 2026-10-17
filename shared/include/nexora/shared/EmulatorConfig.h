@@ -22,6 +22,32 @@ struct LaunchProfile
     bool operator==(const LaunchProfile &) const = default;
 };
 
+// How Nexora asks a running emulator to write a save state and starts it from one
+// (docs/emulator-integration.md#capabilities). Arguments are explicit lists; placeholders
+// are substituted into them, nothing passes through a shell.
+struct SaveStateCapability
+{
+    enum class Adapter {
+        ControlSocket, // Nexora line protocol over a per-session Unix socket
+        RetroArch, // RetroArch network commands (unverified)
+    };
+    Adapter adapter = Adapter::ControlSocket;
+    int timeoutMs = 10000; // save / quit request timeout
+    // Added to the launch when the session uses save states; "{control-socket}" is replaced
+    // by the socket path. control-socket only.
+    QStringList launchArguments;
+    // Added when the game is resumed from a state; "{state-file}" is replaced by its path.
+    // control-socket only.
+    QStringList resumeArguments;
+    int port = 55355; // retroarch only: network command port on 127.0.0.1
+
+    static constexpr int DefaultTimeoutMs = 10000;
+    static constexpr int MinTimeoutMs = 1000;
+    static constexpr int MaxTimeoutMs = 120000;
+
+    bool operator==(const SaveStateCapability &) const = default;
+};
+
 // One validated emulator definition, loaded from a single JSON file.
 struct EmulatorConfig
 {
@@ -37,7 +63,8 @@ struct EmulatorConfig
     QList<LaunchProfile> profiles;
     QString version; // emulator version for display; free text, at most 64 characters
     QStringList systems; // ids of the game systems this emulator can run
-    bool pausable = false; // may be suspended with SIGSTOP and resumed with SIGCONT
+    bool pausable = false; // may be suspended with SIGSTOP and resumed with SIGCONT ("capabilities.pause")
+    std::optional<SaveStateCapability> saveState; // "capabilities.saveState"; none = no save states
 
     static EmulatorConfig make(const QString &id, const QString &name, const QString &executable,
                                const QStringList &arguments = {}, bool enabled = true)

@@ -385,14 +385,14 @@ private slots:
 
         EmulatorManager manager;
         QSignalSpy finished(&manager, &EmulatorManager::processFinished);
-        QVERIFY(manager.launch(LaunchRequest{config, {}, game, QStringLiteral("My Game")}).accepted);
+        QVERIFY(manager.launch(LaunchRequest{config, {}, game, QStringLiteral("My Game"), {}}).accepted);
         QCOMPARE(manager.activeEmulatorId(), QStringLiteral("fake"));
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
         // The path is passed as one argument, spaces and parentheses intact (no shell).
         QVERIFY2(manager.capturedStdout().contains(QStringLiteral("arg: ") + game + u'\n'),
                  qPrintable(manager.capturedStdout()));
 
-        QVERIFY(manager.launch(LaunchRequest{config, QStringLiteral("cwd"), game, {}}).accepted);
+        QVERIFY(manager.launch(LaunchRequest{config, QStringLiteral("cwd"), game, {}, {}}).accepted);
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, Timeout);
         QCOMPARE(manager.state(), ProcessState::Exited);
         const QString out = manager.capturedStdout();

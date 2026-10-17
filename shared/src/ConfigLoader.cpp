@@ -22,12 +22,15 @@ namespace {
 const QStringList &knownKeys()
 {
     static const QStringList keys{
-        QStringLiteral("id"),         QStringLiteral("name"),          QStringLiteral("executable"),
-        QStringLiteral("arguments"),  QStringLiteral("enabled"),       QStringLiteral("workingDirectory"),
-        QStringLiteral("extensions"), QStringLiteral("stopTimeoutMs"), QStringLiteral("profiles"),
-        QStringLiteral("version"),    QStringLiteral("systems"),       QStringLiteral("pausable")};
+        QStringLiteral("id"),          QStringLiteral("name"),          QStringLiteral("executable"),
+        QStringLiteral("arguments"),   QStringLiteral("enabled"),       QStringLiteral("workingDirectory"),
+        QStringLiteral("extensions"),  QStringLiteral("stopTimeoutMs"), QStringLiteral("profiles"),
+        QStringLiteral("version"),     QStringLiteral("systems"),       QStringLiteral("pausable"),
+        QStringLiteral("capabilities")};
     return keys;
 }
+
+constexpr int MaxCapabilityArguments = 32;
 
 QString jsonTypeName(const QJsonValue &value)
 {
@@ -41,6 +44,99 @@ QString jsonTypeName(const QJsonValue &value)
     case QJsonValue::Undefined: break;
     }
     return QStringLiteral("missing");
+}
+
+bool isInteger(const QJsonValue &v, double min, double max)
+{
+    const double d = v.toDouble(-1);
+    return v.isDouble() && d == std::floor(d) && d >= min && d <= max;
+}
+
+// Parses "capabilities.saveState". Problems are returned in |problems|; any problem drops
+// the whole capability (the emulator stays usable without save states).
+std::optional<SaveStateCapability> parseSaveState(const QJsonValue &value, QStringList *problems, QStringList *warnings)
+{
+    const qsizetype problemsBefore = problems->size();
+    auto problem = [&](const QString &m) { problems->append(QStringLiteral("\"capabilities.saveState\": ") + m); };
+    if (!value.isObject()) {
+        problem(QStringLiteral("must be an object (got %1)").arg(jsonTypeName(value)));
+        return std::nullopt;
+    }
+    const QJsonObject o = value.toObject();
+    static const QStringList keys{QStringLiteral("adapter"), QStringLiteral("timeoutMs"),
+                                  QStringLiteral("launchArguments"), QStringLiteral("resumeArguments"),
+                                  QStringLiteral("port")};
+    for (auto it = o.constBegin(); it != o.constEnd(); ++it) {
+        if (!keys.contains(it.key()) && warnings)
+            warnings->append(QStringLiteral("unknown key \"%1\" in \"capabilities.saveState\" ignored").arg(it.key()));
+    }
+
+    SaveStateCapability cap;
+    const QString adapter = o.value(QStringLiteral("adapter")).toString();
+    if (adapter == QLatin1String("control-socket"))
+        cap.adapter = SaveStateCapability::Adapter::ControlSocket;
+    else if (adapter == QLatin1String("retroarch"))
+        cap.adapter = SaveStateCapability::Adapter::RetroArch;
+    else
+        problem(QStringLiteral("\"adapter\" must be \"control-socket\" or \"retroarch\""));
+
+    if (o.contains(QStringLiteral("timeoutMs"))) {
+        if (!isInteger(o.value(QStringLiteral("timeoutMs")), SaveStateCapability::MinTimeoutMs,
+                       SaveStateCapability::MaxTimeoutMs))
+            problem(QStringLiteral("\"timeoutMs\" must be an integer between %1 and %2")
+                        .arg(SaveStateCapability::MinTimeoutMs)
+                        .arg(SaveStateCapability::MaxTimeoutMs));
+        else
+            cap.timeoutMs = o.value(QStringLiteral("timeoutMs")).toInt();
+    }
+
+    auto arguments = [&](const QString &key, QStringList *out) {
+        if (!o.contains(key))
+            return;
+        const QJsonValue v = o.value(key);
+        if (!v.isArray() || v.toArray().size() > MaxCapabilityArguments) {
+            problem(
+                QStringLiteral("\"%1\" must be an array of at most %2 strings").arg(key).arg(MaxCapabilityArguments));
+            return;
+        }
+        for (const QJsonValue &a : v.toArray()) {
+            if (!a.isString() || a.toString().isEmpty()) {
+                problem(QStringLiteral("\"%1\" entries must be non-empty strings").arg(key));
+                return;
+            }
+            out->append(a.toString());
+        }
+    };
+    arguments(QStringLiteral("launchArguments"), &cap.launchArguments);
+    arguments(QStringLiteral("resumeArguments"), &cap.resumeArguments);
+    auto mentions = [](const QStringList &list, const QString &placeholder) {
+        return std::any_of(list.cbegin(), list.cend(), [&](const QString &a) { return a.contains(placeholder); });
+    };
+
+    if (cap.adapter == SaveStateCapability::Adapter::ControlSocket) {
+        if (!mentions(cap.launchArguments, QStringLiteral("{control-socket}")))
+            problem(QStringLiteral("\"launchArguments\" must pass \"{control-socket}\" to the emulator"));
+        if (!mentions(cap.resumeArguments, QStringLiteral("{state-file}")))
+            problem(QStringLiteral("\"resumeArguments\" must pass \"{state-file}\" to the emulator"));
+        if (o.contains(QStringLiteral("port")) && warnings)
+            warnings->append(QStringLiteral("\"capabilities.saveState.port\" is only used by the retroarch adapter"));
+    } else {
+        if ((o.contains(QStringLiteral("launchArguments")) || o.contains(QStringLiteral("resumeArguments")))
+            && warnings)
+            warnings->append(QStringLiteral("\"capabilities.saveState\": the retroarch adapter builds its own "
+                                            "arguments; \"launchArguments\" and \"resumeArguments\" are ignored"));
+        cap.launchArguments.clear();
+        cap.resumeArguments.clear();
+        if (o.contains(QStringLiteral("port"))) {
+            if (!isInteger(o.value(QStringLiteral("port")), 1024, 65535))
+                problem(QStringLiteral("\"port\" must be an integer between 1024 and 65535"));
+            else
+                cap.port = o.value(QStringLiteral("port")).toInt();
+        }
+    }
+    if (problems->size() > problemsBefore)
+        return std::nullopt;
+    return cap;
 }
 
 } // namespace
@@ -216,6 +312,43 @@ std::optional<EmulatorConfig> ConfigLoader::parse(const QByteArray &json, const 
             fail(QStringLiteral("\"pausable\" must be a boolean (got %1)").arg(jsonTypeName(v)));
         else
             config.pausable = v.toBool();
+    }
+
+    if (obj.contains(QStringLiteral("capabilities"))) {
+        // A malformed block only drops the capability: the emulator stays usable, and the
+        // problem is reported as a warning (docs/emulator-integration.md#capabilities).
+        const QJsonValue v = obj.value(QStringLiteral("capabilities"));
+        QStringList problems;
+        if (!v.isObject()) {
+            problems.append(QStringLiteral("\"capabilities\" must be an object (got %1)").arg(jsonTypeName(v)));
+        } else {
+            const QJsonObject caps = v.toObject();
+            for (auto it = caps.constBegin(); it != caps.constEnd(); ++it) {
+                if (it.key() != QLatin1String("pause") && it.key() != QLatin1String("saveState") && warnings)
+                    warnings->append(QStringLiteral("unknown key \"%1\" in \"capabilities\" ignored").arg(it.key()));
+            }
+            if (caps.contains(QStringLiteral("pause"))) {
+                const QJsonValue pause = caps.value(QStringLiteral("pause"));
+                const QJsonValue pausable = obj.value(QStringLiteral("pausable"));
+                if (!pause.isBool()) {
+                    problems.append(
+                        QStringLiteral("\"capabilities.pause\" must be a boolean (got %1)").arg(jsonTypeName(pause)));
+                } else if (pausable.isBool() && pausable.toBool() != pause.toBool()) {
+                    // Pausing a game that cannot take SIGSTOP is worse than not offering it.
+                    problems.append(QStringLiteral("\"pausable\" and \"capabilities.pause\" disagree; "
+                                                   "the emulator is treated as not pausable"));
+                    config.pausable = false;
+                } else {
+                    config.pausable = pause.toBool();
+                }
+            }
+            if (caps.contains(QStringLiteral("saveState")))
+                config.saveState = parseSaveState(caps.value(QStringLiteral("saveState")), &problems, warnings);
+        }
+        if (warnings) {
+            for (const QString &p : std::as_const(problems))
+                warnings->append(p + QStringLiteral("; capability ignored"));
+        }
     }
 
     if (obj.contains(QStringLiteral("profiles"))) {

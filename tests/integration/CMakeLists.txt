@@ -50,3 +50,5 @@ if(NEXORA_OPENSSL_EXECUTABLE)
 else()
     message(STATUS "openssl command not found; skipping test_release_scripts")
 endif()
+nexora_add_test(tst_savestateadapter SOURCES tst_savestateadapter.cpp
+    LIBS nexora_emulator_manager LABELS integration FAKE_EMULATOR)

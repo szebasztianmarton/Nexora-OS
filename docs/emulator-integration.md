@@ -14,6 +14,7 @@ Code: `shared/include/nexora/shared/EmulatorConfig.h`, `shared/src/ConfigLoader.
 - [Launch lifecycle](#launch-lifecycle)
 - [Process states and outcomes](#process-states-and-outcomes)
 - [Pause and resume](#pause-and-resume)
+- [Capabilities](#capabilities)
 - [Stopping](#stopping)
 - [Launch history and output logs](#launch-history-and-output-logs)
 - [Choosing the emulator for a game](#choosing-the-emulator-for-a-game)
@@ -58,6 +59,7 @@ Each emulator is one JSON object in its own `*.json` file in the configuration d
 | `extensions` | string array | no | `^\.[a-z0-9]{1,16}$`; the game files this emulator accepts |
 | `systems` | string array | no | system ids from the [catalog](#gaming-systems); unknown ids are reported and dropped |
 | `pausable` | bool | no | default `false`; allows [pause/resume](#pause-and-resume) with SIGSTOP/SIGCONT |
+| `capabilities` | object | no | `{pause?, saveState?}`; see [Capabilities](#capabilities) |
 | `stopTimeoutMs` | int | no | 500–60000, default 5000: time between SIGTERM and SIGKILL |
 | `profiles` | object array | no | ≤ 32; `{id, name, emulator?, arguments?, workingDirectory?, enabled?}`; profile `arguments` replace the emulator's |
 
@@ -151,6 +153,58 @@ The full transition table is tested in `tst_processstate`; outcomes with the fak
 
 Only for definitions with `"pausable": true`, and only while `Running`. `pause()` sends SIGSTOP, `resume()` SIGCONT, both to the emulator's whole process group (see [Stopping](#stopping)); `paused` is exposed to QML and the quick menu shows "Pause emulator"/"Resume emulator" only when `app.canPause` is true. The quick menu's "Return to game" resumes a paused emulator before closing. Stopping a paused group sends SIGCONT before SIGTERM so it can exit. Tested: `tst_emulatormanager` (process state `T` in `/proc/<pid>/stat`, non-pausable refused, stop while paused), `tst_appcontroller`, `tst_quickmenu.qml`. SIGSTOP freezes the whole process group; whether a given emulator tolerates it (audio devices, timers) is untested.
 
+## Capabilities
+
+What an emulator can do beyond being started and stopped. Optional; a definition without it behaves exactly as before.
+
+```json
+"capabilities": {
+  "pause": true,
+  "saveState": {
+    "adapter": "control-socket",
+    "timeoutMs": 10000,
+    "launchArguments": ["--control-socket", "{control-socket}"],
+    "resumeArguments": ["--load-state", "{state-file}"]
+  }
+}
+```
+
+| Key | Rules |
+| --- | --- |
+| `pause` | bool; same as `pausable` (kept for compatibility). If both are given and disagree, the emulator is treated as not pausable and a warning is reported. |
+| `saveState.adapter` | `"control-socket"` or `"retroarch"` |
+| `saveState.timeoutMs` | 1000–120000, default 10000: how long a save or quit request may take |
+| `saveState.launchArguments` | control-socket only, required: arguments appended to every launch that uses save states; must contain `{control-socket}`, replaced by the socket path |
+| `saveState.resumeArguments` | control-socket only, required: appended when the game starts from a state; must contain `{state-file}`, replaced by the state's absolute path |
+| `saveState.port` | retroarch only: network command port on 127.0.0.1, 1024–65535, default 55355 |
+
+A malformed `capabilities` block does **not** make the definition invalid: the broken capability is dropped, a warning is reported (`--check-config`, System tab), and the emulator stays usable without it. Unknown keys inside it are warnings. Placeholders are substituted into explicit argument lists; nothing passes through a shell. The adapter's arguments are appended after the emulator's (or profile's) arguments and the game path.
+
+Save states are used by Quick Resume (game sessions, [console-experience.md](console-experience.md#dependency-aware-plan) step 3); the adapters are `nexora::emulator::SaveStateAdapter` (`apps/emulator-manager/include/nexora/emulator/SaveStateAdapter.h`).
+
+### control-socket adapter
+
+Nexora's own line protocol, for emulators or wrapper scripts that implement it. For each launch Nexora listens on a fresh Unix socket in the temporary directory, readable only by its own user, and passes the path through `{control-socket}`. The emulator connects once (further connections are refused) and answers one line per request (UTF-8, at most 4096 bytes):
+
+| Nexora sends | Emulator answers |
+| --- | --- |
+| `SAVE <directory>` | `OK <absolute path of the new state file>` or `ERR <message>` |
+| `QUIT` | `OK` and exits, or `ERR <message>` |
+
+A save succeeds only when the answer arrives within `timeoutMs` and the file is a non-empty regular file inside `<directory>` (symbolic links and paths outside it are rejected). If the emulator disconnects or exits while a request is pending, the request fails at once. A failed or timed-out save never stops the game. The emulator must be running (not SIGSTOPped) to answer.
+
+`nexora-fake-emulator` implements the protocol (`--control-socket`, `--load-state`, plus `--save-error`, `--save-empty`, `--save-delay-ms`, `--ignore-quit` to simulate failures). Tested: `tst_savestateadapter` (save, quit, resume from the state, ERR answer, empty file, timeout, one request at a time, not connected, refused quit, disconnect during save).
+
+### retroarch adapter (unverified)
+
+**Not verified with RetroArch**: written from RetroArch's documented configuration keys and network commands and tested only against a stand-in UDP listener (`tst_savestateadapter`), because RetroArch is not integrated yet ([emulator-integracio.md](emulator-integracio.md)).
+
+- Launch: writes `<session>/nexora-retroarch.cfg` (network commands on 127.0.0.1:`port`, `savestate_directory = <session>/retroarch`, slot 0, no automatic save/load, no quit confirmation, `config_save_on_exit = false`) and adds `--appendconfig <file>`.
+- Save: sends the UDP command `SAVE_STATE`, waits until a `*.state` file in `<session>/retroarch` appears or changes and has the same size and time on two polls (100 ms apart), then **copies** it to a new file in the requested directory. RetroArch overwrites its slot file in place; the copy keeps earlier states intact.
+- Resume: copies the state to `<session>/retroarch/<game file name without extension>.state` and adds `--entryslot 0`.
+- Quit: sends `QUIT`. RetroArch sends no answer, so success only means the datagram was sent; the caller still waits for the process to exit and then sends SIGTERM.
+- Needs the loopback interface up on the image. RetroArch's network commands are unauthenticated: any local process can send them while the game runs.
+
 ## Stopping
 
 - Quick menu › Exit game (confirmation: unsaved progress may be lost), the running overlay's Stop (same confirmation, default Cancel), the game bar's Stop emulator (second press), or holding **Select + Start** for 1 s (no confirmation; [controller-support.md](controller-support.md)).
@@ -191,8 +245,8 @@ The launch profile is `emulators.defaultProfiles[<emulator>]` when it exists and
 ## Limitations
 
 - No real emulator tested; no emulator packaged in the image.
-- One process at a time; no save-state, cheat or per-game configuration integration; emulators are not told about `<data>/saves`.
-- `version` is declared, not detected; `capabilities` beyond `pausable` are not modelled.
+- One process at a time; no cheat or per-game configuration integration; emulators are not told about `<data>/saves`. Save states work only through the [adapters](#capabilities); the RetroArch adapter is unverified.
+- `version` is declared, not detected; capabilities are declared, not probed.
 - Emulators run as the same user as the shell and are not sandboxed ([security.md](security.md#known-limitations)).
 - On the image the emulator gets the display only after the shell releases it (EGLFS); how a given emulator behaves under KMS without a window system is untested.
 - Devices are not grabbed: the emulator and the shell both see controller input; navigation is suspended while an emulator runs.

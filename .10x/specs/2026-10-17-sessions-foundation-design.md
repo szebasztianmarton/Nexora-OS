@@ -30,6 +30,7 @@ Emulator definition gains an optional `capabilities` object; `pausable` stays va
   "saveState": {
     "adapter": "control-socket" | "retroarch",
     "timeoutMs": 10000,
+    "launchArguments": ["--control-socket", "{control-socket}"],
     "resumeArguments": ["--load-state", "{state-file}"],
     "port": 55355
   }
@@ -38,8 +39,8 @@ Emulator definition gains an optional `capabilities` object; `pausable` stays va
 
 - `control-socket` (Nexora's own line protocol): Nexora listens on a per-session Unix socket and passes its path through the `{control-socket}` placeholder; the emulator connects and answers `SAVE <dir>` with `OK <file>` / `ERR <message>` and `QUIT` with `OK`. Resume passes `resumeArguments` with `{state-file}`. Implemented by the fake emulator; usable by wrapper scripts.
 - `retroarch` (unverified until RetroArch is integrated): `--appendconfig <session.cfg>` with `savestate_directory` set to the session directory and network commands enabled on `port`; save = UDP `SAVE_STATE` then wait for the state file to change; quit = UDP `QUIT`; resume = `--entryslot 0` with the same config.
-- Interface `SaveStateAdapter`: `prepareLaunch(session dir, resume file) -> extra arguments`, `save(dir, timeout)`, `requestQuit()`, all asynchronous with a single completion signal carrying success/error.
-- Unknown adapters or malformed blocks are config errors (the emulator stays usable without the capability). Arguments never pass through a shell.
+- Interface `SaveStateAdapter`: `prepareLaunch({session dir, resume file, game path}) -> extra arguments`, `save(dir)` (timeout from the capability), `requestQuit()`, `close()`; asynchronous with `saveFinished(ok, file, error)` / `quitFinished(ok, error)`; one request at a time.
+- Unknown adapters or malformed blocks are reported as configuration warnings and the capability is dropped (the emulator stays usable without it). (Implementation: `launchArguments` added so `{control-socket}` is only passed when a session uses save states; the RetroArch adapter copies each state out of its slot directory because RetroArch overwrites slot files in place.) Arguments never pass through a shell.
 
 ## 3. GameSessionManager
 

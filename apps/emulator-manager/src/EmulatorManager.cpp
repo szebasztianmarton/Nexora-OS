@@ -117,6 +117,7 @@ std::optional<ResolvedLaunch> EmulatorManager::resolve(const LaunchRequest &requ
         if (!substituted)
             resolved.arguments.append(path);
     }
+    resolved.arguments.append(request.extraArguments);
     if (error)
         *error = EmulatorError::None;
     return resolved;

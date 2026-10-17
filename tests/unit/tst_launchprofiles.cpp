@@ -148,7 +148,7 @@ private slots:
     void resolvesDefaultsWithoutGame()
     {
         EmulatorError error = EmulatorError::Crashed;
-        const auto r = EmulatorManager::resolve({config(), {}, {}, {}}, &error, nullptr);
+        const auto r = EmulatorManager::resolve({config(), {}, {}, {}, {}}, &error, nullptr);
         QVERIFY(r);
         QCOMPARE(error, EmulatorError::None);
         QCOMPARE(r->program, m_exe);
@@ -160,17 +160,19 @@ private slots:
     void substitutesGamePath()
     {
         const auto base
-            = EmulatorManager::resolve({config(), {}, m_game, QStringLiteral("Super Game")}, nullptr, nullptr);
+            = EmulatorManager::resolve({config(), {}, m_game, QStringLiteral("Super Game"), {}}, nullptr, nullptr);
         QVERIFY(base);
         QCOMPARE(base->arguments, QStringList({QStringLiteral("--base"), m_game}));
         QCOMPARE(base->displayName, QStringLiteral("Super Game"));
 
-        const auto fast = EmulatorManager::resolve({config(), QStringLiteral("fast"), m_game, {}}, nullptr, nullptr);
+        const auto fast
+            = EmulatorManager::resolve({config(), QStringLiteral("fast"), m_game, {}, {}}, nullptr, nullptr);
         QVERIFY(fast);
         QCOMPARE(fast->arguments, QStringList({QStringLiteral("--fast"), QStringLiteral("--rom=") + m_game}));
 
         // A profile without its own arguments inherits the emulator's.
-        const auto plain = EmulatorManager::resolve({config(), QStringLiteral("plain"), m_game, {}}, nullptr, nullptr);
+        const auto plain
+            = EmulatorManager::resolve({config(), QStringLiteral("plain"), m_game, {}, {}}, nullptr, nullptr);
         QVERIFY(plain);
         QCOMPARE(plain->arguments, QStringList({QStringLiteral("--base"), m_game}));
     }
@@ -179,14 +181,14 @@ private slots:
     {
         EmulatorConfig c = config();
         c.arguments = {QStringLiteral("-v")};
-        const auto r = EmulatorManager::resolve({c, {}, m_game, {}}, nullptr, nullptr);
+        const auto r = EmulatorManager::resolve({c, {}, m_game, {}, {}}, nullptr, nullptr);
         QVERIFY(r);
         QCOMPARE(r->arguments, QStringList({QStringLiteral("-v"), m_game}));
     }
 
     void profileWorkingDirectory()
     {
-        const auto r = EmulatorManager::resolve({config(), QStringLiteral("here"), {}, {}}, nullptr, nullptr);
+        const auto r = EmulatorManager::resolve({config(), QStringLiteral("here"), {}, {}, {}}, nullptr, nullptr);
         QVERIFY(r);
         QCOMPARE(r->workingDirectory, m_dir.path());
     }
@@ -195,7 +197,7 @@ private slots:
     {
         EmulatorConfig c = config();
         c.stopTimeoutMs = 750;
-        const auto r = EmulatorManager::resolve({c, {}, {}, {}}, nullptr, nullptr);
+        const auto r = EmulatorManager::resolve({c, {}, {}, {}, {}}, nullptr, nullptr);
         QVERIFY(r);
         QCOMPARE(r->stopTimeout, std::optional<std::chrono::milliseconds>(std::chrono::milliseconds(750)));
     }
@@ -222,7 +224,7 @@ private slots:
         QFETCH(EmulatorError, expected);
         EmulatorError error = EmulatorError::None;
         QString detail;
-        QVERIFY(!EmulatorManager::resolve({config(), profile, game, {}}, &error, &detail));
+        QVERIFY(!EmulatorManager::resolve({config(), profile, game, {}, {}}, &error, &detail));
         QCOMPARE(error, expected);
         QVERIFY(!describe(error, detail).isEmpty());
     }
@@ -230,7 +232,7 @@ private slots:
     void invalidRequestFailsLaunchWithoutProcess()
     {
         EmulatorManager manager;
-        const auto result = manager.launch(LaunchRequest{config(), QStringLiteral("off"), {}, {}});
+        const auto result = manager.launch(LaunchRequest{config(), QStringLiteral("off"), {}, {}, {}});
         QVERIFY(!result.accepted);
         QCOMPARE(result.error, EmulatorError::ProfileDisabled);
         QCOMPARE(manager.state(), ProcessState::Failed);
