@@ -14,6 +14,7 @@ Item {
     activeFocusOnTab: true
     Accessible.role: Accessible.PageTab
     Accessible.name: label
+    Accessible.selected: item.active
     Accessible.onPressAction: item.activated()
 
     Rectangle {
