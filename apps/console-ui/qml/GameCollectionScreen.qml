@@ -12,6 +12,10 @@ FocusScope {
     property string subtitle
     property string emptyTitle
     property string emptyText
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     signal navigate(string tab)
     signal optionsRequested(real gameId)
@@ -48,7 +52,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: Theme.space5
+        anchors.topMargin: Theme.space5 + screen.chromeTop
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
         spacing: Theme.space1
@@ -84,6 +88,7 @@ FocusScope {
         focus: true
         library: screen.library
         model: screen.games
+        chromeBottom: screen.chromeBottom
         onDetailsRequested: (gameId) => screen.detailsRequested(gameId)
         onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
     }

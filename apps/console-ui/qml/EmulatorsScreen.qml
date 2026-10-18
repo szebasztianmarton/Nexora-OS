@@ -8,6 +8,10 @@ FocusScope {
     objectName: "emulatorsScreen"
     required property AppController app
     required property SettingsController settings
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     readonly property alias currentIndex: list.currentIndex
     readonly property bool pickerOpen: picker.visible
@@ -47,7 +51,7 @@ FocusScope {
         id: title
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.topMargin: Theme.spacing * 1.5
+        anchors.topMargin: Theme.spacing * 1.5 + screen.chromeTop
         anchors.leftMargin: Theme.spacing * 2
         text: "Emulators"
         color: Theme.text
@@ -80,7 +84,7 @@ FocusScope {
         anchors.top: statusLine.bottom
         anchors.bottom: parent.bottom
         anchors.topMargin: Theme.spacing
-        anchors.bottomMargin: Theme.spacing
+        anchors.bottomMargin: Theme.spacing + screen.chromeBottom
         leftMargin: Theme.spacing * 2
         rightMargin: Theme.spacing * 2
         orientation: ListView.Horizontal

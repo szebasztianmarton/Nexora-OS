@@ -9,6 +9,10 @@ FocusScope {
     objectName: "systemsScreen"
     required property AppController app
     required property LibraryController library
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     signal navigate(string tab)
     signal systemChosen(string systemId)
@@ -68,7 +72,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: Theme.space5
+        anchors.topMargin: Theme.space5 + screen.chromeTop
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
         spacing: Theme.space1
@@ -100,6 +104,8 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        // Stops above the hint bar: the view scrolls the current card only to its own edge.
+        anchors.bottomMargin: screen.chromeBottom
         anchors.leftMargin: Theme.space6 - Theme.space2
         anchors.rightMargin: Theme.space6 - Theme.space2
         visible: count > 0

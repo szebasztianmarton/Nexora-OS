@@ -14,6 +14,10 @@ FocusScope {
     objectName: "gameDetails"
     required property AppController app
     required property LibraryController library
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     property real gameId: -1
     property var info: ({})
@@ -157,6 +161,8 @@ FocusScope {
         visible: details.hasGame
         anchors.fill: parent
         anchors.margins: Theme.space6
+        anchors.topMargin: Theme.space6 + details.chromeTop
+        anchors.bottomMargin: Theme.space6 + details.chromeBottom
 
         // Left: cover + facts.
         Column {
@@ -170,7 +176,7 @@ FocusScope {
                 id: cover
                 objectName: "gameDetailsCover"
                 width: parent.width
-                height: Math.min(width * 0.75, details.height * 0.42)
+                height: Math.min(width * 0.75, (details.height - details.chromeTop - details.chromeBottom) * 0.42)
                 radius: Theme.radiusLarge
                 clip: true
                 opacity: details.info.present ? 1.0 : 0.5

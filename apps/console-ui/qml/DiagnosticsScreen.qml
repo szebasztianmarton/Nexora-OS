@@ -14,6 +14,10 @@ FocusScope {
     required property SettingsController settings
     required property SystemController system
     required property UpdateController updates
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     signal updatesRequested()
 
@@ -93,7 +97,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.leftMargin: Theme.space6
-        anchors.topMargin: Theme.space5
+        anchors.topMargin: Theme.space5 + screen.chromeTop
         text: "System"
         color: Theme.text
         font.pixelSize: Theme.fontHero
@@ -152,6 +156,8 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        // Stops above the hint bar: the focus frame is drawn around the whole view.
+        anchors.bottomMargin: screen.chromeBottom
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
         contentHeight: content.implicitHeight + Theme.spacing

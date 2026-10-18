@@ -11,6 +11,10 @@ FocusScope {
     required property AppController app
     required property LibraryController library
     required property UpdateController updates
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     signal navigate(string tab)   // "games", "settings", "system"
     signal optionsRequested(real gameId)
@@ -116,10 +120,12 @@ FocusScope {
         const p = item.mapToItem(flick.contentItem, 0, 0)
         const top = p.y - Theme.spacing
         const bottom = p.y + item.height + Theme.spacing
-        if (top < flick.contentY)
-            flick.contentY = Math.max(0, top)
-        else if (bottom > flick.contentY + flick.height)
-            flick.contentY = Math.min(bottom - flick.height, Math.max(0, flick.contentHeight - flick.height))
+        // The content scrolls under the glass bars: only the part between them counts.
+        if (top < flick.contentY + screen.chromeTop)
+            flick.contentY = Math.max(0, top - screen.chromeTop)
+        else if (bottom > flick.contentY + flick.height - screen.chromeBottom)
+            flick.contentY = Math.min(bottom - flick.height + screen.chromeBottom,
+                                      Math.max(0, flick.contentHeight - flick.height))
     }
 
     Component.onCompleted: focusDefault()
@@ -131,7 +137,7 @@ FocusScope {
         id: flick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.height + Theme.spacing * 2
+        contentHeight: column.height + Theme.spacing * 2 + screen.chromeTop + screen.chromeBottom
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Behavior on contentY { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic } }
@@ -139,7 +145,7 @@ FocusScope {
         Column {
             id: column
             x: Theme.space6
-            y: Theme.space5
+            y: Theme.space5 + screen.chromeTop
             width: flick.width - Theme.space6 * 2
             spacing: Theme.space5
 

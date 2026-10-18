@@ -1599,6 +1599,127 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    // Dark and high contrast keep the docked chrome: header at the top, the tab bar under it,
+    // the pages between the tab bar and the hint bar (to the bottom without hints), and the
+    // window-level overlays between the header and the hint bar.
+    void dockedChromeLayout_data() { addWindowSizeRows(); }
+    void dockedChromeLayout()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("alpha"));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        if (QTest::currentTestFailed())
+            return;
+        auto *settings = ui.context->settings();
+        auto *header = find(ui, "header");
+        auto *tabBar = find(ui, "tabBar");
+        auto *hintBar = find(ui, "hintBar");
+        QVERIFY(header && tabBar && hintBar);
+        const QSizeF size = ui.window->size();
+        for (const QString &theme : {QStringLiteral("dark"), QStringLiteral("highContrast")}) {
+            settings->setTheme(theme);
+            for (const bool hints : {true, false}) {
+                settings->setShowHints(hints);
+                QTest::qWait(50);
+                const QString row = theme + (hints ? QStringLiteral(" + hints") : QStringLiteral(""));
+                const qreal top = header->height();
+                const qreal pagesTop = top + tabBar->height();
+                const qreal bottom = hints ? size.height() - hintBar->height() : size.height();
+                QCOMPARE(sceneRect(header), QRectF(0, 0, size.width(), top));
+                QCOMPARE(sceneRect(tabBar), QRectF(0, top, size.width(), tabBar->height()));
+                if (hints)
+                    QCOMPARE(sceneRect(hintBar), QRectF(0, bottom, size.width(), hintBar->height()));
+                for (const char *page : {"homeScreen", "gamesScreen", "systemsScreen", "favoritesScreen",
+                                         "recentScreen", "emulatorsScreen", "settingsScreen", "systemScreen",
+                                         "gameDetails"})
+                    QVERIFY2(sceneRect(find(ui, page)) == QRectF(0, pagesTop, size.width(), bottom - pagesTop),
+                             qPrintable(row + u' ' + QString::fromLatin1(page)));
+                for (const char *overlay : {"runningOverlay", "tutorialOverlay", "gameOptions", "updatePanel"})
+                    QVERIFY2(sceneRect(find(ui, overlay)) == QRectF(0, top, size.width(), bottom - top),
+                             qPrintable(row + u' ' + QString::fromLatin1(overlay)));
+                QCOMPARE(ui.window->property("chromeTop").toReal(), 0.0);
+                QCOMPARE(ui.window->property("chromeBottom").toReal(), 0.0);
+            }
+        }
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // Glass: the header, tab bar and hint bar float (inset from the window edges) over the
+    // scene layer, which fills the window; the pages keep their first and last rows clear of
+    // the bars.
+    void glassChromeFloatsWithoutCoveringContent_data() { addWindowSizeRows(); }
+    void glassChromeFloatsWithoutCoveringContent()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        for (int i = 0; i < 24; ++i)
+            touch(games, QStringLiteral("Game %1.rom").arg(i, 2, 10, QLatin1Char('0')));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+        QCOMPARE(ui.context->settings()->theme(), QStringLiteral("glass"));
+
+        auto *chrome = find(ui, "glassChrome");
+        auto *header = find(ui, "header");
+        auto *tabBar = find(ui, "tabBar");
+        auto *hintBar = find(ui, "hintBar");
+        auto *scene = find(ui, "sceneLayer");
+        QVERIFY(chrome && header && tabBar && hintBar && scene);
+        // The scene (backdrop + pages) fills the window: content scrolls under the bars.
+        QCOMPARE(scene->height(), ui.window->contentItem()->height());
+        QCOMPARE(sceneRect(scene), QRectF(QPointF(0, 0), QSizeF(ui.window->size())));
+        // Bars float: inset from the window edges.
+        QVERIFY(sceneRect(header).top() > 0);
+        QVERIFY(sceneRect(header).left() > 0);
+        QVERIFY(sceneRect(header).right() < ui.window->width());
+        QVERIFY(sceneRect(tabBar).top() > sceneRect(header).bottom());
+        QVERIFY(hintBar->isVisible());
+        QVERIFY(sceneRect(hintBar).bottom() < ui.window->height());
+        const qreal tabBottom = sceneRect(tabBar).bottom();
+        const qreal hintTop = sceneRect(hintBar).top();
+        QVERIFY(ui.window->property("chromeTop").toReal() >= tabBottom);
+        QVERIFY(ui.window->property("chromeBottom").toReal() >= ui.window->height() - hintTop);
+
+        // Games: the toolbar and the first game tile are below the tab bar, not under it.
+        goTo(ui, Games);
+        auto *grid = find(ui, "gameGrid");
+        QTRY_COMPARE_WITH_TIMEOUT(grid->property("count").toInt(), 24, Timeout);
+        QTest::qWait(100);
+        QVERIFY(sceneRect(find(ui, "searchField")).top() >= tabBottom);
+        const auto tiles = visibleWithPrefix(find(ui, "gamesScreen"), QStringLiteral("gameTileTitle"));
+        QVERIFY(!tiles.isEmpty());
+        QVERIFY(sceneRect(tiles.first()).top() >= tabBottom);
+        QVERIFY(sceneRect(find(ui, "scanSummary")).bottom() <= hintTop);
+
+        // Settings: the first row starts below the tab bar; walking to the last row scrolls
+        // it fully above the hint bar.
+        goTo(ui, Settings);
+        QTest::qWait(100);
+        QVERIFY(sceneRect(find(ui, "sectionTitle_General")).top() >= tabBottom);
+        auto *resetRow = find(ui, "resetRow");
+        for (int i = 0; i < 100 && !resetRow->hasActiveFocus(); ++i)
+            key(ui, Qt::Key_Down);
+        QTRY_VERIFY2_WITH_TIMEOUT(resetRow->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(sceneRect(resetRow).bottom() <= hintTop,
+                                  qPrintable(QStringLiteral("row bottom %1 > hint bar top %2")
+                                                 .arg(sceneRect(resetRow).bottom())
+                                                 .arg(hintTop)),
+                                  Timeout);
+        shot(ui, qPrintable(QStringLiteral("glass-chrome-%1-settings").arg(windowSize.height())));
+
+        CHECK_NO_WARNINGS();
+    }
+
     // Systems: the "Other" card shows only the games without a recognised system; a system
     // without games still shows (and selects) its chip.
     void systemsOtherAndEmptySystem()

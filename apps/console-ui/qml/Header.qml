@@ -1,14 +1,17 @@
 import QtQuick
 import Nexora.Console
 
-// Branding plus global status: running emulator, library scan, root warning, clock.
+// Branding plus global status: running emulator, library scan, root warning, clock. A docked
+// bar in dark / high contrast; a floating glass bar in the glass theme (Main.qml places it).
 Rectangle {
     id: header
     required property AppController app
     required property LibraryController library
 
     implicitHeight: Theme.headerHeight
-    color: Theme.surface
+    color: Theme.glassActive ? "transparent" : Theme.surface
+
+    GlassSurface { anchors.fill: parent; z: -1; radius: Theme.radiusXL }
 
     Row {
         anchors.left: parent.left

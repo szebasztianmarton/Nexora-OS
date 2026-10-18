@@ -39,11 +39,16 @@ FocusScope {
     readonly property real labelPadding: compact ? Theme.space2 : Theme.space5
     readonly property real labelFontSize: compact ? Math.round(Theme.fontBody * 0.82) : Theme.fontBody
 
+    // Docked (dark / high contrast): a plain strip with a bottom rule. Glass: a floating glass
+    // bar (Main.qml places it).
+    GlassSurface { anchors.fill: parent; z: -1; radius: Theme.radiusXL }
     Rectangle {
+        visible: !Theme.glassActive
         anchors.fill: parent
-        color: Theme.glassActive ? Theme.surface : Theme.background
+        color: Theme.background
     }
     Rectangle {
+        visible: !Theme.glassActive
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

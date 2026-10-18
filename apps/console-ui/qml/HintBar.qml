@@ -1,16 +1,19 @@
 import QtQuick
 import Nexora.Console
 
-// Bottom bar listing the controls available in the current context.
+// Bottom bar listing the controls available in the current context. Docked in dark / high
+// contrast; a floating glass bar in the glass theme (Main.qml places it).
 Rectangle {
     id: bar
     objectName: "hintBar"
     property var hints: []   // [{ button: "A / Enter", action: "Launch" }, ...]
 
     implicitHeight: Theme.barHeight
-    color: Theme.surface
+    color: Theme.glassActive ? "transparent" : Theme.surface
 
+    GlassSurface { anchors.fill: parent; z: -1; radius: Theme.radiusXL }
     Rectangle {
+        visible: !Theme.glassActive
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
