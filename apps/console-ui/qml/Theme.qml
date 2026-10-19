@@ -67,8 +67,6 @@ QtObject {
     readonly property color warning: highContrast ? "#ffa500" : "#f2b84b"
     readonly property color danger: highContrast ? "#ff3b3b" : "#ff6372"
     readonly property color favorite: highContrast ? "#ffd400" : "#ffc94d"
-    // Glass sheen along the top edge of panels and cards (transparent outside glass).
-    readonly property color glassSheen: glassActive ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
 
     // --- Liquid Glass ---------------------------------------------------------------------------
     readonly property real glassBlurRadius: Math.round(32 * scale)
