@@ -120,6 +120,7 @@ FocusScope {
 
             // Glass: one capsule glides to the focused entry of the visible page.
             GlassFocusPill {
+                radius: Theme.radiusSmall // SettingRow's corners
                 target: {
                     const nav = menu.page === "display" ? displayRows : menu.page === "info" ? null : mainRows
                     const t = nav ? nav.lastFocused : infoBack

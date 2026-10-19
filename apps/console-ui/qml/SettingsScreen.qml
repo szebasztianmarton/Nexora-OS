@@ -255,6 +255,7 @@ FocusScope {
 
         // Glass: one capsule glides to the focused row.
         GlassFocusPill {
+            radius: Theme.radiusSmall // SettingRow's corners
             target: {
                 const f = screen.focusedItem
                 return f && f.label !== undefined && f.activeFocusOnTab && screen.isInside(f) ? f : null

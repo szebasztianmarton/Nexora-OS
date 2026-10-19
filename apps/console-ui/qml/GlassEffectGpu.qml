@@ -56,10 +56,13 @@ Item {
         saturation: gpu.blurredSource ? 0 : Theme.glassSaturation
         maskEnabled: true
         maskSource: shape
-        shadowEnabled: true
-        shadowColor: Theme.glassShadow
-        shadowBlur: 0.6
-        shadowVerticalOffset: Math.round(8 * Theme.scale)
+        // No drop shadow: the mask clips it away (the crop is opaque inside the shape), and
+        // MultiEffect builds its blur levels whenever blur or shadow is on, so a shadow would
+        // make every grouped surface blur again.
+        shadowEnabled: false
+        // The item never draws outside its bounds; with padding the blur would fade to
+        // transparent towards the edges.
+        autoPaddingEnabled: false
     }
     GlassEffectFlat {
         anchors.fill: parent

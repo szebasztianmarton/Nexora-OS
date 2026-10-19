@@ -60,6 +60,7 @@
 #include <QDir>
 #include <QFile>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
 #include <QQmlError>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -206,6 +207,18 @@ private:
     }
 
     static int currentTab(Ui &ui) { return ui.window->property("currentTab").toInt(); }
+
+    // The Theme singleton of the loaded UI (Main.qml binds its inputs), read through a small
+    // component in the same engine (the singleton is a QML file, one instance per engine).
+    static QObject *theme(Ui &ui)
+    {
+        QQmlComponent component(ui.engine.get());
+        component.setData("import QtQml; import Nexora.Console; QtObject { property QtObject theme: Theme }", QUrl());
+        std::unique_ptr<QObject> probe(component.create());
+        if (!probe)
+            return nullptr;
+        return qvariant_cast<QObject *>(probe->property("theme"));
+    }
 
     // NEXORA_SCREENSHOT_DIR=<dir>: saves <dir>/<name>.png (for reviewing layouts and docs).
     static void shot(Ui &ui, const char *name)
@@ -647,11 +660,24 @@ private slots:
         QCOMPARE(list->property("count").toInt(), 2);
 
         // Without profiles: launches directly.
+        QObject *themeObject = theme(ui);
+        QVERIFY(themeObject);
+        QCOMPARE(themeObject->property("sessionActive").toBool(), false);
         QCOMPARE(ui.app->emulators()->emulatorIdAt(0), QStringLiteral("long"));
         key(ui, Qt::Key_Return);
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        // No blur behind a running emulator: Main.qml's state match drives Theme.sessionActive.
+        QCOMPARE(themeObject->property("sessionActive").toBool(), true);
+        QCOMPARE(themeObject->property("glassBlur").toBool(), false);
         stopViaOverlay(ui);
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("exited"), Timeout);
+        QCOMPARE(themeObject->property("sessionActive").toBool(), false);
+        // Settings › Reduce transparency reaches Theme.
+        QCOMPARE(themeObject->property("reduceTransparency").toBool(), false);
+        ui.context->settings()->setReduceTransparency(true);
+        QTRY_COMPARE(themeObject->property("reduceTransparency").toBool(), true);
+        ui.context->settings()->setReduceTransparency(false);
+        QTRY_COMPARE(themeObject->property("reduceTransparency").toBool(), false);
         QTRY_VERIFY2_WITH_TIMEOUT(list->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
 
         // With enabled profiles: a picker ("Default" + enabled profiles); Back closes it.
@@ -1771,6 +1797,75 @@ private slots:
                                                  .arg(hintTop)),
                                   Timeout);
         shot(ui, qPrintable(QStringLiteral("glass-chrome-%1-settings").arg(windowSize.height())));
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // Glass: a card scrolled under the floating hint bar cannot be clicked through the bar.
+    void glassBarsSwallowClicks()
+    {
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        for (int i = 0; i < 24; ++i)
+            touch(games, QStringLiteral("Game %1.rom").arg(i, 2, 10, QLatin1Char('0')));
+        Ui ui;
+        load(ui, config.path());
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+        QCOMPARE(ui.context->settings()->theme(), QStringLiteral("glass"));
+
+        goTo(ui, Games);
+        auto *grid = find(ui, "gameGrid");
+        QTRY_COMPARE_WITH_TIMEOUT(grid->property("count").toInt(), 24, Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QTest::qWait(100);
+        QCOMPARE(grid->property("currentIndex").toInt(), 0);
+        auto *details = find(ui, "gameDetails");
+        QVERIFY(details && !details->isVisible());
+
+        // A point on the hint bar with a card (not the current one) underneath.
+        const QRectF hint = sceneRect(find(ui, "hintBar"));
+        QPointF point;
+        int under = -1;
+        for (qreal x = hint.left() + 8; x < hint.right() - 8 && under <= 0; x += 16) {
+            const QPointF local = grid->mapFromScene(QPointF(x, hint.center().y()));
+            if (local.y() < 0 || local.y() >= grid->height())
+                break;
+            int index = -1;
+            QMetaObject::invokeMethod(grid, "indexAt", Q_RETURN_ARG(int, index),
+                                      Q_ARG(qreal, local.x() + grid->property("contentX").toReal()),
+                                      Q_ARG(qreal, local.y() + grid->property("contentY").toReal()));
+            if (index > 0) {
+                under = index;
+                point = QPointF(x, hint.center().y());
+            }
+        }
+        QVERIFY2(under > 0, "no card under the hint bar");
+        // Aim at the middle of the card (its edges are cell padding).
+        QQuickItem *card = nullptr;
+        QMetaObject::invokeMethod(grid, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, card), Q_ARG(int, under));
+        QVERIFY(card);
+        point.setX(sceneRect(card).center().x());
+        QVERIFY(sceneRect(card).contains(point) && hint.contains(point));
+
+        QTest::mouseClick(ui.window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
+        QTest::qWait(100);
+        QTest::mouseDClick(ui.window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
+        QTest::qWait(300);
+        QCOMPARE(grid->property("currentIndex").toInt(), 0);
+        QVERIFY(!details->isVisible());
+        QCOMPARE(ui.app->state(), QStringLiteral("idle"));
+
+        // The tab bar's own shield sits below its tabs: a tab still takes the click.
+        auto *systemsTab = find(ui, "tab_systems");
+        QVERIFY(systemsTab);
+        QTest::mouseClick(ui.window, Qt::LeftButton, Qt::NoModifier, sceneRect(systemsTab).center().toPoint());
+        QTRY_COMPARE(currentTab(ui), int(Systems));
 
         CHECK_NO_WARNINGS();
     }

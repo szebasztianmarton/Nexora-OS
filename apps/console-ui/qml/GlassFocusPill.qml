@@ -10,7 +10,8 @@ Item {
     property Item target: null
     // False until the pill has been placed on a target; the first placement snaps.
     property bool hasPlaced: false
-    readonly property bool moving: xAnim.running || wAnim.running
+    // Corner radius: a capsule by default (tabs); list rows set their own row radius.
+    property real radius: height / 2
     readonly property rect area: {
         void target
         if (target) {
@@ -30,16 +31,18 @@ Item {
     // Set after the first bindings settled on a real target, so later moves animate.
     onAreaChanged: if (target !== null && !hasPlaced && area.width > 0) Qt.callLater(() => { if (pill.target !== null) pill.hasPlaced = true })
 
-    Behavior on x { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { id: xAnim; duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+    Behavior on x { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
     Behavior on y { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-    Behavior on width { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { id: wAnim; duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+    Behavior on width { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
     Behavior on height { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
 
     GlassSurface {
         anchors.fill: parent
-        radius: height / 2
+        radius: pill.radius
         interactive: true
         active: true
         allowBlur: false
+        // The morph is the motion: no lift, so the pill never overhangs a full-width row.
+        scale: 1.0
     }
 }

@@ -74,6 +74,9 @@ QtObject {
     readonly property color glassFillRegular: reduceTransparency ? surfaceFloating : Qt.rgba(1, 1, 1, 0.10)
     readonly property color glassFillRegularActive: reduceTransparency ? surfaceHover : Qt.rgba(1, 1, 1, 0.15)
     readonly property color glassFillClear: reduceTransparency ? surfaceFloating : Qt.rgba(1, 1, 1, 0.05)
+    // Dense floating panels on the GPU path: a dark tint of surfaceFloating over the blurred
+    // backdrop, so body text keeps >= 4.5:1 also over brightly blurred cover art.
+    readonly property color glassFillDense: reduceTransparency ? surfaceFloating : Qt.rgba(0.10, 0.12, 0.19, 0.65)
     // Prominent (tinted) fill. Reduce transparency: an opaque 50 % mix of the tint into the
     // background, so the light label keeps >= 4.5:1 (about 6.7:1 for the accent).
     function prominentFill(tint) {
@@ -85,7 +88,6 @@ QtObject {
     readonly property color glassRim: Qt.rgba(1, 1, 1, 0.20)
     readonly property color glassRimStrong: Qt.rgba(1, 1, 1, 0.30)
     readonly property color glassHighlight: Qt.rgba(1, 1, 1, reduceTransparency ? 0.06 : 0.18)
-    readonly property color glassShadow: Qt.rgba(0, 0, 0, 0.35)
     // Dedicated focus-ring colour: equal to accent in the normal theme, but kept separate so
     // a future palette can tune focus visibility without touching the accent colour itself.
     readonly property color focusRing: highContrast ? "#ffd400" : accent

@@ -56,6 +56,7 @@ Item {
         GlassFocusPill { id: pill; target: a }
         GlassFocusPill { id: freshPill; target: b }
         GlassFocusPill { id: latePill }
+        GlassFocusPill { id: rowPill; target: b; radius: 6 }
     }
     NxButton { id: playButton; kind: "primary"; text: "Play"; y: 310 }
     NxButton { id: otherButton; text: "Other"; x: 200; y: 310 }
@@ -233,6 +234,34 @@ Item {
             compare(plain.fillColor, Theme.glassFillRegular)
         }
 
+        // Dense panels over the blur use the dark glassFillDense (GPU path only, Qt >= 6.5).
+        function test_denseFillOnGpuPath() {
+            expectMissingEffectsWarnings(4) // plain, grouped, the group pass and densePlain
+            Theme.gpuEffects = true
+            densePlain.backdrop = scene
+            if (hasEffects) {
+                tryCompare(densePlain, "state", "gpu")
+                compare(densePlain.fillColor, Theme.glassFillDense)
+            } else {
+                wait(100)
+                compare(densePlain.blurred, false)
+                compare(densePlain.fillColor, Theme.surfaceFloating)
+            }
+            densePlain.backdrop = null
+        }
+
+        // Body text on a dense panel over a mid-grey blurred backdrop (bright cover art): >= 4.5:1.
+        function test_denseFillContrastOverBlur() {
+            const fill = Theme.glassFillDense
+            verify(fill.a < 1)
+            const bg = Qt.color("#808080")
+            const mix = Qt.rgba(fill.r * fill.a + bg.r * (1 - fill.a), fill.g * fill.a + bg.g * (1 - fill.a),
+                                fill.b * fill.a + bg.b * (1 - fill.a), 1)
+            verify(contrast(Theme.text, mix) >= 4.5, "contrast " + contrast(Theme.text, mix))
+            Theme.reduceTransparency = true
+            compare(Theme.glassFillDense, Theme.surfaceFloating)
+        }
+
         // WCAG contrast ratio of two opaque colours.
         function luminance(c) {
             const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
@@ -254,6 +283,21 @@ Item {
             pill.target = a
             compare(pill.x, a.x)
             compare(pill.width, a.width)
+        }
+        // The pill's surface is lit but never lifted (a 1.02 scale would overhang full-width rows).
+        function test_pillSurfaceDoesNotScale() {
+            Theme.reducedMotion = false
+            const s = findType(pill, "GlassSurface")
+            verify(s !== null)
+            compare(s.lit, true)
+            compare(s.scale, 1)
+        }
+        // A capsule by default; list rows set their own corner radius.
+        function test_pillRadiusIsConfigurable() {
+            compare(pill.radius, pill.height / 2)
+            compare(findType(pill, "GlassSurface").radius, pill.height / 2)
+            compare(rowPill.radius, 6)
+            compare(findType(rowPill, "GlassSurface").radius, 6)
         }
         function test_pillInvisibleOutsideGlass() {
             compare(pill.visible, true)
