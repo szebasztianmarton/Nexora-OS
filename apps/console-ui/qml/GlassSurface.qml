@@ -41,7 +41,7 @@ Item {
     readonly property bool lit: interactive && active
     readonly property color fillColor: dense && !blurred ? Theme.surfaceFloating
         : variant === "prominent"
-        ? (tint === Theme.accent ? Theme.glassFillProminent : Qt.rgba(tint.r, tint.g, tint.b, Theme.glassFillProminent.a))
+        ? (tint === Theme.accent ? Theme.glassFillProminent : Theme.prominentFill(tint))
         : variant === "clear" ? Theme.glassFillClear
         : lit ? Theme.glassFillRegularActive : Theme.glassFillRegular
     readonly property color rimColor: lit ? Theme.glassRimStrong : Theme.glassRim

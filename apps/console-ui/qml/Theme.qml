@@ -76,7 +76,14 @@ QtObject {
     readonly property color glassFillRegular: reduceTransparency ? surfaceFloating : Qt.rgba(1, 1, 1, 0.10)
     readonly property color glassFillRegularActive: reduceTransparency ? surfaceHover : Qt.rgba(1, 1, 1, 0.15)
     readonly property color glassFillClear: reduceTransparency ? surfaceFloating : Qt.rgba(1, 1, 1, 0.05)
-    readonly property color glassFillProminent: Qt.rgba(accent.r, accent.g, accent.b, reduceTransparency ? 0.85 : 0.30)
+    // Prominent (tinted) fill. Reduce transparency: an opaque 50 % mix of the tint into the
+    // background, so the light label keeps >= 4.5:1 (about 6.7:1 for the accent).
+    function prominentFill(tint) {
+        return reduceTransparency
+            ? Qt.rgba((tint.r + background.r) / 2, (tint.g + background.g) / 2, (tint.b + background.b) / 2, 1)
+            : Qt.rgba(tint.r, tint.g, tint.b, 0.30)
+    }
+    readonly property color glassFillProminent: prominentFill(accent)
     readonly property color glassRim: Qt.rgba(1, 1, 1, 0.20)
     readonly property color glassRimStrong: Qt.rgba(1, 1, 1, 0.30)
     readonly property color glassHighlight: Qt.rgba(1, 1, 1, reduceTransparency ? 0.06 : 0.18)

@@ -8,6 +8,8 @@ import Nexora.Console
 Item {
     id: pill
     property Item target: null
+    // False until the pill has been placed on a target; the first placement snaps.
+    property bool hasPlaced: false
     readonly property bool moving: xAnim.running || wAnim.running
     readonly property rect area: {
         void target
@@ -24,11 +26,14 @@ Item {
     height: area.height
     visible: target !== null && Theme.glassActive
     z: -1
+    onTargetChanged: if (target === null) hasPlaced = false
+    // Set after the first bindings settled on a real target, so later moves animate.
+    onAreaChanged: if (target !== null && !hasPlaced && area.width > 0) Qt.callLater(() => { if (pill.target !== null) pill.hasPlaced = true })
 
-    Behavior on x { enabled: !Theme.reducedMotion; NumberAnimation { id: xAnim; duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-    Behavior on y { enabled: !Theme.reducedMotion; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-    Behavior on width { enabled: !Theme.reducedMotion; NumberAnimation { id: wAnim; duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-    Behavior on height { enabled: !Theme.reducedMotion; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+    Behavior on x { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { id: xAnim; duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+    Behavior on y { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+    Behavior on width { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { id: wAnim; duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+    Behavior on height { enabled: !Theme.reducedMotion && pill.hasPlaced; NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
 
     GlassSurface {
         anchors.fill: parent

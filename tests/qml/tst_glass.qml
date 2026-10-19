@@ -54,6 +54,8 @@ Item {
         Rectangle { id: a; x: 0; width: 80; height: 40; color: "transparent" }
         Rectangle { id: b; x: 90; width: 140; height: 40; color: "transparent" }
         GlassFocusPill { id: pill; target: a }
+        GlassFocusPill { id: freshPill; target: b }
+        GlassFocusPill { id: latePill }
     }
     NxButton { id: playButton; kind: "primary"; text: "Play"; y: 310 }
     NxButton { id: otherButton; text: "Other"; x: 200; y: 310 }
@@ -81,6 +83,7 @@ Item {
             Theme.glass = false
             Theme.gpuEffects = false
             Theme.reducedMotion = false
+            Theme.reduceTransparency = false
             plain.interactive = false
             plain.active = false
         }
@@ -278,6 +281,31 @@ Item {
                                 fill.b * fill.a + bg.b * (1 - fill.a), 1)
             verify(contrast(Theme.text, mix) >= 4.5, "contrast " + contrast(Theme.text, mix))
         }
+        // A pill appears on its target; it never sweeps in from the corner.
+        function test_pillSnapsOnFirstPlacement() {
+            Theme.reducedMotion = false
+            compare(freshPill.x, b.x)
+            compare(freshPill.width, b.width)
+            latePill.target = null
+            wait(50)
+            latePill.target = b
+            compare(latePill.x, b.x)
+            compare(latePill.y, b.y)
+            compare(latePill.width, b.width)
+            compare(latePill.height, b.height)
+            wait(50)
+            latePill.target = a   // later moves still animate
+            tryCompare(latePill, "x", a.x, 1000)
+        }
+        // Reduce transparency makes the prominent fill opaque and dark enough for the label.
+        function test_prominentLabelContrastReduceTransparency() {
+            Theme.reduceTransparency = true
+            const fill = Theme.glassFillProminent
+            compare(fill.a, 1)
+            verify(contrast(Theme.text, fill) >= 4.5, "contrast " + contrast(Theme.text, fill))
+            compare(Theme.prominentFill(Qt.color("#ff4040")).a, 1)
+        }
+
         function test_glassButtonIsTransparentAndSolidIsNot() {
             Theme.glass = true
             tryVerify(() => otherButton.color.a === 0) // the colour animates
