@@ -95,6 +95,8 @@ FocusScope {
         width: Math.min(parent.width * 0.42, 560 * Theme.scale)
         color: Theme.overlaySurface
         border.color: Theme.overlayLine
+        // Glass: the highlight and rim over the overlay colours (no blur).
+        GlassSurface { anchors.fill: parent; variant: "clear"; allowBlur: false; radius: 0 }
         MouseArea { anchors.fill: parent }
 
         Flickable {

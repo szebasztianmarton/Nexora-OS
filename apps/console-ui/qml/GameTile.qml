@@ -41,6 +41,21 @@ Item {
         border.color: tile.selected ? Theme.focusRing : Theme.border
         clip: true
 
+        // Glass: the info plate under the art.
+        GlassSurface {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: tile.infoHeight
+            z: -1
+            variant: "clear"
+            allowBlur: false
+            interactive: true
+            active: tile.selected
+            scale: 1.0 // the tile already lifts itself (selected: 1.05)
+            radius: Theme.radius
+        }
+
         Rectangle {
             id: art
             anchors.left: parent.left

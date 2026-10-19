@@ -7,6 +7,8 @@ Rectangle {
     objectName: "toast"
     property string message
     property bool isError: false
+    // Set by Main.qml: the window's scene, blurred behind the toast (glass blur only).
+    property Item glassBackdrop: null
     readonly property bool shown: opacity > 0
 
     function show(text, error) {
@@ -20,9 +22,9 @@ Rectangle {
 
     width: Math.min(label.implicitWidth + 56, parent ? parent.width - 64 : 800)
     height: Math.max(48, label.implicitHeight + 24)
-    radius: 12
-    color: Theme.surfaceFloating
-    GlassSheen {}
+    radius: Theme.glassActive ? Math.min(Theme.radiusXL, height / 2) : 12
+    color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+    GlassSurface { anchors.fill: parent; z: -1; radius: toast.radius; dense: true; backdrop: toast.glassBackdrop }
     border.color: isError ? Theme.danger : Theme.accent
     border.width: 1
     opacity: 0

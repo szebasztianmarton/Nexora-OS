@@ -393,6 +393,8 @@ FocusScope {
 
     ConfirmDialog {
         id: confirmRemove
+        chromeTop: details.chromeTop
+        chromeBottom: details.chromeBottom
         objectName: "confirmRemoveGame"
         title: "Remove “" + (details.info.title || "") + "” from the library?"
         message: "The game file is not deleted. It stays in its folder and can be brought back with "
@@ -407,6 +409,8 @@ FocusScope {
 
     MetadataEditor {
         id: editor
+        chromeTop: details.chromeTop
+        chromeBottom: details.chromeBottom
         library: details.library
         onSaved: details.reload()
     }

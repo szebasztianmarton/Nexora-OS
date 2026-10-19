@@ -9,7 +9,7 @@ import Nexora.Console
 // Theme.glassBlur && allowBlur: GlassEffectGpu blurs |backdrop| (or the enclosing GlassGroup's
 // backdrop) under the surface; otherwise, or when that file cannot load, GlassEffectFlat. The
 // backdrop must not be an ancestor of the surface; such a backdrop is ignored. Invisible
-// outside the glass theme.
+// outside the glass theme. |dense| (floating panels) keeps the flat path solid.
 Item {
     id: surface
     property string variant: "regular"
@@ -19,6 +19,9 @@ Item {
     property bool active: false
     property Item backdrop: null
     property bool allowBlur: true
+    // Floating panels: without the blur the regular fill would let whatever lies behind compete
+    // with the text, so the flat path uses the dense Theme.surfaceFloating instead.
+    property bool dense: false
 
     readonly property Item group: {
         for (let p = surface.parent; p; p = p.parent) {
@@ -36,7 +39,8 @@ Item {
         return b
     }
     readonly property bool lit: interactive && active
-    readonly property color fillColor: variant === "prominent"
+    readonly property color fillColor: dense && !blurred ? Theme.surfaceFloating
+        : variant === "prominent"
         ? (tint === Theme.accent ? Theme.glassFillProminent : Qt.rgba(tint.r, tint.g, tint.b, Theme.glassFillProminent.a))
         : variant === "clear" ? Theme.glassFillClear
         : lit ? Theme.glassFillRegularActive : Theme.glassFillRegular

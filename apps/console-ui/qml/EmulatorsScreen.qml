@@ -174,18 +174,21 @@ FocusScope {
 
         Rectangle {
             anchors.fill: parent
-            color: Theme.background
-            opacity: 0.8
+            color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+            opacity: Theme.glassActive ? 1.0 : 0.8
         }
         MouseArea { anchors.fill: parent; onClicked: picker.close() }
 
         Rectangle {
-            anchors.centerIn: parent
+            id: pickerPanel
+            x: (parent.width - width) / 2
+            y: screen.chromeTop + (parent.height - screen.chromeTop - screen.chromeBottom - height) / 2
             width: Math.min(parent.width - 64, 520)
-            height: Math.min(parent.height - 48, pickerColumn.implicitHeight + Theme.spacing * 3)
-            radius: Theme.radius
-            color: Theme.surfaceFloating
-            GlassSheen {}
+            height: Math.min(parent.height - screen.chromeTop - screen.chromeBottom - 48,
+                             pickerColumn.implicitHeight + Theme.spacing * 3)
+            radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
+            color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+            GlassSurface { anchors.fill: parent; z: -1; radius: pickerPanel.radius; dense: true }
             border.color: Theme.border
             MouseArea { anchors.fill: parent } // keep clicks inside
 

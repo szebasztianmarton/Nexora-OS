@@ -20,6 +20,10 @@ FocusScope {
     property string title: ""
     property string notes: ""
     property Item restoreFocusItem: null
+    // Glass: the panel stays between the floating bars (the owning page passes its
+    // chromeTop/chromeBottom, 0 when docked); the scrim still covers the whole page.
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     readonly property bool keyboardOpen: keyboard.visible
     readonly property var hints: keyboard.visible ? keyboard.hints
@@ -56,17 +60,24 @@ FocusScope {
         return true
     }
 
-    Rectangle { anchors.fill: parent; color: Theme.background; opacity: 0.8 }
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        opacity: Theme.glassActive ? 1.0 : 0.8
+    }
     MouseArea { anchors.fill: parent; onClicked: editor.close() }
 
     Rectangle {
+        id: panel
         objectName: "metadataPanel"
-        anchors.centerIn: parent
+        x: (parent.width - width) / 2
+        y: editor.chromeTop + (parent.height - editor.chromeTop - editor.chromeBottom - height) / 2
         width: Math.min(parent.width - Theme.space6 * 2, 720 * Theme.scale)
-        height: Math.min(content.implicitHeight + Theme.space5 * 2, parent.height - Theme.space2 * 2)
-        radius: Theme.radiusLarge
-        color: Theme.surfaceFloating
-        GlassSheen {}
+        height: Math.min(content.implicitHeight + Theme.space5 * 2,
+                         parent.height - editor.chromeTop - editor.chromeBottom - Theme.space2 * 2)
+        radius: Theme.glassActive ? Theme.radiusXL : Theme.radiusLarge
+        color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+        GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true }
         border.color: Theme.border
         MouseArea { anchors.fill: parent }
 
@@ -158,6 +169,8 @@ FocusScope {
 
     OnScreenKeyboard {
         id: keyboard
+        chromeTop: editor.chromeTop
+        chromeBottom: editor.chromeBottom
         onAccepted: (value) => {
             if (keyboard.title === "Title")
                 editor.title = value.trim() === editor.originalTitle ? "" : value.trim()

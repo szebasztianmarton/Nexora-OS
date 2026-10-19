@@ -24,6 +24,10 @@ FocusScope {
     property int row: 1
     property int column: 0
     property Item restoreFocusItem: null
+    // Glass: the panel stays between the floating bars (the owning page passes its
+    // chromeTop/chromeBottom, 0 when docked); the scrim still covers the whole page.
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     readonly property var rows: [
         ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
@@ -111,17 +115,23 @@ FocusScope {
         column = Math.min(rows[row].length - 1, Math.floor(ratio * rows[row].length))
     }
 
-    Rectangle { anchors.fill: parent; color: Theme.background; opacity: 0.85 }
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        opacity: Theme.glassActive ? 1.0 : 0.85
+    }
     MouseArea { anchors.fill: parent; onClicked: osk.cancel() }
 
     Rectangle {
+        id: oskPanel
         objectName: "oskPanel"
-        anchors.centerIn: parent
+        x: (parent.width - width) / 2
+        y: osk.chromeTop + (parent.height - osk.chromeTop - osk.chromeBottom - height) / 2
         width: Math.min(parent.width - Theme.space6 * 2, 980 * Theme.scale)
         height: content.implicitHeight + Theme.space4 * 2
-        radius: Theme.radiusLarge
-        color: Theme.surfaceFloating
-        GlassSheen {}
+        radius: Theme.glassActive ? Theme.radiusXL : Theme.radiusLarge
+        color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+        GlassSurface { anchors.fill: parent; z: -1; radius: oskPanel.radius; dense: true }
         border.color: Theme.border
         MouseArea { anchors.fill: parent }
 

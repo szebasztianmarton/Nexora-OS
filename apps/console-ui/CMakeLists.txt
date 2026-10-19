@@ -38,7 +38,6 @@ set(NEXORA_QML_FILES
     qml/QuickMenu.qml
     qml/UpdatePanel.qml
     qml/Backdrop.qml
-    qml/GlassSheen.qml
     qml/GlassSurface.qml
     qml/GlassEffectFlat.qml
     qml/GlassEffectGpu.qml

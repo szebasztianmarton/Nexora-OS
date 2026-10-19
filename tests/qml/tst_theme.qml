@@ -87,11 +87,10 @@ Item {
         }
 
         // Glass: translucent surfaces and a dense floating-panel tint; high contrast replaces
-        // it completely (opaque black surfaces, no glows or sheen).
+        // it completely (opaque black surfaces, no glows).
         function test_glassPaletteIsTranslucentAndYieldsToHighContrast() {
             compare(Theme.surface.a, 1.0)
             compare(Theme.glassActive, false)
-            compare(String(Theme.glassSheen), String(Qt.rgba(0, 0, 0, 0)))
             Theme.glass = true
             verify(Theme.glassActive)
             verify(Theme.surface.a < 0.2)
@@ -99,13 +98,11 @@ Item {
             verify(Theme.surfaceHover.a > Theme.surfaceRaised.a)
             verify(Theme.surfaceFloating.a >= 0.85)
             verify(Theme.overlaySurface.a >= 0.8)
-            verify(Theme.glassSheen.a > 0)
             Theme.highContrast = true
             verify(!Theme.glassActive)
             compare(Theme.surface, "#000000")
             compare(Theme.surfaceFloating, "#000000")
             compare(Theme.overlaySurface, "#000000")
-            compare(Theme.glassSheen.a, 0)
         }
 
         function test_backdropShowsGlowsOnlyInGlass() {

@@ -25,6 +25,38 @@ Item {
     GlassSurface { id: cyclic; anchors.fill: scene; backdrop: root }
     GlassSurface { id: selfRef; x: 300; y: 120; width: 100; height: 50 }
     GlassGroup { id: cyclicGroup; x: 420; y: 120; width: 100; height: 50 }
+    GlassSurface { id: densePlain; dense: true; x: 20; y: 220; width: 100; height: 50 }
+    Item {
+        id: host
+        x: 0; y: 0; width: 640; height: 360
+        ConfirmDialog { id: dialog }
+        SettingRow { id: row; label: "Row" }
+        EmulatorCard {
+            id: card
+            index: 0
+            emulatorId: "e"
+            name: "Emu"
+            status: "ready"
+            statusText: "Ready"
+            detail: ""
+            available: true
+            profiles: []
+            extensions: ""
+        }
+    }
+
+    // First descendant whose type name starts with |name| (e.g. "GlassSurface"), or null.
+    function findType(item, name) {
+        for (let i = 0; i < item.children.length; ++i) {
+            const c = item.children[i]
+            if (String(c).startsWith(name))
+                return c
+            const found = findType(c, name)
+            if (found)
+                return found
+        }
+        return null
+    }
 
     TestCase {
         name: "Glass"
@@ -114,6 +146,61 @@ Item {
             compare(cyclicGroup.backdropUsable, false)
             compare(cyclicGroup.blurredSource, null)
             cyclicGroup.backdrop = null
+        }
+
+        // Floating panels and cards draw GlassSurface; cards never take the GPU path.
+        function test_panelsAndCardsUseGlassSurface() {
+            expectMissingEffectsWarnings(3)
+            Theme.gpuEffects = true
+            const panelGlass = findType(dialog, "GlassSurface")
+            verify(panelGlass !== null)
+            compare(panelGlass.dense, true)
+            const rowGlass = findType(row, "GlassSurface")
+            verify(rowGlass !== null)
+            compare(rowGlass.variant, "clear")
+            compare(rowGlass.allowBlur, false)
+            const cardGlass = findType(card, "GlassSurface")
+            verify(cardGlass !== null)
+            compare(cardGlass.variant, "clear")
+            compare(cardGlass.allowBlur, false)
+            compare(rowGlass.blurred, false)
+        }
+
+        // The panel box itself is transparent in glass (GlassSurface is its background) and solid
+        // otherwise; the rim comes from GlassSurface.
+        function test_panelFillFollowsTheTheme() {
+            const panel = findChild(dialog, "confirmDialogPanel")
+            verify(panel !== null)
+            compare(panel.color.a, 0)
+            Theme.glass = false
+            compare(String(panel.color), String(Theme.surfaceFloating))
+            Theme.glass = true
+            Theme.highContrast = true
+            compare(String(panel.color), String(Theme.surfaceFloating))
+            Theme.highContrast = false
+        }
+
+        // In-page dialogs keep their box between the floating bars.
+        function test_dialogPanelStaysInsideChromeInsets() {
+            dialog.chromeTop = 60
+            dialog.chromeBottom = 40
+            const panel = findChild(dialog, "confirmDialogPanel")
+            verify(panel.y >= 60)
+            verify(panel.y + panel.height <= dialog.height - 40)
+            dialog.chromeTop = 0
+            dialog.chromeBottom = 0
+            fuzzyCompare(panel.y, (dialog.height - panel.height) / 2, 0.5)
+        }
+
+        function test_rimIsGlassRim() {
+            compare(plain.rimColor, Theme.glassRim)
+        }
+
+        // Dense floating panels keep today's solid fill on the flat path.
+        function test_denseFillIsSurfaceFloatingWhenFlat() {
+            compare(densePlain.blurred, false)
+            compare(densePlain.fillColor, Theme.surfaceFloating)
+            compare(plain.fillColor, Theme.glassFillRegular)
         }
 
         function test_outsideGlassSurfaceIsHidden() {

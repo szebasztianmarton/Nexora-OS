@@ -20,6 +20,11 @@ FocusScope {
     property string cancelText: "Cancel"
     // Styles the confirm button as a destructive action (danger colour) rather than accent.
     property bool dangerous: false
+    // Glass: the floating bars cover the top and bottom of the page; the panel stays between
+    // them (the owning page passes its chromeTop/chromeBottom, 0 when docked). The scrim still
+    // covers the whole page.
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     readonly property alias confirmButton: confirmButton
     readonly property alias cancelButton: cancelButton
@@ -54,8 +59,8 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
-        opacity: 0.75
+        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        opacity: Theme.glassActive ? 1.0 : 0.75
     }
     // Clicking outside the panel is the same as Cancel.
     MouseArea { anchors.fill: parent; onClicked: dialog.cancel() }
@@ -63,12 +68,13 @@ FocusScope {
     Rectangle {
         id: panel
         objectName: "confirmDialogPanel"
-        anchors.centerIn: parent
+        x: (parent.width - width) / 2
+        y: dialog.chromeTop + (parent.height - dialog.chromeTop - dialog.chromeBottom - height) / 2
         width: Math.min(parent.width - Theme.spacing * 4, 460)
         height: content.implicitHeight + Theme.spacing * 3
-        radius: Theme.radius
-        color: Theme.surfaceFloating
-        GlassSheen {}
+        radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
+        color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+        GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true }
         border.width: Theme.focusWidth
         border.color: Theme.focusRing
         // Absorb clicks inside the panel so they never fall through to the Cancel-on-outside-click area.

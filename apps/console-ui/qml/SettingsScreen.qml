@@ -839,6 +839,8 @@ FocusScope {
 
     ConfirmDialog {
         id: confirmRestart
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         title: "Restart Nexora?"
         message: "The system will restart immediately. Any running emulator will be stopped."
         confirmText: "Restart"
@@ -847,6 +849,8 @@ FocusScope {
     }
     ConfirmDialog {
         id: confirmPowerOff
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         title: "Power off?"
         message: "The system will shut down immediately. Any running emulator will be stopped."
         confirmText: "Power off"
@@ -855,6 +859,8 @@ FocusScope {
     }
     ConfirmDialog {
         id: confirmRestore
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         objectName: "confirmRestoreBackup"
         title: "Restore this backup?"
         message: "Current settings, library and (if the backup includes them) saves will be replaced. This cannot be undone from within Nexora."

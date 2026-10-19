@@ -466,6 +466,7 @@ ApplicationWindow {
     Toast {
         id: toast
         parent: overlayArea
+        glassBackdrop: sceneLayer
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.spacing * 1.5
@@ -491,12 +492,14 @@ ApplicationWindow {
         id: gameOptions
         parent: overlayArea
         anchors.fill: parent
+        glassBackdrop: sceneLayer
         library: window.library
     }
 
     UpdatePanel {
         id: updatePanel
         parent: overlayArea
+        glassBackdrop: sceneLayer
         updates: window.updates
         system: window.system
     }
@@ -507,6 +510,7 @@ ApplicationWindow {
         parent: overlayArea
         anchors.fill: parent
         z: 9
+        glassBackdrop: sceneLayer
         library: window.library
         visible: !window.settings.tutorialCompleted
         onVisibleChanged: {

@@ -22,6 +22,8 @@ FocusScope {
     property var candidates: []
     property bool scanned: false
     property Item restoreFocusItem: null
+    // Set by Main.qml: the window's scene, blurred behind the panel (glass blur only).
+    property Item glassBackdrop: null
 
     readonly property string updateState: updates.state
     readonly property bool busy: updateState === "checking" || updateState === "verifying" || updateState === "installing"
@@ -63,16 +65,21 @@ FocusScope {
         }
     }
 
-    Rectangle { anchors.fill: parent; color: Theme.background; opacity: 0.9 }
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        opacity: Theme.glassActive ? 1.0 : 0.9
+    }
     MouseArea { anchors.fill: parent; onClicked: if (!panel.busy) panel.close() }
 
     Rectangle {
+        id: box
         anchors.centerIn: parent
         width: Math.min(parent.width - Theme.space6 * 2, 820 * Theme.scale)
         height: Math.min(parent.height - Theme.space5 * 2, content.implicitHeight + Theme.space5 * 2)
-        radius: Theme.radiusLarge
-        color: Theme.surfaceFloating
-        GlassSheen {}
+        radius: Theme.glassActive ? Theme.radiusXL : Theme.radiusLarge
+        color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+        GlassSurface { anchors.fill: parent; z: -1; radius: box.radius; dense: true; backdrop: panel.glassBackdrop }
         border.color: Theme.border
         MouseArea { anchors.fill: parent }
 
