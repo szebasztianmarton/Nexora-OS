@@ -122,6 +122,7 @@ FocusScope {
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
         GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true; backdrop: dialog.glassBackdrop }
         border.color: Theme.border
+        border.width: Theme.glassActive ? 0 : 1
         MouseArea { anchors.fill: parent } // keep clicks inside
 
         Column {

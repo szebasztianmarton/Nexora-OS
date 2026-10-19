@@ -26,7 +26,7 @@ Rectangle {
     color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
     GlassSurface { anchors.fill: parent; z: -1; radius: toast.radius; dense: true; backdrop: toast.glassBackdrop }
     border.color: isError ? Theme.danger : Theme.accent
-    border.width: 1
+    border.width: Theme.glassActive ? 0 : 1
     opacity: 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: Theme.animNormal } }

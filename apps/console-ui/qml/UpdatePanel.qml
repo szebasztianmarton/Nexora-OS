@@ -81,6 +81,7 @@ FocusScope {
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
         GlassSurface { anchors.fill: parent; z: -1; radius: box.radius; dense: true; backdrop: panel.glassBackdrop }
         border.color: Theme.border
+        border.width: Theme.glassActive ? 0 : 1
         MouseArea { anchors.fill: parent }
 
         Flickable {

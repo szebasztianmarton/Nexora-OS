@@ -31,6 +31,7 @@ Item {
         x: 0; y: 0; width: 640; height: 360
         ConfirmDialog { id: dialog }
         SettingRow { id: row; label: "Row" }
+        Toast { id: toast }
         EmulatorCard {
             id: card
             index: 0
@@ -77,10 +78,15 @@ Item {
             compare(plain.fillColor, Theme.glassFillRegular)
         }
 
-        // QtQuick.Effects exists from Qt 6.5; Qt.version is the runtime version.
-        readonly property bool hasEffects: {
-            const v = Qt.version.split(".")
-            return Number(v[0]) > 6 || (Number(v[0]) === 6 && Number(v[1]) >= 5)
+        // QtQuick.Effects exists from Qt 6.5: probe whether the module can be imported.
+        property bool hasEffects: false
+        function initTestCase() {
+            try {
+                Qt.createQmlObject('import QtQuick; import QtQuick.Effects; Item {}', root, "probe").destroy()
+                hasEffects = true
+            } catch (e) {
+                hasEffects = false
+            }
         }
 
         // Without QtQuick.Effects every GPU Loader (plain, grouped and the group's shared pass)
@@ -190,6 +196,14 @@ Item {
             dialog.chromeTop = 0
             dialog.chromeBottom = 0
             fuzzyCompare(panel.y, (dialog.height - panel.height) / 2, 0.5)
+        }
+
+        // The glass rim replaces a panel's own plain border; high contrast keeps it.
+        function test_glassPanelDropsItsPlainBorder() {
+            compare(toast.border.width, 0)
+            Theme.highContrast = true
+            compare(toast.border.width, 1)
+            Theme.highContrast = false
         }
 
         function test_rimIsGlassRim() {

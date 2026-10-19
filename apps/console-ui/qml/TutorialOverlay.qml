@@ -100,6 +100,7 @@ FocusScope {
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
         GlassSurface { anchors.fill: parent; z: -1; radius: card.radius; dense: true; backdrop: tutorial.glassBackdrop }
         border.color: Theme.border
+        border.width: Theme.glassActive ? 0 : 1
 
         Column {
             id: content
