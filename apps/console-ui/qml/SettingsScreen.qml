@@ -253,6 +253,14 @@ FocusScope {
         boundsBehavior: Flickable.StopAtBounds
         Behavior on contentY { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic } }
 
+        // Glass: one capsule glides to the focused row.
+        GlassFocusPill {
+            target: {
+                const f = screen.focusedItem
+                return f && f.label !== undefined && f.activeFocusOnTab && screen.isInside(f) ? f : null
+            }
+        }
+
         Column {
             id: column
             width: Math.min(flick.width - Theme.spacing * 4, 980)

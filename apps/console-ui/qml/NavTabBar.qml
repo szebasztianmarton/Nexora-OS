@@ -56,6 +56,11 @@ FocusScope {
         color: Theme.border
     }
 
+    // Glass: one capsule slides onto the current tab (the tab itself stays transparent).
+    GlassFocusPill {
+        target: { void tabRepeater.count; return tabRepeater.itemAt(bar.currentIndex) }
+    }
+
     component KeyCap: Rectangle {
         property string label
         height: Math.round(24 * Theme.scale)
@@ -86,6 +91,7 @@ FocusScope {
         Item { width: Theme.space2; height: 1 }
 
         Repeater {
+            id: tabRepeater
             model: bar.tabs
             delegate: Rectangle {
                 id: tab
@@ -98,7 +104,7 @@ FocusScope {
                 width: Math.min(bar.maxTabWidth, Math.max(bar.compact ? 0 : 96 * Theme.scale,
                                                           tabLabel.implicitWidth + bar.labelPadding))
                 radius: height / 2
-                color: current ? (bar.activeFocus ? Theme.accent : Theme.accentSoft)
+                color: current ? (Theme.glassActive ? "transparent" : bar.activeFocus ? Theme.accent : Theme.accentSoft)
                      : tabMouse.containsMouse ? Theme.surfaceRaised : "transparent"
                 border.width: current && bar.activeFocus ? Theme.focusWidth : 0
                 border.color: Theme.highContrast ? Theme.focusRing : Theme.text

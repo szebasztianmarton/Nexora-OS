@@ -118,6 +118,15 @@ FocusScope {
                     contentY = Math.min(p.y + item.height - height + Theme.space2, Math.max(0, contentHeight - height))
             }
 
+            // Glass: one capsule glides to the focused entry of the visible page.
+            GlassFocusPill {
+                target: {
+                    const nav = menu.page === "display" ? displayRows : menu.page === "info" ? null : mainRows
+                    const t = nav ? nav.lastFocused : infoBack
+                    return t && t.visible && menu.visible ? t : null
+                }
+            }
+
             Column {
                 id: body
                 width: flick.width

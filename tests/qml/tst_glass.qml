@@ -46,6 +46,19 @@ Item {
         }
     }
 
+    Item {
+        id: pillRow
+        y: 260
+        width: 300
+        height: 40
+        Rectangle { id: a; x: 0; width: 80; height: 40; color: "transparent" }
+        Rectangle { id: b; x: 90; width: 140; height: 40; color: "transparent" }
+        GlassFocusPill { id: pill; target: a }
+    }
+    NxButton { id: playButton; kind: "primary"; text: "Play"; y: 310 }
+    NxButton { id: otherButton; text: "Other"; x: 200; y: 310 }
+    NxButton { id: dangerButton; kind: "danger"; text: "Delete"; x: 400; y: 310 }
+
     // First descendant whose type name starts with |name| (e.g. "GlassSurface"), or null.
     function findType(item, name) {
         for (let i = 0; i < item.children.length; ++i) {
@@ -215,6 +228,63 @@ Item {
             compare(densePlain.blurred, false)
             compare(densePlain.fillColor, Theme.surfaceFloating)
             compare(plain.fillColor, Theme.glassFillRegular)
+        }
+
+        // WCAG contrast ratio of two opaque colours.
+        function luminance(c) {
+            const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+            return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+        }
+        function contrast(c1, c2) {
+            const l1 = luminance(c1), l2 = luminance(c2)
+            return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+        }
+
+        function test_pillMorphsToTarget() {
+            Theme.reducedMotion = false
+            pill.target = b
+            tryCompare(pill, "x", b.x, 1000)
+            tryCompare(pill, "width", b.width, 1000)
+        }
+        function test_pillJumpsUnderReducedMotion() {
+            Theme.reducedMotion = true
+            pill.target = a
+            compare(pill.x, a.x)
+            compare(pill.width, a.width)
+        }
+        function test_pillInvisibleOutsideGlass() {
+            compare(pill.visible, true)
+            Theme.glass = false
+            compare(pill.visible, false)
+        }
+        function test_buttonStylesResolve() {
+            Theme.glass = true
+            compare(playButton.effectiveStyle, "glassProminent")
+            compare(otherButton.effectiveStyle, "glass")
+            compare(dangerButton.effectiveStyle, "solid")
+            Theme.glass = false
+            compare(playButton.effectiveStyle, "solid")
+            Theme.glass = true
+            otherButton.style = "solid"
+            compare(otherButton.effectiveStyle, "solid")
+            otherButton.style = "auto"
+        }
+        // Prominent glass label on the flat fill over the darkest backdrop: >= 4.5:1.
+        function test_prominentLabelContrast() {
+            Theme.glass = true
+            const fill = Theme.glassFillProminent
+            const bg = Theme.background
+            const mix = Qt.rgba(fill.r * fill.a + bg.r * (1 - fill.a), fill.g * fill.a + bg.g * (1 - fill.a),
+                                fill.b * fill.a + bg.b * (1 - fill.a), 1)
+            verify(contrast(Theme.text, mix) >= 4.5, "contrast " + contrast(Theme.text, mix))
+        }
+        function test_glassButtonIsTransparentAndSolidIsNot() {
+            Theme.glass = true
+            tryVerify(() => otherButton.color.a === 0) // the colour animates
+            compare(otherButton.radius, otherButton.height / 2)
+            Theme.glass = false
+            tryVerify(() => otherButton.color.a > 0)
+            compare(otherButton.radius, Theme.radiusSmall)
         }
 
         function test_outsideGlassSurfaceIsHidden() {
