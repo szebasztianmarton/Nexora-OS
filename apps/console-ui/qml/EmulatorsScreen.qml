@@ -84,6 +84,7 @@ FocusScope {
         anchors.top: statusLine.bottom
         anchors.bottom: parent.bottom
         anchors.topMargin: Theme.spacing
+        // Horizontal list: the cards stop above the hint bar rather than scrolling under it.
         anchors.bottomMargin: Theme.spacing + screen.chromeBottom
         leftMargin: Theme.spacing * 2
         rightMargin: Theme.spacing * 2

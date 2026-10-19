@@ -104,8 +104,6 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        // Stops above the hint bar: the view scrolls the current card only to its own edge.
-        anchors.bottomMargin: screen.chromeBottom
         anchors.leftMargin: Theme.space6 - Theme.space2
         anchors.rightMargin: Theme.space6 - Theme.space2
         visible: count > 0
@@ -115,8 +113,14 @@ FocusScope {
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
         highlightMoveDuration: Theme.animMove
+        // Glass: the cards scroll under the hint bar; the highlight range keeps the current one
+        // above it (plain tracking would only scroll it to the view's own edge). Docked: the
+        // default tracking, as before.
+        highlightRangeMode: screen.chromeBottom > 0 ? GridView.ApplyRange : GridView.NoHighlightRange
+        preferredHighlightBegin: Theme.space3
+        preferredHighlightEnd: height - screen.chromeBottom - cellHeight - Theme.space3
         topMargin: Theme.space3
-        bottomMargin: Theme.space3
+        bottomMargin: Theme.space3 + screen.chromeBottom
         readonly property int columns: Math.max(2, Math.floor(width / (280 * Theme.scale)))
         cellWidth: Math.floor(width / columns)
         cellHeight: Math.round(150 * Theme.scale)

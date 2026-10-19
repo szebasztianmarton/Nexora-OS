@@ -1657,6 +1657,11 @@ private slots:
         QTemporaryDir config;
         writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"{file}\""),
                     QStringLiteral("\"extensions\":[\".rom\"]"));
+        // One emulator for every catalogue system: enough Systems cards to scroll.
+        writeConfig(config, QStringLiteral("multi"), QStringLiteral("\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".zzz\"],\"systems\":[\"nes\",\"snes\",\"n64\",\"gb\","
+                                   "\"gbc\",\"gba\",\"nds\",\"genesis\",\"sms\",\"gamegear\",\"psx\",\"ps2\","
+                                   "\"psp\",\"gamecube\",\"wii\",\"pce\",\"atari2600\",\"arcade\",\"dos\"]"));
         QTemporaryDir games;
         for (int i = 0; i < 24; ++i)
             touch(games, QStringLiteral("Game %1.rom").arg(i, 2, 10, QLatin1Char('0')));
@@ -1690,16 +1695,66 @@ private slots:
         QVERIFY(ui.window->property("chromeTop").toReal() >= tabBottom);
         QVERIFY(ui.window->property("chromeBottom").toReal() >= ui.window->height() - hintTop);
 
-        // Games: the toolbar and the first game tile are below the tab bar, not under it.
+        // A grid passes under the hint bar, yet walking down to its last row keeps every
+        // current card fully above the bar (and above |above|, a line pinned over the grid).
+        const auto checkScrollsUnder = [&](QQuickItem *view, qreal above) {
+            QVERIFY(view->hasActiveFocus());
+            QVERIFY2(sceneRect(view).bottom() > hintTop, view->objectName().toLatin1());
+            const int count = view->property("count").toInt();
+            const int columns = view->property("columns").toInt();
+            QVERIFY(columns > 0);
+            const int lastRow = (count - 1) / columns * columns; // index of the last row's first card
+            const qreal startY = view->property("contentY").toReal();
+            qreal settledY = startY;
+            for (int i = 0; i < count && view->property("currentIndex").toInt() < lastRow; ++i) {
+                key(ui, Qt::Key_Down);
+                // Let the scroll animation settle before measuring (mid-way the card can pass).
+                for (int w = 0; w < 50; ++w) {
+                    QTest::qWait(100);
+                    const qreal y = view->property("contentY").toReal();
+                    if (qAbs(y - settledY) < 0.01)
+                        break;
+                    settledY = y;
+                }
+                auto *current = qvariant_cast<QQuickItem *>(view->property("currentItem"));
+                QVERIFY(current);
+                QVERIFY2(sceneRect(current).bottom() <= above,
+                         qPrintable(QStringLiteral("%1 card %2: bottom %3 > %4")
+                                        .arg(view->objectName())
+                                        .arg(view->property("currentIndex").toInt())
+                                        .arg(sceneRect(current).bottom())
+                                        .arg(above)));
+            }
+            QVERIFY(view->property("currentIndex").toInt() >= lastRow);
+            QVERIFY2(settledY > startY, qPrintable(view->objectName() + QStringLiteral(" did not scroll")));
+        };
+
+        // Games: the toolbar is below the tab bar; the grid scrolls under the scan summary
+        // and the hint bar.
         goTo(ui, Games);
         auto *grid = find(ui, "gameGrid");
         QTRY_COMPARE_WITH_TIMEOUT(grid->property("count").toInt(), 24, Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QTest::qWait(100);
         QVERIFY(sceneRect(find(ui, "searchField")).top() >= tabBottom);
-        const auto tiles = visibleWithPrefix(find(ui, "gamesScreen"), QStringLiteral("gameTileTitle"));
-        QVERIFY(!tiles.isEmpty());
-        QVERIFY(sceneRect(tiles.first()).top() >= tabBottom);
-        QVERIFY(sceneRect(find(ui, "scanSummary")).bottom() <= hintTop);
+        QVERIFY(sceneRect(grid).top() >= tabBottom);
+        auto *summary = find(ui, "scanSummary");
+        QVERIFY(sceneRect(summary).bottom() <= hintTop);
+        checkScrollsUnder(grid, sceneRect(summary).top());
+        if (QTest::currentTestFailed())
+            return;
+        shot(ui, qPrintable(QStringLiteral("glass-chrome-%1-games").arg(windowSize.height())));
+
+        // Systems: the same with the system cards.
+        goTo(ui, Systems);
+        auto *systemGrid = find(ui, "systemGrid");
+        QTRY_VERIFY2_WITH_TIMEOUT(systemGrid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        QVERIFY(systemGrid->property("count").toInt() >= 19);
+        QTest::qWait(100);
+        QVERIFY(sceneRect(systemGrid).top() >= tabBottom);
+        checkScrollsUnder(systemGrid, hintTop);
+        if (QTest::currentTestFailed())
+            return;
 
         // Settings: the first row starts below the tab bar; walking to the last row scrolls
         // it fully above the hint bar.

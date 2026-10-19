@@ -156,7 +156,8 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        // Stops above the hint bar: the focus frame is drawn around the whole view.
+        // Stops above the hint bar instead of scrolling under it: the focus frame is drawn
+        // around the whole view.
         anchors.bottomMargin: screen.chromeBottom
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
