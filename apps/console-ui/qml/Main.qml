@@ -29,7 +29,7 @@ ApplicationWindow {
     visible: true
     title: "Nexora OS"
     color: Theme.background
-    background: Backdrop { objectName: "backdrop" }
+    background: Rectangle { color: Theme.background }
 
     // Only implemented capabilities get a tab (no Downloads / Imports).
     readonly property var tabs: [{ key: "home", title: "Home" },
@@ -41,6 +41,17 @@ ApplicationWindow {
                                  { key: "settings", title: "Settings" },
                                  { key: "system", title: "System" }]
     property int currentTab: 0
+
+    // The header, tab bar and hint bar live in |chrome|, not in header/footer. Glass: they
+    // float over the pages, which pad their content by |chromeTop| / |chromeBottom| (the
+    // height the bars cover) so nothing is hidden under them while scrolling passes beneath.
+    // Dark / high contrast: the bars are docked and the pages sit between them (|dockedTop| /
+    // |dockedBottom|), as with ApplicationWindow.header/footer.
+    readonly property real chromeTop: Theme.glassActive ? tabBar.y + tabBar.height + Theme.space2 : 0
+    readonly property real chromeBottom: Theme.glassActive
+        ? (hintBar.visible ? chrome.height - hintBar.y + Theme.space2 : Theme.space4) : 0
+    readonly property real dockedTop: headerBar.height + tabBar.height
+    readonly property real dockedBottom: hintBar.visible ? hintBar.height : 0
     readonly property string currentTabKey: tabs[currentTab].key
     readonly property var pages: [homeScreen, gamesScreen, systemsScreen, favoritesScreen, recentScreen,
                                   emulatorsScreen, settingsScreen, systemScreen]
@@ -193,154 +204,199 @@ ApplicationWindow {
         }
     }
 
-    header: Header {
-        app: window.app
-        library: window.library
-    }
-    footer: HintBar {
-        visible: window.settings.showHints
-        hints: window.gameBar.quickMenuOpen ? quickMenu.hints
-               : window.app.busy ? overlay.hints
-               : tutorial.visible ? tutorial.hints
-               : updatePanel.visible ? updatePanel.hints
-               : gameOptions.visible ? gameOptions.hints
-               : details.visible ? details.hints
-               : tabBar.activeFocus
-                 ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
-                    { button: "L1 / R1", action: "Switch tab" }]
-                 : window.pages[window.currentTab].hints
-    }
-
     FocusScope {
         id: contentRoot
         objectName: "contentRoot"
         anchors.fill: parent
         focus: true
 
-        NavTabBar {
-            id: tabBar
-            objectName: "tabBar"
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            tabs: window.tabs
-            currentIndex: window.currentTab
-            onTabRequested: (index) => {
-                window.switchTab(index)
+        // Everything the glass bars float over (and blur): the backdrop and the pages.
+        Item {
+            id: sceneLayer
+            objectName: "sceneLayer"
+            anchors.fill: parent
+            Backdrop { objectName: "backdrop"; anchors.fill: parent }
+
+            Item {
+                id: pageArea
+                anchors.fill: parent
+                anchors.topMargin: Theme.glassActive ? 0 : window.dockedTop
+                anchors.bottomMargin: Theme.glassActive ? 0 : window.dockedBottom
+
+                HomeScreen {
+                    id: homeScreen
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 0
+                    app: window.app
+                    library: window.library
+                    updates: window.updates
+                    sessions: window.sessions
+                    onNavigate: (tab) => window.navigate(tab)
+                    onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                    onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+                    onSystemChosen: (systemId) => window.showSystem(systemId)
+                    onSettingsSectionRequested: (section) => window.openSettingsSection(section)
+                    onUpdatesRequested: window.openUpdatePanel()
+                }
+                GamesScreen {
+                    id: gamesScreen
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 1
+                    app: window.app
+                    library: window.library
+                    onNavigate: (tab) => window.navigate(tab)
+                    onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                    onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+                }
+                SystemsScreen {
+                    id: systemsScreen
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 2
+                    app: window.app
+                    library: window.library
+                    onNavigate: (tab) => window.navigate(tab)
+                    onSystemChosen: (systemId) => window.showSystem(systemId)
+                }
+                GameCollectionScreen {
+                    id: favoritesScreen
+                    objectName: "favoritesScreen"
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 3
+                    library: window.library
+                    games: window.library.favoriteGames
+                    title: "Favorites"
+                    subtitle: "Press Y / F on any game to add or remove it"
+                    emptyTitle: "No favorites yet"
+                    emptyText: "Press Y / F on a game in Games or Home to mark it as a favorite."
+                    onNavigate: (tab) => window.navigate(tab)
+                    onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                    onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+                }
+                GameCollectionScreen {
+                    id: recentScreen
+                    objectName: "recentScreen"
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 4
+                    library: window.library
+                    games: window.library.recentGames
+                    title: "Recently played"
+                    subtitle: "Most recent first"
+                    emptyTitle: "Nothing played yet"
+                    emptyText: "Games you launch show up here, most recent first."
+                    onNavigate: (tab) => window.navigate(tab)
+                    onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                    onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+                }
+                EmulatorsScreen {
+                    id: emulatorsScreen
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 5
+                    app: window.app
+                    settings: window.settings
+                }
+                SettingsScreen {
+                    id: settingsScreen
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 6
+                    app: window.app
+                    library: window.library
+                    settings: window.settings
+                    system: window.system
+                    updates: window.updates
+                    onOpenUpdatePanel: window.openUpdatePanel()
+                    onNotice: (message, isError) => window.notifications.postMessage("system", message, isError)
+                }
+                DiagnosticsScreen {
+                    id: systemScreen
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    visible: window.currentTab === 7
+                    app: window.app
+                    library: window.library
+                    settings: window.settings
+                    system: window.system
+                    updates: window.updates
+                    notifications: window.notifications
+                    onUpdatesRequested: window.openUpdatePanel()
+                }
+
+                // Above the pages (modal), below the dialogs and overlays.
+                GameDetailsScreen {
+                    id: details
+                    anchors.fill: parent
+                    chromeTop: window.chromeTop
+                    chromeBottom: window.chromeBottom
+                    app: window.app
+                    library: window.library
+                    onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+                }
             }
-            onEnterRequested: window.focusPage()
         }
 
-        Item {
-            id: pageArea
-            anchors.top: tabBar.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+        // The bars, sharing one blur pass over |sceneLayer| (which must not contain them).
+        // Glass: inset by Theme.space4 with Theme.space2 between header and tab bar; docked:
+        // full width, header and tab bar stacked at the top, hint bar at the very bottom.
+        GlassGroup {
+            id: chrome
+            objectName: "glassChrome"
+            anchors.fill: parent
+            backdrop: sceneLayer
+            readonly property real inset: Theme.glassActive ? Theme.space4 : 0
 
-            HomeScreen {
-                id: homeScreen
-                anchors.fill: parent
-                visible: window.currentTab === 0
+            Header {
+                id: headerBar
+                objectName: "header"
+                x: chrome.inset
+                y: chrome.inset
+                width: chrome.width - 2 * chrome.inset
                 app: window.app
                 library: window.library
-                updates: window.updates
-                sessions: window.sessions
-                onNavigate: (tab) => window.navigate(tab)
-                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
-                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
-                onSystemChosen: (systemId) => window.showSystem(systemId)
-                onSettingsSectionRequested: (section) => window.openSettingsSection(section)
-                onUpdatesRequested: window.openUpdatePanel()
             }
-            GamesScreen {
-                id: gamesScreen
-                anchors.fill: parent
-                visible: window.currentTab === 1
-                app: window.app
-                library: window.library
-                onNavigate: (tab) => window.navigate(tab)
-                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
-                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
+            NavTabBar {
+                id: tabBar
+                objectName: "tabBar"
+                x: chrome.inset
+                y: headerBar.y + headerBar.height + (Theme.glassActive ? Theme.space2 : 0)
+                width: chrome.width - 2 * chrome.inset
+                tabs: window.tabs
+                currentIndex: window.currentTab
+                onTabRequested: (index) => {
+                    window.switchTab(index)
+                }
+                onEnterRequested: window.focusPage()
             }
-            SystemsScreen {
-                id: systemsScreen
-                anchors.fill: parent
-                visible: window.currentTab === 2
-                app: window.app
-                library: window.library
-                onNavigate: (tab) => window.navigate(tab)
-                onSystemChosen: (systemId) => window.showSystem(systemId)
-            }
-            GameCollectionScreen {
-                id: favoritesScreen
-                objectName: "favoritesScreen"
-                anchors.fill: parent
-                visible: window.currentTab === 3
-                library: window.library
-                games: window.library.favoriteGames
-                title: "Favorites"
-                subtitle: "Press Y / F on any game to add or remove it"
-                emptyTitle: "No favorites yet"
-                emptyText: "Press Y / F on a game in Games or Home to mark it as a favorite."
-                onNavigate: (tab) => window.navigate(tab)
-                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
-                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
-            }
-            GameCollectionScreen {
-                id: recentScreen
-                objectName: "recentScreen"
-                anchors.fill: parent
-                visible: window.currentTab === 4
-                library: window.library
-                games: window.library.recentGames
-                title: "Recently played"
-                subtitle: "Most recent first"
-                emptyTitle: "Nothing played yet"
-                emptyText: "Games you launch show up here, most recent first."
-                onNavigate: (tab) => window.navigate(tab)
-                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
-                onDetailsRequested: (gameId) => window.openGameDetails(gameId)
-            }
-            EmulatorsScreen {
-                id: emulatorsScreen
-                anchors.fill: parent
-                visible: window.currentTab === 5
-                app: window.app
-                settings: window.settings
-            }
-            SettingsScreen {
-                id: settingsScreen
-                anchors.fill: parent
-                visible: window.currentTab === 6
-                app: window.app
-                library: window.library
-                settings: window.settings
-                system: window.system
-                updates: window.updates
-                onOpenUpdatePanel: window.openUpdatePanel()
-                onNotice: (message, isError) => window.notifications.postMessage("system", message, isError)
-            }
-            DiagnosticsScreen {
-                id: systemScreen
-                anchors.fill: parent
-                visible: window.currentTab === 7
-                app: window.app
-                library: window.library
-                settings: window.settings
-                system: window.system
-                updates: window.updates
-                notifications: window.notifications
-                onUpdatesRequested: window.openUpdatePanel()
-            }
-
-            // Above the pages (modal), below the dialogs and overlays.
-            GameDetailsScreen {
-                id: details
-                anchors.fill: parent
-                app: window.app
-                library: window.library
-                onOptionsRequested: (gameId) => window.openGameOptions(gameId)
+            HintBar {
+                id: hintBar
+                objectName: "hintBar"
+                x: chrome.inset
+                y: chrome.height - height - chrome.inset
+                width: chrome.width - 2 * chrome.inset
+                visible: window.settings.showHints
+                hints: window.gameBar.quickMenuOpen ? quickMenu.hints
+                       : window.app.busy ? overlay.hints
+                       : tutorial.visible ? tutorial.hints
+                       : updatePanel.visible ? updatePanel.hints
+                       : gameOptions.visible ? gameOptions.hints
+                       : details.visible ? details.hints
+                       : tabBar.activeFocus
+                         ? [{ button: "← →", action: "Choose tab" }, { button: "↓ / A", action: "Open" },
+                            { button: "L1 / R1", action: "Switch tab" }]
+                         : window.pages[window.currentTab].hints
             }
         }
 
@@ -396,6 +452,16 @@ ApplicationWindow {
         }
     }
 
+    // The window-level dialogs and overlays below cover the pages and the tab bar but not the
+    // header or the hint bar (which lists their controls), like the ApplicationWindow
+    // contentItem between header and footer did.
+    Item {
+        id: overlayArea
+        anchors.fill: parent
+        anchors.topMargin: headerBar.y + headerBar.height
+        anchors.bottomMargin: hintBar.visible ? chrome.height - hintBar.y : 0
+    }
+
     Timer {
         id: startupQuiet
         interval: 3000
@@ -404,6 +470,8 @@ ApplicationWindow {
     Toast {
         id: toast
         service: window.notifications
+        parent: overlayArea
+        glassBackdrop: sceneLayer
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.spacing * 1.5
@@ -421,13 +489,17 @@ ApplicationWindow {
 
     GameOptionsDialog {
         id: gameOptions
+        parent: overlayArea
         anchors.fill: parent
+        glassBackdrop: sceneLayer
         library: window.library
         sessions: window.sessions
     }
 
     UpdatePanel {
         id: updatePanel
+        parent: overlayArea
+        glassBackdrop: sceneLayer
         updates: window.updates
         system: window.system
     }
@@ -435,8 +507,10 @@ ApplicationWindow {
     // First-start tour; above the pages, below the running-emulator overlay.
     TutorialOverlay {
         id: tutorial
+        parent: overlayArea
         anchors.fill: parent
         z: 9
+        glassBackdrop: sceneLayer
         library: window.library
         visible: !window.settings.tutorialCompleted
         onVisibleChanged: {
@@ -455,6 +529,7 @@ ApplicationWindow {
 
     RunningOverlay {
         id: overlay
+        parent: overlayArea
         anchors.fill: parent
         z: 10
         app: window.app
@@ -567,6 +642,9 @@ ApplicationWindow {
         objectName: "resumeFailedDialog"
         property string sessionId
         z: 60
+        // Keeps the panel between the floating glass bars (0 when docked).
+        chromeTop: window.chromeTop
+        chromeBottom: window.chromeBottom
         confirmText: "Start fresh"
         cancelText: "Not now"
         onConfirmed: window.sessions.startFresh(sessionId)
@@ -590,7 +668,8 @@ ApplicationWindow {
 
     Component.onCompleted: {
         // Every screen reads these back off Theme; binding them once here keeps the
-        // look and accessibility settings (theme, UI scale, reduced motion) wired to the
+        // look, accessibility settings (theme, UI scale, reduced motion, reduce transparency) and
+        // the glass-blur inputs (GPU capability, emulator session) wired to the
         // whole interface without each screen having to know about SettingsController.
         Theme.userScale = Qt.binding(() => window.settings.uiScale / 100)
         // The layout is designed for 1280x720; larger windows scale up (never down).
@@ -598,6 +677,9 @@ ApplicationWindow {
         Theme.highContrast = Qt.binding(() => window.settings.theme === "highContrast")
         Theme.glass = Qt.binding(() => window.settings.theme === "glass")
         Theme.reducedMotion = Qt.binding(() => window.settings.reducedMotion)
+        Theme.reduceTransparency = Qt.binding(() => window.settings.reduceTransparency)
+        Theme.gpuEffects = Qt.binding(() => UiCapabilities.gpuEffects)
+        Theme.sessionActive = Qt.binding(() => ["starting", "running", "stopping"].indexOf(window.app.state) >= 0)
         // Settings › General › Start screen.
         if (window.settings.startScreen === "games")
             currentTab = tabIndex("games")

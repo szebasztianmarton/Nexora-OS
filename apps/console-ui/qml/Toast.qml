@@ -17,6 +17,8 @@ Rectangle {
                                                                 : notification.text)
                                       : ""
     readonly property bool shown: opacity > 0
+    // Set by Main.qml: the window's scene, blurred behind the toast (glass blur only).
+    property Item glassBackdrop: null
     // Kept while fading out, so the text does not vanish before the box does.
     property string displayedMessage
     onMessageChanged: if (message.length > 0) displayedMessage = message
@@ -26,11 +28,11 @@ Rectangle {
 
     width: Math.min(label.implicitWidth + 56, parent ? parent.width - 64 : 800)
     height: Math.max(48, label.implicitHeight + 24)
-    radius: 12
-    color: Theme.surfaceFloating
-    GlassSheen {}
+    radius: Theme.glassActive ? Math.min(Theme.radiusXL, height / 2) : 12
+    color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+    GlassSurface { anchors.fill: parent; z: -1; radius: toast.radius; dense: true; backdrop: toast.glassBackdrop }
     border.color: severity === "critical" ? Theme.danger : isError ? Theme.warning : Theme.accent
-    border.width: 1
+    border.width: Theme.glassActive ? 0 : 1
     opacity: hasNotification ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: Theme.animNormal } }

@@ -214,6 +214,7 @@ const QList<Settings::Spec> &Settings::specs()
          oneOf({QStringLiteral("glass"), QStringLiteral("dark"), QStringLiteral("highContrast")})},
         {UiScale, 100, QStringLiteral("Interface scale in percent (75-150)"), intRange(75, 150)},
         {UiReducedMotion, false, QStringLiteral("Reduce animations"), boolean()},
+        {UiReduceTransparency, false, QStringLiteral("Reduce transparency"), boolean()},
         {UiStartScreen, QStringLiteral("home"), QStringLiteral("Screen shown at startup"),
          oneOf({QStringLiteral("home"), QStringLiteral("games")})},
         {InputDeadzone, 25, QStringLiteral("Analog stick dead zone in percent (5-60)"), intRange(5, 60)},

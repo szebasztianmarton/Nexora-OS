@@ -7,6 +7,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 - [Collecting information](#collecting-information)
 - [Building](#building)
 - [Starting the application](#starting-the-application)
+- [The glass theme](#the-glass-theme)
 - [Controllers](#controllers)
 - [Library](#library)
 - [Emulators](#emulators)
@@ -48,6 +49,13 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | `Nexora is already running` (exit code 3) | another instance holds `$XDG_RUNTIME_DIR/nexora-console-ui.lock`; close it |
 | "Could not prepare data directories" in the log | a directory under `~/.config/nexora`, `~/.local/share/nexora`, `~/.local/state/nexora` or `~/.cache/nexora` cannot be created or set to mode 0700; check ownership and free space |
 | Text too small/large, too much motion | Settings › General: Interface scale (75–150 %), Theme (high contrast), Reduce motion |
+
+## The glass theme
+
+| Symptom | Fix |
+| --- | --- |
+| Glitches, flicker or a slow UI with the glass theme (the backdrop blur under the bars and dialogs) | set `NEXORA_NO_GLASS_BLUR=1` in the environment that starts the UI (any non-empty value works), or turn on Settings › General › Reduce transparency (solid panels, no blur); choosing the `dark` theme avoids the glass look completely. The blur is also off by itself on the software renderer, on llvmpipe, with a Qt older than 6.5 and while a game runs ([design-system.md](design-system.md#liquid-glass)) |
+| No blur at all | expected without a hardware renderer, with Qt older than 6.5, with Reduce transparency on, in high contrast, and while an emulator runs; the glass theme then draws the flat glass |
 
 ## Controllers
 

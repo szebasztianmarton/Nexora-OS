@@ -36,6 +36,9 @@ Item {
             Theme.highContrast = false
             Theme.glass = false
             Theme.reducedMotion = false
+            Theme.reduceTransparency = false
+            Theme.gpuEffects = false
+            Theme.sessionActive = false
         }
 
         function test_scaleMultipliesTypographyAndSpacing() {
@@ -84,11 +87,10 @@ Item {
         }
 
         // Glass: translucent surfaces and a dense floating-panel tint; high contrast replaces
-        // it completely (opaque black surfaces, no glows or sheen).
+        // it completely (opaque black surfaces, no glows).
         function test_glassPaletteIsTranslucentAndYieldsToHighContrast() {
             compare(Theme.surface.a, 1.0)
             compare(Theme.glassActive, false)
-            compare(String(Theme.glassSheen), String(Qt.rgba(0, 0, 0, 0)))
             Theme.glass = true
             verify(Theme.glassActive)
             verify(Theme.surface.a < 0.2)
@@ -96,13 +98,11 @@ Item {
             verify(Theme.surfaceHover.a > Theme.surfaceRaised.a)
             verify(Theme.surfaceFloating.a >= 0.85)
             verify(Theme.overlaySurface.a >= 0.8)
-            verify(Theme.glassSheen.a > 0)
             Theme.highContrast = true
             verify(!Theme.glassActive)
             compare(Theme.surface, "#000000")
             compare(Theme.surfaceFloating, "#000000")
             compare(Theme.overlaySurface, "#000000")
-            compare(Theme.glassSheen.a, 0)
         }
 
         function test_backdropShowsGlowsOnlyInGlass() {
@@ -116,6 +116,41 @@ Item {
             Theme.highContrast = true
             verify(!glows.visible)
             compare(backdrop.color, Theme.background)
+        }
+
+        // Theme.glassBlur is the one switch every glass surface reads (spec: "glassBlur").
+        function test_glassBlurNeedsGlassGpuAndNoSession() {
+            Theme.glass = true
+            compare(Theme.glassBlur, false)          // no GPU yet
+            Theme.gpuEffects = true
+            compare(Theme.glassBlur, true)
+            Theme.sessionActive = true
+            compare(Theme.glassBlur, false)
+            Theme.sessionActive = false
+            Theme.reduceTransparency = true
+            compare(Theme.glassBlur, false)
+            Theme.reduceTransparency = false
+            Theme.highContrast = true
+            compare(Theme.glassBlur, false)
+            Theme.highContrast = false
+            Theme.glass = false
+            compare(Theme.glassBlur, false)
+        }
+
+        function test_reduceTransparencyUsesDenseFills() {
+            Theme.glass = true
+            verify(Theme.glassFillRegular.a < 0.5)
+            Theme.reduceTransparency = true
+            compare(Theme.glassFillRegular, Theme.surfaceFloating)
+            compare(Theme.glassFillClear, Theme.surfaceFloating)
+        }
+
+        function test_glassTokensScale() {
+            compare(Theme.glassBlurRadius, 32)
+            compare(Theme.radiusXL, 24)
+            Theme.userScale = 1.5
+            compare(Theme.glassBlurRadius, 48)
+            compare(Theme.radiusXL, 36)
         }
 
         function test_reducedMotionZeroesAnimationTokens() {

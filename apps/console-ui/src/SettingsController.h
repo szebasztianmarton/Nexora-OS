@@ -50,6 +50,7 @@ class SettingsController : public QObject
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY changed)
     Q_PROPERTY(int uiScale READ uiScale WRITE setUiScale NOTIFY changed)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY changed)
+    Q_PROPERTY(bool reduceTransparency READ reduceTransparency WRITE setReduceTransparency NOTIFY changed)
     // Notifications (docs/notifications.md): quiet mode and how long info notices stay (s).
     Q_PROPERTY(bool notificationsQuiet READ notificationsQuiet WRITE setNotificationsQuiet NOTIFY changed)
     Q_PROPERTY(int notificationSeconds READ notificationSeconds WRITE setNotificationSeconds NOTIFY changed)
@@ -101,6 +102,8 @@ public:
     void setUiScale(int percent) { set(QStringLiteral("ui.scale"), qBound(75, percent, 150)); }
     bool reducedMotion() const;
     void setReducedMotion(bool value) { set(QStringLiteral("ui.reducedMotion"), value); }
+    bool reduceTransparency() const;
+    void setReduceTransparency(bool value) { set(QStringLiteral("ui.reduceTransparency"), value); }
     bool notificationsQuiet() const { return m_settings->boolValue(shared::Settings::NotificationsQuiet); }
     void setNotificationsQuiet(bool value) { set(shared::Settings::NotificationsQuiet, value); }
     int notificationSeconds() const { return m_settings->intValue(shared::Settings::NotificationsDurationMs) / 1000; }

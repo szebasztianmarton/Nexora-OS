@@ -11,6 +11,13 @@ FocusScope {
     objectName: "gamesScreen"
     required property AppController app
     required property LibraryController library
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
+    // Glass: the grid runs to the bottom of the window, under the scan summary and the hint
+    // bar; the current card stays above both. Docked: the grid stops above the summary.
+    readonly property bool floatingChrome: chromeBottom > 0
 
     signal navigate(string tab)
     signal optionsRequested(real gameId)
@@ -132,7 +139,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: Theme.space4
+        anchors.topMargin: Theme.space4 + screen.chromeTop
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
         height: Theme.controlHeight
@@ -523,8 +530,8 @@ FocusScope {
         anchors.topMargin: Theme.space1
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: summary.top
-        anchors.bottomMargin: Theme.space1
+        anchors.bottom: screen.floatingChrome ? parent.bottom : summary.top
+        anchors.bottomMargin: screen.floatingChrome ? 0 : Theme.space1
         anchors.leftMargin: Theme.space6 - Theme.space2
         anchors.rightMargin: Theme.space6 - Theme.space2
 
@@ -537,6 +544,9 @@ FocusScope {
             library: screen.library
             model: screen.library.games
             listMode: screen.listMode
+            chromeBottom: !screen.floatingChrome ? 0
+                          : summaryBacking.visible ? screen.height - summaryBacking.y + Theme.space1
+                          : screen.chromeBottom
             onDetailsRequested: (gameId) => screen.detailsRequested(gameId)
             onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
         }
@@ -665,6 +675,18 @@ FocusScope {
         }
     }
 
+    // Glass: cards scroll under the summary, so it sits on a dense pill of its own.
+    Rectangle {
+        id: summaryBacking
+        visible: screen.floatingChrome && summary.text.length > 0
+        x: summary.x - Theme.space3
+        y: summary.y - Theme.space1
+        width: Math.min(summary.implicitWidth, summary.width) + Theme.space3 * 2
+        height: summary.height + Theme.space1 * 2
+        radius: height / 2
+        color: Theme.surfaceFloating
+        border.color: Theme.glassRim
+    }
     Text {
         textFormat: Text.PlainText
         id: summary
@@ -674,7 +696,7 @@ FocusScope {
         anchors.bottom: parent.bottom
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
-        anchors.bottomMargin: Theme.space2
+        anchors.bottomMargin: Theme.space2 + screen.chromeBottom
         text: screen.library.lastScanSummary
         color: Theme.textFaint
         font.pixelSize: Theme.fontTiny

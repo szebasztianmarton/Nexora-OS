@@ -31,7 +31,16 @@ Rectangle {
     width: 300
     height: 360
     radius: Theme.radius
-    GlassSheen {}
+    GlassSurface {
+        anchors.fill: parent
+        z: -1
+        variant: "clear"
+        allowBlur: false
+        interactive: true
+        active: card.selected // the ListView holds the focus, not the card
+        scale: 1.0 // the card already lifts itself (selected: 1.04) and has its own focus ring
+        radius: card.radius
+    }
     color: selected ? Theme.surfaceHover : Theme.surfaceRaised
     opacity: available ? 1.0 : 0.65
     border.width: selected ? Theme.focusWidth : 1

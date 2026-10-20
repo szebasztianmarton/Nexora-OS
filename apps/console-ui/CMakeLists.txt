@@ -39,7 +39,12 @@ set(NEXORA_QML_FILES
     qml/QuickResumeRow.qml
     qml/UpdatePanel.qml
     qml/Backdrop.qml
-    qml/GlassSheen.qml
+    qml/GlassFocusPill.qml
+    qml/GlassSurface.qml
+    qml/GlassEffectFlat.qml
+    qml/GlassEffectGpu.qml
+    qml/GlassGroup.qml
+    qml/GlassGroupBlur.qml
 )
 # Glass theme backdrop glows (scripts/make-glass-glows.py), served next to the QML files.
 set(NEXORA_QML_RESOURCES
@@ -79,6 +84,7 @@ qt_add_qml_module(nexora_ui
         src/NotificationService.h src/NotificationService.cpp
         src/GameSessionManager.h src/GameSessionManager.cpp
         src/UiContext.h src/UiContext.cpp
+        src/UiCapabilities.h src/UiCapabilities.cpp
 )
 
 # qmltyperegistrar includes the QML_ELEMENT headers by bare name.
@@ -93,7 +99,7 @@ target_compile_definitions(nexora_ui PRIVATE
 nexora_apply_warnings(src/AppController.cpp src/EmulatorListModel.cpp src/GameBarController.cpp src/UiBootstrap.cpp
     src/GameListModel.cpp src/LibraryController.cpp src/SettingsController.cpp src/SystemController.cpp
     src/SystemListModel.cpp src/UpdateController.cpp src/UiContext.cpp src/NotificationService.cpp
-    src/GameSessionManager.cpp)
+    src/GameSessionManager.cpp src/UiCapabilities.cpp)
 
 # --- Application ---------------------------------------------------------------------------
 qt_add_executable(nexora-console-ui src/main.cpp)

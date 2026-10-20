@@ -44,7 +44,16 @@ Rectangle {
     width: parent ? parent.width : 600
     implicitHeight: Math.max(Theme.rowHeight, texts.implicitHeight + Theme.space5)
     radius: Theme.radiusSmall
-    GlassSheen {}
+    GlassSurface {
+        anchors.fill: parent
+        z: -1
+        variant: "clear"
+        allowBlur: false
+        interactive: true
+        active: row.activeFocus
+        scale: 1.0 // a full-width row would overhang its focus border and the list's clip
+        radius: row.radius
+    }
     color: activeFocus ? Theme.surfaceHover : (mouse.containsMouse ? Theme.surfaceRaised : Theme.surface)
     border.width: activeFocus ? Theme.focusWidth : 1
     border.color: activeFocus ? (armed ? Theme.danger : Theme.focusRing) : Theme.border

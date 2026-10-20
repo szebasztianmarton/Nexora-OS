@@ -15,6 +15,10 @@ FocusScope {
     required property SettingsController settings
     required property SystemController system
     required property UpdateController updates
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     // Main.qml opens the update panel; Settings only offers the entry point.
     signal openUpdatePanel()
@@ -167,10 +171,12 @@ FocusScope {
         const p = item.mapToItem(flick.contentItem, 0, 0)
         const top = p.y - 48
         const bottom = p.y + item.height + Theme.spacing * 3
-        if (top < flick.contentY)
-            flick.contentY = Math.max(0, top)
-        else if (bottom > flick.contentY + flick.height)
-            flick.contentY = Math.min(bottom - flick.height, Math.max(0, flick.contentHeight - flick.height))
+        // The list scrolls under the glass bars: only the part between them counts.
+        if (top < flick.contentY + screen.chromeTop)
+            flick.contentY = Math.max(0, top - screen.chromeTop)
+        else if (bottom > flick.contentY + flick.height - screen.chromeBottom)
+            flick.contentY = Math.min(bottom - flick.height + screen.chromeBottom,
+                                      Math.max(0, flick.contentHeight - flick.height))
     }
     function nextButton(current, delta) {
         const names = Theme.buttonNames
@@ -242,16 +248,25 @@ FocusScope {
         id: flick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.height + Theme.spacing * 4
+        contentHeight: column.height + Theme.spacing * 4 + screen.chromeTop + screen.chromeBottom
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Behavior on contentY { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic } }
+
+        // Glass: one capsule glides to the focused row.
+        GlassFocusPill {
+            radius: Theme.radiusSmall // SettingRow's corners
+            target: {
+                const f = screen.focusedItem
+                return f && f.label !== undefined && f.activeFocusOnTab && screen.isInside(f) ? f : null
+            }
+        }
 
         Column {
             id: column
             width: Math.min(flick.width - Theme.spacing * 4, 980)
             x: (flick.width - width) / 2
-            y: Theme.spacing * 1.5
+            y: Theme.spacing * 1.5 + screen.chromeTop
             spacing: Theme.space2
 
             Text {
@@ -335,6 +350,17 @@ FocusScope {
                 onDecrement: screen.settings.reducedMotion = !screen.settings.reducedMotion
                 onIncrement: screen.settings.reducedMotion = !screen.settings.reducedMotion
                 onAccepted: screen.settings.reducedMotion = !screen.settings.reducedMotion
+            }
+            SettingRow {
+                objectName: "settingReduceTransparency"
+                label: "Reduce transparency"
+                description: "Makes glass panels solid and turns off background blur"
+                value: screen.settings.reduceTransparency ? "On" : "Off"
+                valueColor: screen.settings.reduceTransparency ? Theme.success : Theme.textMuted
+                adjustable: true
+                onDecrement: screen.settings.reduceTransparency = !screen.settings.reduceTransparency
+                onIncrement: screen.settings.reduceTransparency = !screen.settings.reduceTransparency
+                onAccepted: screen.settings.reduceTransparency = !screen.settings.reduceTransparency
             }
             SettingRow {
                 objectName: "settingNotificationsQuiet"
@@ -842,6 +868,8 @@ FocusScope {
 
     ConfirmDialog {
         id: confirmRestart
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         title: "Restart Nexora?"
         message: "The system will restart. A running game is saved for Quick Resume first when its emulator supports it; otherwise it is closed and unsaved progress may be lost."
         confirmText: "Restart"
@@ -850,6 +878,8 @@ FocusScope {
     }
     ConfirmDialog {
         id: confirmPowerOff
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         title: "Power off?"
         message: "The system will shut down. A running game is saved for Quick Resume first when its emulator supports it; otherwise it is closed and unsaved progress may be lost."
         confirmText: "Power off"
@@ -858,6 +888,8 @@ FocusScope {
     }
     ConfirmDialog {
         id: confirmRestore
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         objectName: "confirmRestoreBackup"
         title: "Restore this backup?"
         message: "Current settings, library and (if the backup includes them) saves will be replaced. This cannot be undone from within Nexora."

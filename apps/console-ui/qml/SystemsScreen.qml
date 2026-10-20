@@ -9,6 +9,10 @@ FocusScope {
     objectName: "systemsScreen"
     required property AppController app
     required property LibraryController library
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     signal navigate(string tab)
     signal systemChosen(string systemId)
@@ -68,7 +72,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: Theme.space5
+        anchors.topMargin: Theme.space5 + screen.chromeTop
         anchors.leftMargin: Theme.space6
         anchors.rightMargin: Theme.space6
         spacing: Theme.space1
@@ -109,8 +113,14 @@ FocusScope {
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
         highlightMoveDuration: Theme.animMove
+        // Glass: the cards scroll under the hint bar; the highlight range keeps the current one
+        // above it (plain tracking would only scroll it to the view's own edge). Docked: the
+        // default tracking, as before.
+        highlightRangeMode: screen.chromeBottom > 0 ? GridView.ApplyRange : GridView.NoHighlightRange
+        preferredHighlightBegin: Theme.space3
+        preferredHighlightEnd: height - screen.chromeBottom - cellHeight - Theme.space3
         topMargin: Theme.space3
-        bottomMargin: Theme.space3
+        bottomMargin: Theme.space3 + screen.chromeBottom
         readonly property int columns: Math.max(2, Math.floor(width / (280 * Theme.scale)))
         cellWidth: Math.floor(width / columns)
         cellHeight: Math.round(150 * Theme.scale)

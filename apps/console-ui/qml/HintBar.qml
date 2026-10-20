@@ -1,16 +1,30 @@
 import QtQuick
 import Nexora.Console
 
-// Bottom bar listing the controls available in the current context.
+// Bottom bar listing the controls available in the current context. Docked in dark / high
+// contrast; a floating glass bar in the glass theme (Main.qml places it).
 Rectangle {
     id: bar
     objectName: "hintBar"
     property var hints: []   // [{ button: "A / Enter", action: "Launch" }, ...]
 
     implicitHeight: Theme.barHeight
-    color: Theme.surface
+    color: Theme.glassActive ? "transparent" : Theme.surface
 
+    GlassSurface { anchors.fill: parent; z: -1; radius: Theme.radiusXL }
+    // Glass: the bar floats over the scrolling pages; presses on it (also between its controls)
+    // must not reach a card scrolled underneath. Below the bar's own content in z.
+    MouseArea {
+        objectName: "hintBarClickShield"
+        anchors.fill: parent
+        z: -1
+        enabled: Theme.glassActive
+        hoverEnabled: false
+        acceptedButtons: Qt.AllButtons
+        onWheel: (wheel) => wheel.accepted = false // scrolling still reaches the page
+    }
     Rectangle {
+        visible: !Theme.glassActive
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
