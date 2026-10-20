@@ -15,7 +15,8 @@ private slots:
     {
         if (QLibraryInfo::version() < QVersionNumber(6, 5))
             QSKIP("QtQuick.Effects needs Qt >= 6.5; see qtOlderThan65DisablesGpuEffects");
-        QVERIFY(UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("Mesa Intel(R) UHD Graphics 620"), {}));
+        QVERIFY(
+            UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("Mesa Intel(R) UHD Graphics 620"), {}));
         QVERIFY(UiCapabilities::decide(QSGRendererInterface::Vulkan, {}, {}));
     }
     void qtOlderThan65DisablesGpuEffects()
@@ -27,14 +28,16 @@ private slots:
     void softwareRenderersDisableGpuEffects()
     {
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::Software, {}, {}));
-        QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("llvmpipe (LLVM 17.0.6, 256 bits)"), {}));
+        QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL,
+                                        QStringLiteral("llvmpipe (LLVM 17.0.6, 256 bits)"), {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("softpipe"), {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("virgl (Mesa 24.0.5)"), {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("Virgl"), {}));
     }
     void environmentVariableDisablesGpuEffects()
     {
-        QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("AMD Radeon"), QByteArrayLiteral("1")));
+        QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("AMD Radeon"),
+                                        QByteArrayLiteral("1")));
     }
     void defaultsToFalseUntilProbed()
     {

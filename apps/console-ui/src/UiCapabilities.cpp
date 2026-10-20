@@ -10,8 +10,7 @@ namespace nexora::ui {
 
 UiCapabilities::UiCapabilities(QObject *parent)
     : QObject(parent)
-{
-}
+{ }
 
 UiCapabilities *UiCapabilities::instance()
 {
@@ -27,7 +26,8 @@ UiCapabilities *UiCapabilities::create(QQmlEngine *, QJSEngine *engine)
     return instance();
 }
 
-bool UiCapabilities::decide(QSGRendererInterface::GraphicsApi api, const QString &glRenderer, const QByteArray &disableEnv)
+bool UiCapabilities::decide(QSGRendererInterface::GraphicsApi api, const QString &glRenderer,
+                            const QByteArray &disableEnv)
 {
     // QtQuick.Effects is a QML module loaded at run time, so the installed Qt decides (not the
     // version we were compiled against): before 6.5 the GPU glass files cannot load at all.
@@ -58,7 +58,8 @@ void UiCapabilities::probe(QQuickWindow *window)
                         reinterpret_cast<const char *>(context->functions()->glGetString(GL_RENDERER)));
             }
             const bool allowed = decide(api, glRenderer, qgetenv("NEXORA_NO_GLASS_BLUR"));
-            QMetaObject::invokeMethod(instance(), [allowed] { instance()->setGpuEffects(allowed); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(
+                instance(), [allowed] { instance()->setGpuEffects(allowed); }, Qt::QueuedConnection);
         },
         Qt::DirectConnection);
 }
