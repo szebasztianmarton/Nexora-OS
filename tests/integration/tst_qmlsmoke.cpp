@@ -1755,6 +1755,82 @@ private slots:
         CHECK_NO_WARNINGS();
     }
 
+    // Glass: one shared modal scrim covers the whole window (including the gaps around the
+    // floating bars) above the pages but below the bars; the overlays' own scrims are
+    // transparent so nothing is dimmed twice. The docked themes keep the overlay scrims.
+    void glassModalScrimCoversWindowBelowChrome_data() { addWindowSizeRows(); }
+    void glassModalScrimCoversWindowBelowChrome()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("alpha"));
+        Ui ui;
+        load(ui, config.path(), windowSize, true);
+        if (QTest::currentTestFailed())
+            return;
+        auto *settings = ui.context->settings();
+        QCOMPARE(settings->theme(), QStringLiteral("glass"));
+        auto *scrim = find(ui, "glassModalScrim");
+        auto *scene = find(ui, "sceneLayer");
+        auto *chrome = find(ui, "glassChrome");
+        QVERIFY(scrim && scene && chrome);
+        QVERIFY(find(ui, "tutorialOverlay")->isVisible());
+
+        const auto ownScrims = {"tutorialScrim", "gameOptionsScrim", "updatePanelScrim"};
+        // Glass, tutorial open: the scrim fills the window and sits between the scene and the bars.
+        QTRY_VERIFY(scrim->isVisible());
+        QCOMPARE(sceneRect(scrim), QRectF(QPointF(0, 0), QSizeF(ui.window->size())));
+        QCOMPARE(scrim->parentItem(), scene);
+        const auto sceneKids = scene->childItems();
+        QCOMPARE(sceneKids.last(), scrim);
+        QCOMPARE(chrome->parentItem(), scene->parentItem());
+        const auto siblings = scene->parentItem()->childItems();
+        QVERIFY(siblings.indexOf(chrome) > siblings.indexOf(scene));
+        QVERIFY(chrome->z() >= scene->z());
+        // The bars sit inside |chrome|, so they are above the scrim too.
+        for (const char *bar : {"header", "hintBar"}) {
+            auto *item = find(ui, bar);
+            QVERIFY(item);
+            QVERIFY2(chrome->isAncestorOf(item), bar);
+        }
+        for (const char *name : ownScrims) {
+            auto *own = find(ui, name);
+            QVERIFY2(own, name);
+            QCOMPARE(own->property("color").value<QColor>().alpha(), 0);
+        }
+
+        // Closed: no scrim.
+        settings->setTutorialCompleted(true);
+        QTRY_VERIFY(!find(ui, "tutorialOverlay")->isVisible());
+        QTRY_VERIFY(!scrim->isVisible());
+
+        // The update panel also raises it.
+        QMetaObject::invokeMethod(ui.window, "openUpdatePanel");
+        QTRY_VERIFY(find(ui, "updatePanel")->isVisible());
+        QTRY_VERIFY(scrim->isVisible());
+        QMetaObject::invokeMethod(find(ui, "updatePanel"), "close");
+        QTRY_VERIFY(!scrim->isVisible());
+
+        // Docked themes: never visible, overlay scrims keep their own fill.
+        for (const QString &theme : {QStringLiteral("dark"), QStringLiteral("highContrast")}) {
+            settings->setTheme(theme);
+            settings->setTutorialCompleted(false);
+            QTRY_VERIFY(find(ui, "tutorialOverlay")->isVisible());
+            QTest::qWait(50);
+            QVERIFY2(!scrim->isVisible(), qPrintable(theme));
+            for (const char *name : ownScrims)
+                QCOMPARE(find(ui, name)->property("color").value<QColor>().alpha(), 255);
+            settings->setTutorialCompleted(true);
+            QMetaObject::invokeMethod(ui.window, "openUpdatePanel");
+            QTRY_VERIFY(find(ui, "updatePanel")->isVisible());
+            QTest::qWait(50);
+            QVERIFY2(!scrim->isVisible(), qPrintable(theme));
+            QMetaObject::invokeMethod(find(ui, "updatePanel"), "close");
+        }
+
+        CHECK_NO_WARNINGS();
+    }
+
     // Glass: the header, tab bar and hint bar float (inset from the window edges) over the
     // scene layer, which fills the window; the pages keep their first and last rows clear of
     // the bars.

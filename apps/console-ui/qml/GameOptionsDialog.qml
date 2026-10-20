@@ -124,9 +124,11 @@ FocusScope {
         }
     }
 
+    // Glass: the window's shared modal scrim (Main.qml) dims the whole window, so none here.
     Rectangle {
+        objectName: "gameOptionsScrim"
         anchors.fill: parent
-        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        color: Theme.glassActive ? "transparent" : Theme.background
         opacity: Theme.glassActive ? 1.0 : 0.8
     }
     MouseArea { anchors.fill: parent; onClicked: dialog.close() }

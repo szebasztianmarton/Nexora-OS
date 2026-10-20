@@ -47,6 +47,9 @@ ApplicationWindow {
     // height the bars cover) so nothing is hidden under them while scrolling passes beneath.
     // Dark / high contrast: the bars are docked and the pages sit between them (|dockedTop| /
     // |dockedBottom|), as with ApplicationWindow.header/footer.
+    // A window-level modal is open in glass: the shared scrim in |sceneLayer| dims the window.
+    readonly property bool glassModalOpen: Theme.glassActive
+        && (tutorial.visible || gameOptions.visible || updatePanel.visible)
     readonly property real chromeTop: Theme.glassActive ? tabBar.y + tabBar.height + Theme.space2 : 0
     readonly property real chromeBottom: Theme.glassActive
         ? (hintBar.visible ? chrome.height - hintBar.y + Theme.space2 : Theme.space4) : 0
@@ -345,6 +348,17 @@ ApplicationWindow {
                     library: window.library
                     onOptionsRequested: (gameId) => window.openGameOptions(gameId)
                 }
+            }
+
+            // Glass: one scrim for the window-level modals (tutorial, game options, update
+            // panel), above the pages and below the floating bars, which stay undimmed; their
+            // controls are listed in the hint bar. The GPU blur samples this layer, so it
+            // blurs the dimmed scene.
+            Rectangle {
+                objectName: "glassModalScrim"
+                anchors.fill: parent
+                color: Qt.rgba(0, 0, 0, 0.40)
+                visible: window.glassModalOpen
             }
         }
 
