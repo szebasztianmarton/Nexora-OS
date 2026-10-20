@@ -2,7 +2,7 @@ import QtQuick
 import Nexora.Console
 
 // Blur-free glass layers: fill, specular highlight and rim. Used by GlassSurface whenever the
-// GPU path is off (software renderer, llvmpipe, reduce transparency, a running emulator).
+// GPU path is off (software or virtual GL renderer (llvmpipe, virgl), reduce transparency, a running emulator).
 Item {
     id: flat
     required property color fillColor

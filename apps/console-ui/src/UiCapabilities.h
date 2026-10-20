@@ -13,8 +13,8 @@ class QQuickWindow;
 namespace nexora::ui {
 
 // Whether the console UI may use GPU effects (the Liquid Glass backdrop blur). False until the
-// main window's scene graph is up, and always false on the software backend, on llvmpipe /
-// softpipe and when NEXORA_NO_GLASS_BLUR is set. QML: UiCapabilities.gpuEffects.
+// main window's scene graph is up, and always false on the software backend, on llvmpipe / softpipe /
+// virgl and when NEXORA_NO_GLASS_BLUR is set. QML: UiCapabilities.gpuEffects.
 class UiCapabilities : public QObject
 {
     Q_OBJECT

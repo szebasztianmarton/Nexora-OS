@@ -54,7 +54,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 
 | Symptom | Fix |
 | --- | --- |
-| Glitches, flicker or a slow UI with the glass theme (the backdrop blur under the bars and dialogs) | set `NEXORA_NO_GLASS_BLUR=1` in the environment that starts the UI (any non-empty value works), or turn on Settings › General › Reduce transparency (solid panels, no blur); choosing the `dark` theme avoids the glass look completely. The blur is also off by itself on the software renderer, on llvmpipe, with a Qt older than 6.5 and while a game runs ([design-system.md](design-system.md#liquid-glass)) |
+| Glitches, flicker or a slow UI with the glass theme (the backdrop blur under the bars and dialogs) | set `NEXORA_NO_GLASS_BLUR=1` in the environment that starts the UI (any non-empty value works), or turn on Settings › General › Reduce transparency (solid panels, no blur); choosing the `dark` theme avoids the glass look completely. The blur is also off by itself on software or virtual GL renderers (llvmpipe, softpipe, virgl), with a Qt older than 6.5 and while a game runs ([design-system.md](design-system.md#liquid-glass)) |
 | No blur at all | expected without a hardware renderer, with Qt older than 6.5, with Reduce transparency on, in high contrast, and while an emulator runs; the glass theme then draws the flat glass |
 
 ## Controllers

@@ -31,6 +31,7 @@ private slots:
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL,
                                         QStringLiteral("llvmpipe (LLVM 17.0.6, 256 bits)"), {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("softpipe"), {}));
+        // Only effective on Qt >= 6.5: below that the version gate returns false first.
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("virgl (Mesa 24.0.5)"), {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("Virgl"), {}));
     }
