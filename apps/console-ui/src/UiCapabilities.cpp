@@ -36,7 +36,10 @@ bool UiCapabilities::decide(QSGRendererInterface::GraphicsApi api, const QString
     if (!disableEnv.isEmpty() || api == QSGRendererInterface::Software || api == QSGRendererInterface::Unknown)
         return false;
     const QString renderer = glRenderer.toLower();
-    return !renderer.contains(QLatin1String("llvmpipe")) && !renderer.contains(QLatin1String("softpipe"));
+    // virgl is the paravirtualised GPU of QEMU/virtio virtual machines. It never runs on real
+    // console hardware, and in a VM the blur is slow and not wanted.
+    return !renderer.contains(QLatin1String("llvmpipe")) && !renderer.contains(QLatin1String("softpipe"))
+        && !renderer.contains(QLatin1String("virgl"));
 }
 
 void UiCapabilities::probe(QQuickWindow *window)

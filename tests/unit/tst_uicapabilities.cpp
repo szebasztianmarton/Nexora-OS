@@ -29,6 +29,8 @@ private slots:
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::Software, {}, {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("llvmpipe (LLVM 17.0.6, 256 bits)"), {}));
         QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("softpipe"), {}));
+        QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("virgl (Mesa 24.0.5)"), {}));
+        QVERIFY(!UiCapabilities::decide(QSGRendererInterface::OpenGL, QStringLiteral("Virgl"), {}));
     }
     void environmentVariableDisablesGpuEffects()
     {

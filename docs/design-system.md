@@ -109,7 +109,7 @@ When it is false, glass surfaces use the **flat path** (`GlassEffectFlat`): fill
 - the Qt that is running is at least 6.5. This is checked at run time with `QLibraryInfo::version()`, not against the version compiled with: `QtQuick.Effects` (`MultiEffect`) is a QML module loaded when needed, so the minimum build stays Qt 6.4 and the image's Qt 6.9.1 gets the blur;
 - `NEXORA_NO_GLASS_BLUR` is unset or empty (any non-empty value switches the blur off; see [troubleshooting.md](troubleshooting.md#the-glass-theme));
 - the scene graph is neither the software backend nor an unknown API;
-- for OpenGL, the `GL_RENDERER` string (lower-cased) contains neither `llvmpipe` nor `softpipe`. Other graphics APIs (for example Vulkan) pass without a renderer-string check.
+- for OpenGL, the `GL_RENDERER` string (lower-cased) contains none of `llvmpipe`, `softpipe` or `virgl` (virgl is the paravirtualised GPU of QEMU/virtio VMs: never real console hardware, and the blur is slow there). Other graphics APIs (for example Vulkan) pass without a renderer-string check.
 
 If `GlassEffectGpu.qml` still cannot load (`Loader.Error`, for example `QtQuick.Effects` missing), the surface silently stays flat and logs one `nexora.ui` debug line. A GPU shader failure at run time cannot be detected from QML; `NEXORA_NO_GLASS_BLUR=1` and Reduce transparency are the escape hatches.
 
