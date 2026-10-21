@@ -18,6 +18,10 @@ FocusScope {
     visible: false
     z: 50
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Test input"
+    Accessible.description: panel.available ? "Press any button or move a stick. Hold " + Theme.buttonLabel(backButton) + " for 2 seconds to exit, or press Escape." : "No controller input layer is active."
+
     readonly property var inputController: app ? app.input : null
     readonly property bool available: inputController !== null
     readonly property var hints: [{ button: "B / Esc", action: "Close" },

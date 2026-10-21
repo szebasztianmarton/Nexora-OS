@@ -26,6 +26,10 @@ FocusScope {
     property real chromeTop: 0
     property real chromeBottom: 0
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: title
+    Accessible.description: message
+
     readonly property alias confirmButton: confirmButton
     readonly property alias cancelButton: cancelButton
 

@@ -133,6 +133,10 @@ FocusScope {
     }
     MouseArea { anchors.fill: parent; onClicked: dialog.close() }
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: dialog.details.title || "Game options"
+    Accessible.description: dialog.details.path || ""
+
     Rectangle {
         id: panel
         anchors.centerIn: parent
