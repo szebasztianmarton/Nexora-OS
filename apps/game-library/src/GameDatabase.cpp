@@ -99,6 +99,7 @@ bool GameDatabase::open(const QString &path, bool allowRecovery)
 {
     close();
     m_issues.clear();
+    m_lastError.clear();
     m_recoverable = true;
     m_backupPath.clear();
     m_path = path;

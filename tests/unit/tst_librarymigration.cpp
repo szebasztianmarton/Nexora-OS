@@ -227,6 +227,20 @@ private slots:
             == 0);
     }
 
+    void failedOpenDoesNotReportAStaleError()
+    {
+        createV1({QStringLiteral("PRAGMA user_version = 99")});
+        GameDatabase database;
+        QVERIFY(!database.open(db()));
+        QVERIFY(database.lastError().contains(QStringLiteral("newer")));
+        // A directory cannot be opened as a database: that is the error to report now.
+        const QString directory = m_dir.filePath(QStringLiteral("not-a-file"));
+        QVERIFY(QDir().mkpath(directory));
+        QVERIFY(!database.open(directory, false));
+        QVERIFY(!database.lastError().isEmpty());
+        QVERIFY2(!database.lastError().contains(QStringLiteral("newer")), qPrintable(database.lastError()));
+    }
+
     void metadataValidation()
     {
         GameDatabase database;
