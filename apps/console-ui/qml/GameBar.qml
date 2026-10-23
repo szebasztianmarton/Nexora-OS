@@ -453,7 +453,8 @@ FocusScope {
                                 visible: index < 4
                                 enabled: available && !bar.app.busy
                                 artTitle: title
-                                label: bar.app.busy ? title + " (stop the running game first)" : "Play " + title
+                                // Disabled while a game runs (no focus, so no label shown then).
+                                label: "Play " + title
                                 onActivated: {
                                     if (bar.library.launch(gameId))
                                         bar.gameBar.close()
@@ -478,7 +479,7 @@ FocusScope {
                             objectName: "gameBarSettings"
                             enabled: !bar.app.busy
                             icon: "gear"
-                            label: bar.app.busy ? "Settings (stop the running game first)" : "All settings"
+                            label: "All settings" // disabled while a game runs: explained underneath
                             tone: Theme.accentSoft
                             onActivated: { bar.navigate("settings"); bar.gameBar.close() }
                         }
@@ -505,6 +506,7 @@ FocusScope {
                         text: (bar.app.inputDevices.length > 0 ? "Controller: " + bar.app.inputDevices.join(", ")
                                                                : "No controller connected (" + bar.app.inputBackend + ")")
                               + (bar.system.powerSupported ? "" : "\nPower control is not available on this platform.")
+                              + (bar.app.busy ? "\nAll settings opens once the running game is stopped." : "")
                         color: Theme.overlayTextFaint
                         font.pixelSize: Theme.fontSmall
                     }
