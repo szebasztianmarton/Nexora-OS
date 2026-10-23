@@ -1,11 +1,14 @@
 #include "nexora/library/LibraryScanner.h"
 
+#include "nexora/library/XboxDiscProbe.h"
 #include "nexora/shared/Logging.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
+
+#include <algorithm>
 
 #include <sys/stat.h>
 
@@ -204,6 +207,7 @@ private:
             file.modified = info.lastModified();
             file.emulatorIds = *handlers;
             file.systemIds = m_options.extensionSystems.value(extension);
+            LibraryScanner::classifyXboxDisc(file, m_options);
             m_result.files.append(file);
             if (m_progress && m_result.files.size() % 100 == 0)
                 m_progress(int(m_result.files.size()), m_currentRoot);
@@ -221,6 +225,28 @@ private:
 };
 
 } // namespace
+
+void LibraryScanner::classifyXboxDisc(ScannedFile &file, const ScanOptions &options)
+{
+    static const QString xbox360 = QStringLiteral("xbox360");
+    if (file.extension != QStringLiteral(".iso") || !file.systemIds.contains(xbox360))
+        return;
+    if (isXboxDisc(file.path))
+        file.systemIds = {xbox360};
+    else
+        file.systemIds.removeAll(xbox360);
+
+    QStringList kept;
+    for (const QString &id : std::as_const(file.emulatorIds)) {
+        const QStringList declared = options.emulatorSystems.value(id);
+        const bool any = declared.isEmpty();
+        const bool matches = std::any_of(declared.cbegin(), declared.cend(),
+                                         [&](const QString &s) { return file.systemIds.contains(s); });
+        if (any || matches)
+            kept.append(id);
+    }
+    file.emulatorIds = kept;
+}
 
 QString LibraryScanner::titleFromFileName(const QString &fileName)
 {

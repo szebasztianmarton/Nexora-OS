@@ -189,6 +189,7 @@ void LibraryController::updateScanOptions(bool force, bool autoScan)
     options.roots = directories();
     options.followSymlinks = m_settings->boolValue(Settings::LibraryFollowSymlinks);
     for (const auto &config : m_app->enabledEmulators()) {
+        options.emulatorSystems.insert(config.id, config.systems);
         for (const QString &ext : config.extensions) {
             QStringList &ids = options.extensionMap[ext];
             if (!ids.contains(config.id))
