@@ -97,6 +97,8 @@ FocusScope {
             required lastPlayed
             required available
             required unavailableReason
+            required present
+            required systemShortName
             width: row.tileWidth
             height: row.tileHeight
             selected: ListView.isCurrentItem && list.activeFocus
