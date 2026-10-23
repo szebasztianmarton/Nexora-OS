@@ -129,7 +129,7 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 
 ## Fake emulator
 
-`nexora-fake-emulator` (`tests/fixtures/fake-emulator/main.cpp`) is a Qt-free program. Options (applied in a fixed order): `--startup-delay-ms N`, `--ignore-sigterm`, always prints `ready`, `--print-cwd`, `--echo-args`, `--stdout TEXT`, `--stderr TEXT`, `--sleep-ms N` (≤ 10 min), `--crash segv|abort`, `--exit-code N`, `--spawn-child` (forks a child that sleeps for `--sleep-ms` and prints `child: <pid>`, to test process-group signalling). Other arguments (a game path) are ignored; unknown `--` options exit 64. Tests get its path through `NEXORA_FAKE_EMULATOR`; the build also generates the `fake-ok`, `fake-fail`, `fake-crash`, `fake-long` development configurations.
+`nexora-fake-emulator` (`tests/fixtures/fake-emulator/main.cpp`) is a Qt-free program. Options (applied in a fixed order): `--startup-delay-ms N`, `--ignore-sigterm`, always prints `ready`, `--print-cwd`, `--echo-args`, `--stdout TEXT`, `--stderr TEXT`, `--sleep-ms N` (≤ 10 min), `--crash segv|abort`, `--exit-code N`, `--spawn-child` (forks a child that sleeps for `--sleep-ms` and prints `child: <pid>`, to test process-group signalling). Other arguments (a game path) are ignored; unknown `--` options exit 64. Tests get its path through `NEXORA_FAKE_EMULATOR`; with `-DNEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` the build also generates the `fake-ok`, `fake-fail`, `fake-crash`, `fake-long` development configurations for manual runs ([building.md](building.md)).
 
 ## Test environment
 

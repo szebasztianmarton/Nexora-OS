@@ -165,7 +165,9 @@ scripts/run.sh debug -- --input-backend none --log-file /tmp/nexora.log
 QT_LOGGING_RULES="nexora.*.debug=true" scripts/run.sh          # részletes napló
 ```
 
-A build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) a `build/debug/share/nexora/emulators/` mappába generálja, így valódi emulátor nélkül is kipróbálható az indítás és visszatérés.
+**Játékkönyvtár:** a repó gyökerében lévő `.games/` mappa (git-ignorált, sosem kerül commitba) a fejlesztői játékkönyvtár: ha a konfiguráláskor létezik, a build a `build/<preset>/share/nexora/settings-defaults.json` fájlba írja `library.directories`-ként, így a Games fül beállítás nélkül is ezt a mappát olvassa. Másik mappa: `-DNEXORA_DEV_LIBRARY_DIR=<mappa>`. A mappa létrehozása vagy törlése után futtasd újra a konfigurálást.
+
+**Fake emulátorok:** alapból nem jelennek meg. A `-DNEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` kapcsolóval a build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) a `build/debug/share/nexora/emulators/` mappába generálja, így valódi emulátor nélkül is kipróbálható az indítás és visszatérés; kikapcsolt opcióval újrakonfigurálva a fájlok eltűnnek.
 
 ### Vezérlés billentyűzettel
 
@@ -182,7 +184,7 @@ A build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake
 
 ### Mit érdemes kipróbálni
 
-1. **Emulators** fül → `fake-ok` indítása: megjelenik a futás-overlay, a folyamat kilép, a fókusz visszatér ugyanarra az elemre.
+1. **Emulators** fül (a `NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` kapcsolóval konfigurált buildben) → `fake-ok` indítása: megjelenik a futás-overlay, a folyamat kilép, a fókusz visszatér ugyanarra az elemre.
 2. `fake-fail` és `fake-crash`: a felület hibaüzenetet mutat, nem fagy le, utána újra lehet indítani.
 3. `fake-long` indítása, majd Enter az overlayen: a folyamat leáll, a UI visszajön.
 4. **Settings** → könyvtármappa hozzáadása (pl. egy `~/nexora-test-games` mappa néhány fájllal a konfigurációban megadott kiterjesztéssel) → **Games** fülön megjelennek, keresés, kedvenc jelölés.
@@ -359,7 +361,7 @@ Másold ki és pipáld ki az eredményeket (dátum, Windows-build, GPU):
 - [ ] `scripts/build.sh ci --test` → 19/19 teszt sikeres
 - [ ] `--check-config` mindkét példakonfigurációra 0-s kóddal tér vissza
 - [ ] Fő alkalmazás elindul ablakban (WSLg), billentyűzettel navigálható
-- [ ] `fake-ok` / `fake-fail` / `fake-crash` / `fake-long` indítása és visszatérés rendben
+- [ ] `fake-ok` / `fake-fail` / `fake-crash` / `fake-long` indítása és visszatérés rendben (`NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` build)
 - [ ] Játékkönyvtár: mappa hozzáadása, keresés, kedvenc, indítás
 - [ ] Console UI prototípus: fordítás, minden teszt sikeres
 - [ ] Console UI prototípus: `run-dev.sh` sandbox, első indítási varázsló, 1080p és 720p elrendezés
