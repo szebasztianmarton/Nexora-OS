@@ -105,7 +105,8 @@ public:
     QDateTime startedAt() const { return m_startedAt; }
 
     // Application exit: SIGTERM to the process group, SIGKILL if it is still running after
-    // min(stop timeout, ShutdownGraceLimit). Blocks (bounded); emits nothing.
+    // min(stop timeout, ShutdownGraceLimit). Blocks (bounded); ends the run like stop()
+    // (Stopping, then Exited and processFinished, emitted from inside this call).
     void shutdown();
     static constexpr std::chrono::milliseconds ShutdownGraceLimit{3000};
 
