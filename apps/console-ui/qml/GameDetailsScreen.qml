@@ -346,8 +346,10 @@ FocusScope {
                         value: details.info.automatic
                                ? "Automatic" + (details.info.emulatorName ? " (" + details.info.emulatorName + ")" : "")
                                : (details.info.emulatorName || "—")
-                        description: choices.length > 1 ? "← → choose which emulator starts this game"
-                                                        : "No emulator declares this file type"
+                        // "Automatic" plus one emulator start the same thing: nothing to choose.
+                        description: choices.length > 2 ? "← → choose which emulator starts this game"
+                                   : choices.length > 1 ? "The only emulator that declares this file type"
+                                   : "No emulator declares this file type"
                         adjustable: choices.length > 2
                         onDecrement: details.cycleEmulator(-1)
                         onIncrement: details.cycleEmulator(1)
