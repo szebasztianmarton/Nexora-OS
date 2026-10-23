@@ -16,7 +16,7 @@ The test suite uses Qt Test, Qt Quick Test and a few shell tests, all registered
 | GitHub Actions (`ci.yml`) for the MVP 4 commits | not recorded here; check the Actions tab | — |
 | Buildroot A/B image build and QEMU boot | **not yet built/booted** <!-- TASK12-RESULT: image build result (duration, size) and qemu-boot-test.sh PASS/FAIL with time and serial log excerpt --> | — |
 
-The `-Werror` builds with GCC and Clang were not repeated after the verification fixes (commit `64b014f`); only the GCC Debug build above was. The container runs as root, so the two [root-skipped functions](#tests-skipped-as-root) were skipped in these runs. Previous milestones: 19/19 at the end of MVP 2 (2026-10-11), also verified as non-root then.
+The `-Werror` builds with GCC and Clang were not repeated after the verification fixes (commit `64b014f`); only the GCC Debug build above was. The container runs as root, so the two [root-skipped functions](#tests-skipped-as-root) were skipped in these runs. Previous milestones: 19/19 at the end of MVP 2 (2026-10-11), also verified as non-root then. The suite has grown since these runs: it now registers **49** tests (31 unit, 14 integration, 4 system; 9 also labelled `security`), see [Layout and labels](#layout-and-labels).
 
 ## Contents
 
@@ -48,9 +48,9 @@ buildroot-external/tests/test-update-helper.sh   run by the system test test_upd
 
 | Label | Tests | Meaning |
 | --- | --- | --- |
-| `unit` | 27 | isolated logic |
-| `integration` | 12 | real processes, databases, QML, shell scripts, virtual controllers (uinput) |
-| `system` | 3 | image helpers, GRUB script syntax, image shell scripts (need `bash`, `grub-common`, `shellcheck`). `ctest -L system` runs 4, because CTest adds the fixture `tst_updateservice` that writes the bundles for `test_update_helper` |
+| `unit` | 31 | isolated logic |
+| `integration` | 14 | real processes, databases, QML, shell scripts, virtual controllers (uinput) |
+| `system` | 4 | image helpers, GRUB script syntax, image shell scripts (need `bash`, `grub-common`, `shellcheck`), line endings of the tracked files. `ctest -L system` runs 5, because CTest adds the fixture `tst_updateservice` that writes the bundles for `test_update_helper` |
 | `security` | 9 (also in unit/integration) | path traversal and escapes, redaction, signature/manifest/checksum rejection: `tst_libraryscanner`, `tst_redaction`, `tst_diagnosticreport`, `tst_updatemanifest`, `tst_signatureverifier`, `tst_backupservice`, `tst_updateservice`, `test_update_tool`, `test_release_scripts` |
 
 ## Running tests
@@ -66,7 +66,7 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 
 ## What each test covers
 
-### Unit (27)
+### Unit (31)
 
 | Test | Covers |
 | --- | --- |
@@ -83,24 +83,26 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | `tst_emulatorlistmodel` | model roles, status updates, lookup by id |
 | `tst_systemlistmodel` | per-system game/emulator counts; "Other" bucket only when non-empty; unchanged systems update in place (no model reset) |
 | `tst_gamelistmodel` | the emulator roles (id, name, available, reason) follow the effective emulator: per-game override, else the system default, else the first candidate; changing the defaults refreshes the rows (`dataChanged`) |
+| `tst_uicapabilities` | GPU effects allowed only with a hardware renderer on Qt 6.5 or newer, disabled by software renderers and by the environment variable, off until probed |
 | `tst_gamepadnavigator` | button → action mapping, dead-zone press/release thresholds and clamping, hysteresis, auto-repeat, OS key-repeat ignored for Confirm/Back, Select+Start chord, Start hold (quick menu), per-device state, evdev code mapping and layouts (Xbox labels, joystick-class pads) |
 | `tst_inputcontroller` | action → key delivery, suspension, capture, chord and Guide reported while suspended, device list and connect/disconnect signals, test mode (raw events, no navigation, hold Back 2 s to exit) |
 | `tst_buttonmapping` | default mapping, validation, swaps, fallbacks |
 | `tst_libraryquery` | sorting (the emulator sort uses the effective emulator incl. the system default), filters incl. `systemId`, the `@other` filter for games without a system, and `Missing`, search incl. edited titles and system names |
+| `tst_xboxdiscprobe` | Xbox disc image detection: the signature at every base offset, shifted or truncated signature, ISO 9660, empty and missing files, FIFO and directory rejected |
 | `tst_libraryscanner` (security) | extensions, bad roots, symlinks (skipped, escapes refused, loops terminate), system directories such as `proc/` not entered, multi-system extensions, duplicates, limits, cancellation |
 | `tst_librarymigration` | real v1 schema → v2 with rows, favorites and play counts preserved, backup file opens as v1, version 99 refused untouched, no second backup |
 | `tst_systemintegration` | platform detection, status from fake `/proc`, power FIFO, `amixer` fallback, update info (supported on the image, "not running" without the update FIFO, `Capability::Update` with it), single instance, Unix signals |
 | `tst_datalayout` | 9 absolute distinct directories, XDG overrides and fallbacks, mode 0700, cache-only list excludes saves/data |
 | `tst_atomicfile` | round trip, mode 0600, size-limited read, missing file, `moveAside()` |
 | `tst_redaction` (security) | home path → `~`, URL credentials stripped, `token=`, `"password":` masked, more key names (`passphrase`, `apikey`, `auth`, `credential`, `session`, `cookie`, …) masked while `monkey`/`author`/`bypass` are not, `--flag value` and `--flag=value` secrets, `Authorization`/`Cookie` headers and `Bearer` tokens, unrelated text unchanged |
-| `tst_systemcatalog` | built-in catalog (19 systems), `.sfc` → snes, `.iso` → several, invalid/duplicate entries dropped, oversize file rejected |
+| `tst_systemcatalog` | built-in catalog (20 systems), `.sfc` → snes, `.iso` → several, invalid/duplicate entries dropped, oversize file rejected |
 | `tst_hardwareinfo` | CPU, memory, GPU (Intel i915), HDMI output with modes, audio cards from `tests/fixtures/sysroot`; missing roots; 2 MiB file not read |
 | `tst_diagnosticreport` (security) | version/build/GPU present, home path redacted, 100 000 log lines → ≤ 512 KiB, newest 10 reports kept, mode 0600 |
 | `tst_version` | strict version parsing and ordering |
 | `tst_updatemanifest` (security) | every malformed manifest case (unknown key, path in file name, uppercase/short hash, size 0, format 2, long notes, > 64 KiB, …) |
 | `tst_signatureverifier` (security) | Ed25519 verify, tampered message/signature, wrong size, zero keys fail closed, RSA key rejected, second of two keys |
 
-### Integration (12)
+### Integration (14)
 
 | Test | Covers |
 | --- | --- |
@@ -117,15 +119,16 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | `tst_updateservice` (security) | update state machine with a freshly signed 3 MiB bundle: happy path, wrong board, not newer, too old, tampered image, cancel during hashing, no FIFO reader, real FIFO and status file → `RestartRequired`, state directory created by `verify()` and no room needed for the image, stale status ignored, fresh status with the same text accepted, `installing` then `ok`, `ok` for another version fails, install timeout, acknowledging a rollback or a completed update, transition table; writes the fixture bundles for the shell tests |
 | `test_update_tool` (security) | `nexora-update-tool verify` accepts the good bundle, rejects the tampered one |
 | `test_release_scripts` (security) | `sign-update.sh` / `verify-release.sh` with a throwaway key: bundle and `SHA256SUMS` signing, verification, tamper detection, key inside a work tree refused; `check-docs.sh` on a scratch tree (missing doc, broken inline and reference links); `check-image-version.sh` on scratch ext4 images (skipped without `mkfs.ext4`/`debugfs`) and that `make-release.sh` calls it |
-| `tst_console_qml` | Qt Quick Test files in `tests/qml/`: `tst_theme.qml` (scale, high contrast, reduced motion tokens), `tst_settings_ui.qml` (seven sections, focus stays inside, ConfirmDialog defaults to Cancel), `tst_navigation.qml` (eight tabs with keys only, fit at TV resolutions and large scale, grid/list), `tst_gamedetails.qml` (open/close restores focus, favorite, remove dialog defaults to Cancel and says the file stays, title editing with the on-screen keyboard, unknown game error state, markup in titles and notes shown literally, a failed save keeps the editor open), `tst_quickmenu.qml` (hidden without a game, opens over a running game, pause/resume, "Return to game" resumes a paused emulator, volume and display page, Exit game asks for confirmation); `tst_theme.qml` also covers the resolution factor and the readable high-contrast primary button, `tst_settings_ui.qml` the eliding plain-text value — 31 test functions |
+| `tst_console_qml` | Qt Quick Test files in `tests/qml/`: `tst_theme.qml` (scale, high contrast, reduced motion tokens), `tst_settings_ui.qml` (seven sections, focus stays inside, ConfirmDialog defaults to Cancel), `tst_navigation.qml` (eight tabs with keys only, fit at TV resolutions and large scale, grid/list), `tst_gamedetails.qml` (open/close restores focus, favorite, remove dialog defaults to Cancel and says the file stays, title editing with the on-screen keyboard, unknown game error state, markup in titles and notes shown literally, a failed save keeps the editor open), `tst_quickmenu.qml` (hidden without a game, opens over a running game, pause/resume, "Return to game" resumes a paused emulator, volume and display page, Exit game asks for confirmation); `tst_theme.qml` also covers the resolution factor and the readable high-contrast primary button, `tst_settings_ui.qml` the eliding plain-text value; `tst_glass.qml` (GlassSurface flat under the software backend and silent fallback without the GPU path, interactive and prominent fills, GlassGroup backdrops, the sliding pill and reduced motion, button styles and label contrast) — 6 files, 63 test functions |
 
-### System (3)
+### System (4)
 
 | Test | Covers |
 | --- | --- |
 | `test_update_helper` | `nexora-updated --once` and `nexora-bootok` in their test modes on 16 MiB scratch slot files and a scratch `grubenv` (each helper run bounded in time): install into B and into A, tampered bundle (slot untouched), not newer, image larger than slot, rejected request lines (`..`, bad characters, wrong verb), symlinked image or manifest rejected, image swapped for a file or a FIFO after verification (the verified image is written), install refused while a trial boot is pending, grubenv replaced via a validated copy and backed up to `grubenv.bak`, `nexora_env_recreate` and `nexora_mask_secrets`; confirmation after a healthy boot, no confirmation with an unhealthy UI or a UI restarted during the window, tries used up → "rolled-back", previous slot picked by hand → trial cancelled, nothing pending → no change. GRUB itself is not executed; its decrement is simulated with `grub-editenv`. |
 | `grub_cfg_syntax` | `grub-script-check` on `buildroot-external/board/nexora-x86_64/grub.cfg` |
 | `shellcheck_image_scripts` | `shellcheck -s sh` on every init script and helper in the root filesystem overlay and the board scripts |
+| `check_line_endings` | `scripts/check-line-endings.sh`: fails when `git ls-files --eol` reports a tracked file with CRLF line endings in the index or the work tree (a CRLF script breaks the Buildroot build); skipped when the source tree is not a git checkout. On Windows set `git config core.autocrlf false` in this repository ([testing-windows11.md](testing-windows11.md)) |
 
 ## Fake emulator
 

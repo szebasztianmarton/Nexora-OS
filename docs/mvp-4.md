@@ -33,7 +33,7 @@ Risks recorded at the start: single `Main.qml` with tabs; user data on the root 
 
 | Plan task | Delivered | Main evidence |
 | --- | --- | --- |
-| 1 Shared foundation | `BuildInfo` (version/build id/board), `DataLayout`, `AtomicFile`, `Redaction`, `SystemCatalog` (19 systems), new settings keys, emulator `version`/`systems`/`pausable` | `tst_datalayout`, `tst_atomicfile`, `tst_redaction`, `tst_systemcatalog`, `tst_configloader`, `tst_settings` |
+| 1 Shared foundation | `BuildInfo` (version/build id/board), `DataLayout`, `AtomicFile`, `Redaction`, `SystemCatalog` (20 systems), new settings keys, emulator `version`/`systems`/`pausable` | `tst_datalayout`, `tst_atomicfile`, `tst_redaction`, `tst_systemcatalog`, `tst_configloader`, `tst_settings` |
 | 2 Library v2 | systems, metadata overrides, hidden entries, v1→v2 migration with backup, scan progress and cancel, system-directory skipping | `tst_librarymigration`, `tst_gamelibrary`, `tst_libraryscanner`, `tst_libraryquery` |
 | 3 Emulators | health checks, launch history, startup-failure detection, pause/resume | `tst_emulatorhealth`, `tst_launchhistory`, `tst_emulatormanager` |
 | 4 System | hardware info, backup/restore, redacted diagnostics, log level | `tst_hardwareinfo`, `tst_backupservice`, `tst_diagnosticreport`, `tst_logging` |

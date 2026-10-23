@@ -129,7 +129,7 @@ buildroot-external/scripts/check-kernel-fragment.sh ~/br/out
 
 [`.github/workflows/buildroot.yml`](../.github/workflows/buildroot.yml):
 
-- **validate** (push/PR touching `buildroot-external/**`, and manual runs): shallow-clones the pinned Buildroot, runs `check-package --br2-external` on the whole tree and `scripts/check-defconfig.sh`.
+- **validate** (push/PR touching `buildroot-external/**`, and manual runs): shallow-clones the pinned Buildroot, runs `check-package --br2-external` on the whole tree and `buildroot-external/scripts/check-defconfig.sh`.
 - **image** (only `workflow_dispatch` with `full_build: true`): full build on `/mnt`, caches `dl/`, uploads `disk.img.xz` and the build log. A cold build **may exceed the 6-hour limit of GitHub-hosted runners**; it has not been run on GitHub yet.
 
 ## Running in QEMU
@@ -310,10 +310,10 @@ Checks done before MVP 4 (single-root tree), in a container (Ubuntu 24.04 host, 
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Kconfig symbols | `scripts/check-defconfig.sh <buildroot> <out>` | all options of `nexora_x86_64_defconfig` present unchanged in the generated `.config` (0 problems). A negative test with two non-existent/unsatisfiable symbols reported both. |
+| Kconfig symbols | `buildroot-external/scripts/check-defconfig.sh <buildroot> <out>` | all options of `nexora_x86_64_defconfig` present unchanged in the generated `.config` (0 problems). A negative test with two non-existent/unsatisfiable symbols reported both. |
 | Every symbol exists in 2026.02.3 | grep of `Config.in` files | yes (Qt6, Mesa, eudev, GRUB2, Bootlin toolchain, linux-firmware, dejavu, alsa-utils, system options) |
 | `savedefconfig` round trip | `make savedefconfig` | the committed defconfig *is* the `savedefconfig` output |
-| Kernel fragment | `make linux-configure` + `scripts/check-kernel-fragment.sh` | all 68 options of `linux.fragment` present in the kernel `.config` of Linux 6.12.91 |
+| Kernel fragment | `make linux-configure` + `buildroot-external/scripts/check-kernel-fragment.sh` | all 68 options of `linux.fragment` present in the kernel `.config` of Linux 6.12.91 |
 | Lint | `utils/check-package --br2-external` on every file of the tree | 0 warnings (covers `Config.in`, `.mk`, defconfig, `.hash`, init scripts incl. shellcheck, all shell scripts) |
 | Supervisor logic | `nexora-session` run under BusyBox `sh` with a fake application (paths substituted) | correct arguments/environment; the app is a session leader with the VT as stdin; restart with 1/2/4 s backoff; gives up after the configured number of rapid failures; SIGTERM stops supervisor and app |
 | Source downloads | `make source` (with `BR2_DOWNLOAD_FORCE_CHECK_HASHES=y`) | exit 0, no errors: every package source was fetched and matched its hash, including Linux 6.12.91 against the tree's own `patches/linux/linux.hash`, Qt 6.9.1, Mesa 26.0.1 and GRUB 2.12 (2026-10-11) |

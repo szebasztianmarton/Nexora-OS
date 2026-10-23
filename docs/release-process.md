@@ -144,5 +144,5 @@ openssl pkeyutl -verify -pubin -inkey nexora-release.pem -rawin -in SHA256SUMS -
 - No release has been made with this process yet; the workflow has not run on GitHub.
 - The image and update-bundle part of `make-release.sh` has not been run (no A/B image has been built); only its version check (`check-image-version.sh`, on small scratch ext4 images) is tested in `test_release_scripts`.
 - No package-manager packages (deb/rpm); the tarball is an install tree for `/usr`.
-- `docs/release-notes/` does not exist yet; the first tagged release must add its notes file or the workflow fails.
+- `docs/release-notes/` holds only its [README](release-notes/README.md) (file naming and contents) so far; the first tagged release must add its notes file or the workflow fails.
 - The update bundle is published as an archive of a directory; there is no single-file bundle format.

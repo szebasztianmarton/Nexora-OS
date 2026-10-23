@@ -2,7 +2,7 @@
 
 How to build, test and run Nexora OS from source on a development host, how the development build differs from the release image, and the conventions for working on the code. The bootable image is built with Buildroot; see [buildroot.md](buildroot.md).
 
-**Verified build environment (2026-10-16):** Ubuntu 24.04 container, Qt 6.4.2 (distribution packages), CMake 3.28.3, Ninja, GCC 13.3 and Clang 18.1.3, OpenSSL 3. With `-DNEXORA_WARNINGS_AS_ERRORS=ON` both compilers build cleanly and **41/41** CTest tests pass ([testing.md](testing.md)). The same steps are what CI runs on `ubuntu-24.04`. Building on Windows 11 through WSL 2 is described (in Hungarian) in [testing-windows11.md](testing-windows11.md).
+**Verified build environment (2026-10-16):** Ubuntu 24.04 container, Qt 6.4.2 (distribution packages), CMake 3.28.3, Ninja, GCC 13.3 and Clang 18.1.3, OpenSSL 3. With `-DNEXORA_WARNINGS_AS_ERRORS=ON` both compilers built cleanly and **41/41** CTest tests passed on that date; the suite has 49 tests now ([testing.md](testing.md)). The same steps are what CI runs on `ubuntu-24.04`. Building on Windows 11 through WSL 2 is described (in Hungarian) in [testing-windows11.md](testing-windows11.md).
 
 ## Contents
 
@@ -174,7 +174,7 @@ apps/update/            nexora_update: Version, UpdateManifest, SignatureVerifie
                         tools/nexora-update-tool
 apps/console-ui/        nexora_ui + QML module Nexora.Console (qml/), controllers (src/),
                         src/input/ = nexora_input; nexora-console-ui
-config/                 emulators/example.json, examples/, systems/systems.json
+config/                 emulators/example.json and xenia.json, examples/, systems/systems.json
 tests/                  unit/, integration/, qml/, system/, support/, fixtures/
 buildroot-external/     the Buildroot BR2_EXTERNAL tree (image)
 scripts/                build/run, image/, release/, qmllint.sh, shellcheck.sh
