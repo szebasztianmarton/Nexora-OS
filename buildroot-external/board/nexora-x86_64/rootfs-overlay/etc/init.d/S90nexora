@@ -81,11 +81,11 @@ start_recovery() {
 
 start() {
 	printf 'Starting %s: ' "$DAEMON"
-	if grep -qw "nexora.recovery" /proc/cmdline; then
+	if grep -qwF "nexora.recovery" /proc/cmdline; then
 		start_recovery
 		return
 	fi
-	if grep -qw "nexora.noui" /proc/cmdline; then
+	if grep -qwF "nexora.noui" /proc/cmdline; then
 		echo "skipped (nexora.noui on kernel command line)"
 		return 0
 	fi
