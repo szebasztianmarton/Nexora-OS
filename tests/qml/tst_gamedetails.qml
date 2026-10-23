@@ -229,6 +229,26 @@ Item {
             verify(!editor.visible)
         }
 
+        function openEditor() {
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return details.visible })
+            focusRow("detailsEdit")
+            keyClick(Qt.Key_Return)
+            const editor = root.findByName(details, "metadataEditor")
+            tryVerify(function() { return editor.visible })
+            tryVerify(function() { return root.findByName(editor, "metadataTitle").activeFocus })
+            return editor
+        }
+
+        // Title and Notes show no action text, but Accept edits them: screen readers hear a button.
+        function test_editRowsAreButtonsForAccessibility() {
+            const editor = openEditor()
+            compare(root.findByName(editor, "metadataTitle").Accessible.role, Accessible.Button)
+            compare(root.findByName(editor, "metadataNotes").Accessible.role, Accessible.Button)
+            keyClick(Qt.Key_Escape)
+            verify(!editor.visible)
+        }
+
         // Glass at 150 % on 720p: the panel stays between the floating bars.
         function test_keyboardStaysBetweenTheGlassBars() {
             Theme.userScale = 1.5

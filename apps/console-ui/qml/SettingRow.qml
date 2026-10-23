@@ -15,6 +15,7 @@ Rectangle {
     property bool requireConfirm: false
     property string confirmText: "Press A / Enter again to confirm"
     property string actionText        // shown instead of a value for action rows
+    property bool activatable: false  // Accept acts on it although it shows a value (e.g. edit rows)
     property color labelColor: Theme.text
     property real meter: -1           // 0..1 draws a level bar under the value
     property bool armed: false
@@ -35,7 +36,8 @@ Rectangle {
         accepted()
     }
 
-    Accessible.role: adjustable ? Accessible.SpinBox : (actionText.length > 0 ? Accessible.Button : Accessible.StaticText)
+    Accessible.role: adjustable ? Accessible.SpinBox
+                                : (actionText.length > 0 || activatable ? Accessible.Button : Accessible.StaticText)
     Accessible.name: label + (value.length > 0 ? ": " + value : "")
     Accessible.description: description
     Accessible.onPressAction: if (actionText.length > 0 || !adjustable) activate()

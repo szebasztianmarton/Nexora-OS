@@ -135,6 +135,7 @@ FocusScope {
                         value: editor.title.length > 0 ? editor.title : editor.originalTitle + " (from file name)"
                         description: "A / Enter: edit with the on-screen keyboard"
                         actionText: ""
+                        activatable: true
                         onAccepted: keyboard.open("Title", editor.title.length > 0 ? editor.title : editor.originalTitle)
                     }
                     SettingRow {
@@ -142,6 +143,7 @@ FocusScope {
                         label: "Notes"
                         value: editor.notes.length > 0 ? editor.notes : "None"
                         valueColor: editor.notes.length > 0 ? Theme.text : Theme.textFaint
+                        activatable: true
                         onAccepted: keyboard.open("Notes", editor.notes)
                     }
                     SettingRow {
