@@ -192,7 +192,7 @@ GPU drivers are modules on purpose: built-in amdgpu/i915 would request their fir
 
 Boot sequence (BusyBox init → `/etc/init.d/rcS`):
 
-1. **`S01nexora-data`** — before udev, finds the partitions by GPT name on the boot disk through sysfs, mounts the ESP on `/boot/efi` (root only) and, after `e2fsck -p`, the data partition on `/home`; never blocks for more than 10 s and never fails the boot (details in [user-data.md](user-data.md#on-the-image)).
+1. **`S01nexora-data`** — before udev, finds the partitions by GPT name on the boot disk through sysfs, mounts the ESP on `/boot/efi` (root only) and, after `e2fsck -p`, the data partition on `/home`; waits at most 10 s for the partition (`DATA_TIMEOUT`) and gives `e2fsck` another 10 s (`FSCK_TIMEOUT`) counted from when the device appears, so it blocks for about 20 s at most, and never fails the boot (details in [user-data.md](user-data.md#on-the-image)).
 2. `S01syslogd`, `S02klogd`, `S02sysctl`, `S10udevd` (coldplug, module loading, `udevadm settle`), …
 3. **`S80nexora-powerd`** — starts the root power-request daemon (below).
 4. **`S85nexora-updated`** — starts the root update install daemon (FIFO `/run/nexora/update-request`, [update-system.md](update-system.md#the-root-helper-nexora-updated)).

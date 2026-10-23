@@ -24,7 +24,7 @@ graph TD
     fw[UEFI firmware] --> grub["GRUB (EFI/BOOT/bootx64.efi)<br/>grub.cfg + grubenv on nexora-esp"]
     grub -->|"slot A or B: /boot/bzImage<br/>root=PARTUUID, nexora.slot=X"| kernel[Linux kernel]
     kernel --> init[BusyBox init, rcS]
-    init --> data["<b>S01nexora-data</b><br/>mount ESP on /boot/efi,<br/>e2fsck -p + mount nexora-data on /home<br/>(≤ 10 s, never fails the boot)"]
+    init --> data["<b>S01nexora-data</b><br/>mount ESP on /boot/efi,<br/>e2fsck -p + mount nexora-data on /home<br/>(≤ 10 s wait + ≤ 10 s e2fsck, never fails the boot)"]
     data --> logd["S01syslogd, S02klogd, S02sysctl"]
     logd --> udev["S10udevd<br/>coldplug, GPU/input modules"]
     udev --> powerd["<b>S80nexora-powerd</b><br/>FIFO /run/nexora/power-request"]
