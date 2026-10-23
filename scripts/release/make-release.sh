@@ -93,6 +93,7 @@ if [[ -e "$work" ]]; then
     rm -rf "$work"
 fi
 mkdir -m 0700 "$work"
+stage=""
 trap 'rm -rf "${stage:-}" "$work"' EXIT
 mkdir "$work/src"
 git archive --format=tar HEAD | tar -x -C "$work/src"
