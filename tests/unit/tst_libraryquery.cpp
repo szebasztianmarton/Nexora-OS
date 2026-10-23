@@ -202,6 +202,40 @@ private slots:
         QCOMPARE(e.emulatorId(), QStringLiteral("a"));
     }
 
+    // The launch path honours the per-system default between the per-game override and the
+    // first candidate; the model and the emulator sort must resolve the same emulator.
+    void effectiveEmulatorHonoursSystemDefault()
+    {
+        GameEntry e;
+        e.emulatorCandidates = {QStringLiteral("a"), QStringLiteral("b")};
+        e.systemId = QStringLiteral("snes");
+        const QHash<QString, QString> defaults{{QStringLiteral("snes"), QStringLiteral("b")}};
+        QCOMPARE(LibraryQuery::effectiveEmulatorId(e, {}), QStringLiteral("a"));
+        QCOMPARE(LibraryQuery::effectiveEmulatorId(e, defaults), QStringLiteral("b"));
+        e.emulatorOverride = QStringLiteral("a"); // the per-game choice beats the system default
+        QCOMPARE(LibraryQuery::effectiveEmulatorId(e, defaults), QStringLiteral("a"));
+        e.emulatorOverride.clear();
+        e.systemId = QStringLiteral("nes"); // no default for this system
+        QCOMPARE(LibraryQuery::effectiveEmulatorId(e, defaults), QStringLiteral("a"));
+        e.systemId = QStringLiteral("snes");
+        e.emulatorCandidates = {QStringLiteral("a")}; // the default does not handle the file
+        QCOMPARE(LibraryQuery::effectiveEmulatorId(e, defaults), QStringLiteral("a"));
+        e.systemId.clear();
+        QCOMPARE(LibraryQuery::effectiveEmulatorId(e, defaults), QStringLiteral("a"));
+    }
+
+    void emulatorSortUsesSystemDefault()
+    {
+        auto list = sample();
+        list[0].emulatorCandidates = {QStringLiteral("snes"), QStringLiteral("aaa")}; // zelda
+        list[0].systemId = QStringLiteral("snes");
+        QueryOptions o;
+        o.sort = SortOrder::Emulator;
+        QCOMPARE(titles(LibraryQuery::apply(list, o)).last(), QStringLiteral("zelda"));
+        o.systemDefaultEmulators.insert(QStringLiteral("snes"), QStringLiteral("aaa"));
+        QCOMPARE(titles(LibraryQuery::apply(list, o)).first(), QStringLiteral("zelda"));
+    }
+
     void namesRoundTrip()
     {
         for (auto s : {SortOrder::Title, SortOrder::Recent, SortOrder::Emulator, SortOrder::Added})

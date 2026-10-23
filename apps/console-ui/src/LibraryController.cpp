@@ -44,6 +44,7 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
         model->setEmulatorInfo(info);
         model->setSystemInfo(systemInfo);
     }
+    applySystemDefaultEmulators();
 
     m_searchDebounce.setSingleShot(true);
     m_searchDebounce.setInterval(150);
@@ -98,6 +99,7 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
         } else if (key == Settings::LibrarySortOrder) {
             setSortOrder(m_settings->stringValue(Settings::LibrarySortOrder));
         } else if (key == Settings::EmulatorDefaultForSystem) {
+            applySystemDefaultEmulators();
             rebuildViews();
         }
     });
@@ -229,15 +231,24 @@ bool LibraryController::cancelScan()
 
 QString LibraryController::effectiveEmulatorId(const library::GameEntry &entry) const
 {
-    if (!entry.emulatorOverride.isEmpty() && entry.emulatorCandidates.contains(entry.emulatorOverride))
-        return entry.emulatorOverride;
-    if (!entry.systemId.isEmpty()) {
-        const QString systemDefault
-            = m_settings->mapValue(Settings::EmulatorDefaultForSystem).value(entry.systemId).toString();
-        if (!systemDefault.isEmpty() && entry.emulatorCandidates.contains(systemDefault))
-            return systemDefault;
-    }
-    return entry.emulatorCandidates.value(0);
+    return library::LibraryQuery::effectiveEmulatorId(entry, systemDefaultEmulators());
+}
+
+QHash<QString, QString> LibraryController::systemDefaultEmulators() const
+{
+    QHash<QString, QString> defaults;
+    const QVariantMap stored = m_settings->mapValue(Settings::EmulatorDefaultForSystem);
+    for (auto it = stored.cbegin(); it != stored.cend(); ++it)
+        defaults.insert(it.key(), it.value().toString());
+    return defaults;
+}
+
+void LibraryController::applySystemDefaultEmulators()
+{
+    const QHash<QString, QString> defaults = systemDefaultEmulators();
+    m_query.systemDefaultEmulators = defaults;
+    for (GameListModel *model : {&m_games, &m_recent, &m_favorites, &m_recentlyAdded})
+        model->setSystemDefaultEmulators(defaults);
 }
 
 QString LibraryController::systemName(const QString &systemId) const

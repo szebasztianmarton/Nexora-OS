@@ -82,10 +82,11 @@ build/ci/tests/tst_console_qml -input tests/qml/tst_quickmenu.qml               
 | `tst_launchhistory` | 50-record bound newest-first, 4 KiB stderr tail, home path redacted, corrupt file moved aside, only the title stored |
 | `tst_emulatorlistmodel` | model roles, status updates, lookup by id |
 | `tst_systemlistmodel` | per-system game/emulator counts; "Other" bucket only when non-empty; unchanged systems update in place (no model reset) |
+| `tst_gamelistmodel` | the emulator roles (id, name, available, reason) follow the effective emulator: per-game override, else the system default, else the first candidate; changing the defaults refreshes the rows (`dataChanged`) |
 | `tst_gamepadnavigator` | button → action mapping, dead-zone press/release thresholds and clamping, hysteresis, auto-repeat, OS key-repeat ignored for Confirm/Back, Select+Start chord, Start hold (quick menu), per-device state, evdev code mapping and layouts (Xbox labels, joystick-class pads) |
 | `tst_inputcontroller` | action → key delivery, suspension, capture, chord and Guide reported while suspended, device list and connect/disconnect signals, test mode (raw events, no navigation, hold Back 2 s to exit) |
 | `tst_buttonmapping` | default mapping, validation, swaps, fallbacks |
-| `tst_libraryquery` | sorting, filters incl. `systemId`, the `@other` filter for games without a system, and `Missing`, search incl. edited titles and system names |
+| `tst_libraryquery` | sorting (the emulator sort uses the effective emulator incl. the system default), filters incl. `systemId`, the `@other` filter for games without a system, and `Missing`, search incl. edited titles and system names |
 | `tst_libraryscanner` (security) | extensions, bad roots, symlinks (skipped, escapes refused, loops terminate), system directories such as `proc/` not entered, multi-system extensions, duplicates, limits, cancellation |
 | `tst_librarymigration` | real v1 schema → v2 with rows, favorites and play counts preserved, backup file opens as v1, version 99 refused untouched, no second backup |
 | `tst_systemintegration` | platform detection, status from fake `/proc`, power FIFO, `amixer` fallback, update info (supported on the image, "not running" without the update FIFO, `Capability::Update` with it), single instance, Unix signals |

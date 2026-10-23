@@ -805,6 +805,44 @@ private slots:
         QVERIFY(choices.isEmpty());
     }
 
+    // The tiles name the emulator that launch() would use: a system default set in
+    // Settings › Emulators moves the game off the (broken) first candidate without a rescan.
+    void gameListFollowsTheDefaultEmulator()
+    {
+        write(configDir() + QStringLiteral("/aemu.json"),
+              "{\"id\":\"aemu\",\"name\":\"A Emu\",\"executable\":\"/nonexistent/a-emu\","
+              "\"extensions\":[\".sfc\"],\"systems\":[\"snes\"]}");
+        write(configDir() + QStringLiteral("/bemu.json"),
+              "{\"id\":\"bemu\",\"name\":\"B Emu\",\"executable\":\"" NEXORA_FAKE_EMULATOR "\","
+              "\"extensions\":[\".sfc\"],\"systems\":[\"snes\"]}");
+        QTemporaryDir snesGames;
+        write(snesGames.filePath(QStringLiteral("Mario.sfc")), "rom");
+
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(snesGames.path()));
+        waitForScan(ctx);
+        auto *games = ctx.library()->games();
+        QCOMPARE(games->rowCount(), 1);
+        const QModelIndex row = games->index(0);
+        QCOMPARE(row.data(ui::GameListModel::EmulatorIdRole).toString(), QStringLiteral("aemu"));
+        QCOMPARE(row.data(ui::GameListModel::EmulatorNameRole).toString(), QStringLiteral("A Emu"));
+        QVERIFY(!row.data(ui::GameListModel::AvailableRole).toBool());
+
+        QSignalSpy changes(games, &QAbstractItemModel::dataChanged);
+        QVERIFY(ctx.library()->setDefaultEmulator(QStringLiteral("snes"), QStringLiteral("bemu")));
+        QVERIFY(changes.size() >= 1);
+        QCOMPARE(row.data(ui::GameListModel::EmulatorIdRole).toString(), QStringLiteral("bemu"));
+        QCOMPARE(row.data(ui::GameListModel::EmulatorNameRole).toString(), QStringLiteral("B Emu"));
+        QVERIFY(row.data(ui::GameListModel::AvailableRole).toBool());
+        QCOMPARE(row.data(ui::GameListModel::UnavailableReasonRole).toString(), QString());
+        // The details screen and the launch path agree with the tile.
+        QCOMPARE(ctx.library()->gameDetails(games->gameIdAt(0)).value(QStringLiteral("emulatorId")).toString(),
+                 QStringLiteral("bemu"));
+        QVERIFY(ctx.library()->launch(games->gameIdAt(0)));
+        QCOMPARE(ctx.app()->activeEmulatorName(), QStringLiteral("Mario (B Emu)"));
+    }
+
     // Edits that fail (unknown/removed game) say so through notice(..., true) instead of
     // failing silently.
     void failedEditsEmitNotices()

@@ -152,6 +152,11 @@ private:
     // candidate; otherwise the settings default for its system if that is a candidate;
     // otherwise the first candidate.
     QString effectiveEmulatorId(const library::GameEntry &entry) const;
+    // Settings::EmulatorDefaultForSystem as system id -> emulator id.
+    QHash<QString, QString> systemDefaultEmulators() const;
+    // Hands the current per-system defaults to the list models and the query so tiles and
+    // the emulator sort resolve the same emulator as launch().
+    void applySystemDefaultEmulators();
 
     library::GameLibrary *m_library;
     shared::Settings *m_settings;
