@@ -44,7 +44,7 @@ for f in "${IMAGE}" "${OVMF_CODE}" "${OVMF_VARS}"; do
 done
 
 WORK="$(mktemp -d)"
-trap '[ -n "${QEMU_PID:-}" ] && kill "${QEMU_PID}" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
+trap 'if [ -n "${QEMU_PID:-}" ]; then kill "${QEMU_PID}" 2>/dev/null || true; fi; rm -rf "${WORK}"' EXIT INT TERM
 
 cp "${IMAGE}" "${WORK}/disk.img"
 cp "${OVMF_VARS}" "${WORK}/vars.fd"
