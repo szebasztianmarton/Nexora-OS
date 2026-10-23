@@ -25,8 +25,7 @@ FocusScope {
     property string page: "main" // main, display, info
     readonly property bool confirmOpen: confirmExit.visible
     readonly property var hints: confirmExit.visible
-        ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
-           { button: "B / Esc", action: "Cancel" }]
+        ? confirmExit.hints
         : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Adjust" },
            { button: "A / Enter", action: "Select" },
            { button: "B / Guide", action: page === "main" ? "Back to game" : "Back" }]

@@ -24,8 +24,9 @@ FocusScope {
     readonly property var hints: grid.activeFocus
         ? [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Details" },
            { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
-           { button: "L1 / R1", action: "Switch tab" }]
-        : [{ button: "A / Enter", action: "Browse games" }, { button: "L1 / R1", action: "Switch tab" }]
+           { button: "L1 / R1", action: "Switch tab" }, { button: "B / Esc", action: "Tabs" }]
+        : [{ button: "A / Enter", action: browseButton.text }, { button: "L1 / R1", action: "Switch tab" },
+           { button: "B / Esc", action: "Tabs" }]
 
     function focusDefault() {
         if (grid.count > 0)

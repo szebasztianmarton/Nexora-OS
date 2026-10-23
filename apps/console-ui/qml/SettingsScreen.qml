@@ -31,12 +31,13 @@ FocusScope {
                                         || confirmPowerOff.visible || confirmRestore.visible
     readonly property var hints: testPanel.visible ? testPanel.hints
         : overlayOpen
-        ? [{ button: "A / Enter", action: "Confirm" }, { button: "B / Esc", action: "Cancel" }]
+        ? confirmRestart.hints
         : inTextField
           ? [{ button: "Type", action: "Folder path" }, { button: "Enter", action: "Add folder" },
              { button: "B / Esc", action: "Leave field" }]
           : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Change" },
-             { button: "A / Enter", action: "Select" }, { button: "L1 / R1", action: "Switch tab" }]
+             { button: "A / Enter", action: "Select" }, { button: "L1 / R1", action: "Switch tab" },
+             { button: "B / Esc", action: "Tabs" }]
 
     // Action feedback (export/backup paths or why they failed, restore count) shown under
     // their own row only; there is no settings-level property for any of these, so it is

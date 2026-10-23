@@ -28,7 +28,7 @@ FocusScope {
     property int currentTab: 0
     readonly property string currentKey: tabs[currentTab].key
     readonly property var hints: confirmReboot.visible || confirmPowerOff.visible
-        ? [{ button: "← →", action: "Choose" }, { button: "A", action: "Confirm" }, { button: "B", action: "Cancel" }]
+        ? confirmReboot.hints
         : [{ button: "Guide / B", action: "Close" },
            { button: "A", action: "Select" },
            { button: "← → ↑ ↓", action: "Move" }]

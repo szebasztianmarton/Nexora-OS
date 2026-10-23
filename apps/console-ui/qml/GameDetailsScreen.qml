@@ -26,8 +26,7 @@ FocusScope {
     readonly property bool overlayOpen: confirmRemove.visible || editor.visible
 
     readonly property var hints: editor.visible ? editor.hints
-        : confirmRemove.visible ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
-                                   { button: "B / Esc", action: "Cancel" }]
+        : confirmRemove.visible ? confirmRemove.hints
         : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Change" },
            { button: "A / Enter", action: "Select" }, { button: "Y / F", action: "Favorite" },
            { button: "B / Esc", action: "Back" }]

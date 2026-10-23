@@ -12,8 +12,7 @@ FocusScope {
     signal quickMenuRequested()
 
     readonly property var hints: confirmStop.visible
-        ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
-           { button: "B / Esc", action: "Cancel" }]
+        ? confirmStop.hints
         : [{ button: "A / Enter", action: "Stop emulator" },
            { button: "Guide / hold Start", action: "Quick menu" },
            { button: "Select + Start (hold)", action: "Return to Nexora" }]
