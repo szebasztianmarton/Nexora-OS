@@ -42,6 +42,13 @@ Item {
         library: testLibrary
     }
     SignalSpy { id: closedSpy; target: details; signalName: "closed" }
+    // A keyboard on its own, for the layout budget (glass bars, large scale, little height).
+    Item {
+        id: oskHost
+        width: 1280
+        height: 720
+        OnScreenKeyboard { id: soloKeyboard }
+    }
 
     TestCase {
         name: "GameDetails"
@@ -56,6 +63,14 @@ Item {
             grid.currentIndex = 0
             grid.forceActiveFocus()
             tryVerify(function() { return grid.activeFocus })
+        }
+        function cleanup() {
+            if (soloKeyboard.visible)
+                soloKeyboard.cancel()
+            soloKeyboard.chromeTop = 0
+            soloKeyboard.chromeBottom = 0
+            oskHost.height = 720
+            Theme.userScale = 1.0
         }
         function focusRow(name) {
             const row = root.findByName(details, name)
@@ -212,6 +227,27 @@ Item {
             tryVerify(function() { return save.activeFocus })
             keyClick(Qt.Key_Escape)
             verify(!editor.visible)
+        }
+
+        // Glass at 150 % on 720p: the panel stays between the floating bars.
+        function test_keyboardStaysBetweenTheGlassBars() {
+            Theme.userScale = 1.5
+            soloKeyboard.chromeTop = 140
+            soloKeyboard.chromeBottom = 80
+            soloKeyboard.open("Title", "abc")
+            const panel = root.findByName(soloKeyboard, "oskPanel")
+            waitForRendering(soloKeyboard)
+            verify(panel.y >= 140, "panel top " + panel.y)
+            verify(panel.y + panel.height <= oskHost.height - 80, "panel bottom " + (panel.y + panel.height))
+        }
+
+        // With very little height the keys get shorter, but their labels never drop below fontTiny.
+        function test_keyLabelsStayReadableWithLittleHeight() {
+            oskHost.height = 150
+            soloKeyboard.open("Title", "abc")
+            const label = root.findByName(soloKeyboard, "oskKeyLabel")
+            verify(label !== null)
+            verify(label.font.pixelSize >= Theme.fontTiny, "key label " + label.font.pixelSize + " px")
         }
 
         function test_unknownGameShowsErrorState() {

@@ -1700,6 +1700,14 @@ private slots:
         QVERIFY2(oskArea.contains(sceneRect(oskPanel)), "keyboard panel is cut off");
         QVERIFY2(oskArea.contains(sceneRect(find(ui, "oskKeys"))), "keyboard keys are cut off");
         shot(ui, qPrintable(QStringLiteral("large-scale-%1-osk").arg(windowSize.height())));
+        // Glass at the same scale: the panel stays between the floating tab bar and hint bar.
+        ui.context->settings()->setTheme(QStringLiteral("glass"));
+        QTest::qWait(100);
+        QVERIFY(osk->isVisible());
+        const QRectF glassPanel = sceneRect(oskPanel);
+        QVERIFY2(glassPanel.top() >= sceneRect(find(ui, "tabBar")).bottom(), "keyboard panel under the tab bar");
+        QVERIFY2(glassPanel.bottom() <= sceneRect(find(ui, "hintBar")).top(), "keyboard panel under the hint bar");
+        shot(ui, qPrintable(QStringLiteral("large-scale-%1-osk-glass").arg(windowSize.height())));
         key(ui, Qt::Key_Escape);
         key(ui, Qt::Key_Escape);
         QTRY_VERIFY(!editor->isVisible());
