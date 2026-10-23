@@ -166,9 +166,16 @@ copy_exact() {
 			2> /dev/null || return 1
 	fi
 	if [ "${_rest}" -gt 0 ]; then
-		nexora_run_bounded "${WRITE_TIMEOUT}" dd if="$1" of="$2" bs=1 \
-			skip=$((_full * _mib)) seek=$((_full * _mib)) \
-			count="${_rest}" conv=notrunc,fsync 2> /dev/null || return 1
+		# The tail in the largest power-of-two blocks that divide it (and so
+		# the MiB offset too): byte-exact, and 512 bytes or more per block
+		# for any sector-aligned image instead of one byte per block.
+		_bs=1
+		while [ $((_rest % (_bs * 2))) -eq 0 ]; do
+			_bs=$((_bs * 2))
+		done
+		nexora_run_bounded "${WRITE_TIMEOUT}" dd if="$1" of="$2" bs="${_bs}" \
+			skip=$((_full * _mib / _bs)) seek=$((_full * _mib / _bs)) \
+			count=$((_rest / _bs)) conv=notrunc,fsync 2> /dev/null || return 1
 	fi
 	sync
 }
