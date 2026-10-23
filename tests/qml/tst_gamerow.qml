@@ -54,6 +54,17 @@ Item {
         title: "Row"
     }
 
+    ListModel { id: emptyModel }
+    GameRow {
+        id: emptyRow
+        y: 300
+        width: parent.width
+        library: testLibrary
+        model: emptyModel
+        title: "Empty"
+        emptyText: "Nothing here"
+    }
+
     GameTile {
         id: tile
         y: 400
@@ -69,6 +80,15 @@ Item {
 
         function cleanup() {
             Theme.reducedMotion = false
+            Theme.userScale = 1.0
+        }
+
+        // Every gap and box in the row follows the UI scale (no fixed pixels).
+        function test_emptyRowFollowsUiScale() {
+            const normal = emptyRow.implicitHeight
+            Theme.userScale = 1.5
+            tryVerify(function() { return emptyRow.implicitHeight >= normal * 1.4 }, 1000,
+                      "row " + emptyRow.implicitHeight + " at 150% vs " + normal + " at 100%")
         }
 
         function tileAt(index) {
