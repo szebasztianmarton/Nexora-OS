@@ -10,7 +10,8 @@ Column {
     Accessible.name: "Empty state"
 
     spacing: Theme.spacing
-    width: Math.min(parent ? parent.width - 64 : 800, 900)
+    width: Math.min(parent ? parent.width - Theme.space6 * 2 : Math.round(800 * Theme.scale),
+                    Math.round(900 * Theme.scale))
 
     Text {
         textFormat: Text.PlainText

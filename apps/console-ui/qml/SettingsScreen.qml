@@ -169,7 +169,7 @@ FocusScope {
         if (!item || !isInside(item))
             return
         const p = item.mapToItem(flick.contentItem, 0, 0)
-        const top = p.y - 48
+        const top = p.y - Math.round(48 * Theme.scale)
         const bottom = p.y + item.height + Theme.spacing * 3
         // The list scrolls under the glass bars: only the part between them counts.
         if (top < flick.contentY + screen.chromeTop)
@@ -264,7 +264,7 @@ FocusScope {
 
         Column {
             id: column
-            width: Math.min(flick.width - Theme.spacing * 4, 980)
+            width: Math.min(flick.width - Theme.spacing * 4, 980 * Theme.scale)
             x: (flick.width - width) / 2
             y: Theme.spacing * 1.5 + screen.chromeTop
             spacing: Theme.space2

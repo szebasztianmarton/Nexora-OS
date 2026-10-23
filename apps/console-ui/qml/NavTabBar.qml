@@ -76,7 +76,7 @@ FocusScope {
         property string label
         height: Math.round(24 * Theme.scale)
         width: capLabel.implicitWidth + Theme.space3
-        radius: Theme.space1 + 2
+        radius: Math.round(6 * Theme.scale)
         color: Theme.surfaceRaised
         border.color: Theme.border
         Text {
