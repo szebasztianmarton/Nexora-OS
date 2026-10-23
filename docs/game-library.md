@@ -227,7 +227,7 @@ The Options button (default Select; keyboard `O`; remappable as `options`) on a 
    - The game path is only ever passed as an argument. The emulator executable is started directly with an argument list; no shell is involved, so spaces and quotes in file names need no escaping.
    - Working directory: profile `workingDirectory`, else emulator `workingDirectory`, else the executable's directory.
    - Stop timeout before SIGKILL: the emulator's `stopTimeoutMs` (500–60000) or 5000 ms.
-4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does.
+4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does. If the write fails (logged as a warning) while a scan is running, it is retried once when the scan finishes.
 5. When the process ends, a launch-history record is written and the lists are refreshed ([emulator-integration.md](emulator-integration.md#launch-lifecycle)).
 
 Starting an emulator **without** a game (from the emulator list) drops every argument that contains `{file}`.

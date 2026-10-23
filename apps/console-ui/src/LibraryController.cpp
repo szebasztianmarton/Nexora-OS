@@ -12,6 +12,7 @@
 #include <QLocale>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace nexora::ui {
@@ -80,9 +81,25 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
     connect(m_app->manager(), &emulator::EmulatorManager::stateChanged, this, [this](emulator::ProcessState state) {
         if (m_pendingLaunch == 0)
             return;
-        if (state == emulator::ProcessState::Running)
-            m_library->recordLaunch(std::exchange(m_pendingLaunch, 0));
-        else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
+        if (state == emulator::ProcessState::Running) {
+            const qint64 id = std::exchange(m_pendingLaunch, 0);
+            if (m_library->recordLaunch(id))
+                return;
+            qCWarning(lcUi).noquote() << "Could not record the play count of game" << id << "-"
+                                      << m_library->lastError();
+            if (!m_library->isScanning())
+                return;
+            // The scan merge may have held the write lock: try once more when it is done.
+            auto retry = std::make_shared<QMetaObject::Connection>();
+            *retry = connect(m_library, &library::GameLibrary::scanningChanged, this, [this, id, retry](bool scanning) {
+                if (scanning)
+                    return;
+                disconnect(*retry);
+                if (!m_library->recordLaunch(id))
+                    qCWarning(lcUi).noquote() << "Could not record the play count of game" << id << "-"
+                                              << m_library->lastError();
+            });
+        } else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
             m_pendingLaunch = 0;
     });
     connect(m_app, &AppController::configChanged, this, [this] {

@@ -512,7 +512,15 @@ bool GameDatabase::recordLaunch(qint64 id, const QDateTime &when)
     q.prepare(QStringLiteral("UPDATE games SET play_count = play_count + 1, last_played = ? WHERE id = ?"));
     q.addBindValue(when.toSecsSinceEpoch());
     q.addBindValue(id);
-    return q.exec() && q.numRowsAffected() == 1;
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() != 1) {
+        m_lastError = QStringLiteral("no game with id %1").arg(id);
+        return false;
+    }
+    return true;
 }
 
 bool GameDatabase::setEmulatorOverride(qint64 id, const QString &emulatorId)
