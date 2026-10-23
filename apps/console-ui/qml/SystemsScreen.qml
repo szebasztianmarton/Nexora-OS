@@ -144,7 +144,7 @@ FocusScope {
                 Behavior on scale { NumberAnimation { duration: Theme.animFast } }
                 Accessible.role: Accessible.Button
                 Accessible.name: cell.modelData.name
-                Accessible.description: cell.modelData.gameCount + " games"
+                Accessible.description: cell.modelData.gameCount === 1 ? "1 game" : cell.modelData.gameCount + " games"
 
                 Rectangle {
                     id: badge
