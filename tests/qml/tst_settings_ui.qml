@@ -65,6 +65,7 @@ Item {
         // Theme is process-wide; leave the scale as found.
         function cleanup() {
             Theme.userScale = 1.0
+            Theme.glass = false
         }
 
         // Settings screen reachable sections count 7 (spec §6.8): General, Controllers,
@@ -163,12 +164,17 @@ Item {
         }
 
         // The panel outline is a plain 1 px border: the only focus ring in the dialog is the
-        // focused button's.
+        // focused button's. In glass the GlassSurface rim replaces the border.
         function test_confirmDialogPanelHasNoFocusRingBorder() {
             dialog.open()
             const panel = findByName(dialog, "confirmDialogPanel")
             compare(panel.border.width, 1)
             compare(panel.border.color, Theme.border)
+            verify(!Qt.colorEqual(panel.border.color, Theme.focusRing))
+            Theme.glass = true
+            verify(Theme.glassActive)
+            compare(panel.border.width, 0)
+            verify(!Qt.colorEqual(panel.border.color, Theme.focusRing))
         }
     }
 }
