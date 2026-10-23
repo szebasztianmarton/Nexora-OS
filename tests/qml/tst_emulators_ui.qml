@@ -106,5 +106,36 @@ Item {
             const topLeft = frame.mapToItem(flick, 0, 0)
             compare(topLeft.y, 0)
         }
+
+        function test_gameOptionsListFitsThePanel() {
+            Theme.userScale = 2.25
+            const list = openOptionsWithRows(10)
+            const panel = root.findByName(options, "gameOptionsPanel")
+            tryVerify(function() { return list.contentHeight > list.height }, 1000, "10 rows scroll inside the list")
+            verify(list.clip)
+            tryVerify(function() { return list.mapToItem(panel, 0, list.height).y <= panel.height }, 1000,
+                      "list bottom " + list.mapToItem(panel, 0, list.height).y + " > panel " + panel.height)
+            verify(panel.height <= options.height)
+        }
+
+        function test_gameOptionsRowsGrowWithTheFont() {
+            let list = openOptionsWithRows(4)
+            // Scale 1.0 keeps the original row heights.
+            compare(list.itemAtIndex(0).height, 56)
+            compare(list.itemAtIndex(1).height, 44)
+            Theme.userScale = 2.25
+            for (let i = 0; i < 2; ++i) {
+                const row = list.itemAtIndex(i)
+                const content = root.findByName(row, "gameOptionContent")
+                verify(row.height >= content.implicitHeight, row.height + " < " + content.implicitHeight)
+            }
+        }
+
+        function test_gameOptionsFocusRing() {
+            Theme.highContrast = true
+            const list = openOptionsWithRows(2)
+            tryVerify(function() { return list.activeFocus })
+            compare(list.itemAtIndex(0).border.color, Theme.focusRing)
+        }
     }
 }
