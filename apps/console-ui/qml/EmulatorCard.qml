@@ -28,8 +28,8 @@ Rectangle {
     Accessible.description: "Starts the emulator without a game"
     Accessible.onPressAction: activated()
 
-    width: 300
-    height: 360
+    width: Math.round(300 * Theme.scale)
+    height: Math.round(360 * Theme.scale)
     radius: Theme.radius
     GlassSurface {
         anchors.fill: parent
@@ -44,19 +44,19 @@ Rectangle {
     color: selected ? Theme.surfaceHover : Theme.surfaceRaised
     opacity: available ? 1.0 : 0.65
     border.width: selected ? Theme.focusWidth : 1
-    border.color: selected ? Theme.accent : Theme.border
-    scale: selected ? 1.04 : 1.0
+    border.color: selected ? Theme.focusRing : Theme.border
+    scale: selected && !Theme.reducedMotion ? 1.04 : 1.0
     Behavior on scale { NumberAnimation { duration: Theme.animFast } }
 
     Column {
         anchors.fill: parent
         anchors.margins: Theme.spacing * 1.25
-        spacing: 12
+        spacing: Theme.space3
 
         Rectangle {
             width: parent.width
-            height: Math.max(90, card.height * 0.38)
-            radius: Theme.radius - 4
+            height: Math.max(Math.round(90 * Theme.scale), card.height * 0.38)
+            radius: Theme.radius - Theme.space1
             gradient: Gradient {
                 GradientStop { position: 0.0; color: Theme.artColor(card.emulatorId, 0.30) }
                 GradientStop { position: 1.0; color: Theme.surface }
@@ -83,8 +83,8 @@ Rectangle {
 
         Rectangle {
             objectName: "statusPill"
-            height: 28
-            width: pillLabel.implicitWidth + 24
+            height: Math.round(28 * Theme.scale)
+            width: pillLabel.implicitWidth + Theme.space5
             radius: height / 2
             color: "transparent"
             border.color: Theme.statusColor(card.status)
@@ -117,6 +117,7 @@ Rectangle {
         Text {
             textFormat: Text.PlainText
             width: parent.width
+            objectName: "emulatorDetail"
             text: card.detail
             visible: text.length > 0
             color: card.status === "failed" || card.status === "unavailable" ? Theme.danger : Theme.textMuted

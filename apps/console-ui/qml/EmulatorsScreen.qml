@@ -97,12 +97,12 @@ FocusScope {
         highlightFollowsCurrentItem: true
         highlightMoveDuration: Theme.animMove
         preferredHighlightBegin: Theme.spacing * 2
-        preferredHighlightEnd: width - 300 - Theme.spacing * 2
+        preferredHighlightEnd: width - Math.round(300 * Theme.scale) - Theme.spacing * 2
         highlightRangeMode: ListView.ApplyRange
         model: screen.app.emulators
 
         delegate: EmulatorCard {
-            height: Math.min(380, list.height - 24)
+            height: Math.min(Math.round(380 * Theme.scale), list.height - Theme.space5)
             anchors.verticalCenter: parent ? parent.verticalCenter : undefined
             onActivated: screen.activate(index)
         }
@@ -209,6 +209,9 @@ FocusScope {
                 }
                 Text {
                     textFormat: Text.PlainText
+                    objectName: "pickerSubtitle"
+                    width: parent.width
+                    wrapMode: Text.Wrap
                     text: "Choose a launch profile · Y / F makes it the default for this emulator and its games"
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSmall
@@ -227,19 +230,27 @@ FocusScope {
                         required property var modelData
                         required property int index
                         width: profileList.width
-                        height: 60
+                        // 60 at scale 1.0, taller when the scaled text needs it.
+                        height: Math.max(60, choiceContent.implicitHeight + Theme.space4)
                         radius: 10
                         readonly property bool current: ListView.isCurrentItem && profileList.activeFocus
                         color: current ? Theme.surfaceHover : Theme.surfaceRaised
                         border.width: current ? Theme.focusWidth : 1
-                        border.color: current ? Theme.accent : Theme.border
+                        border.color: current ? Theme.focusRing : Theme.border
                         Column {
+                            id: choiceContent
+                            objectName: "profileChoiceContent"
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
+                            anchors.right: parent.right
                             anchors.leftMargin: Theme.spacing
+                            anchors.rightMargin: Theme.spacing
                             spacing: 2
                             Text {
                                 textFormat: Text.PlainText
+                                objectName: "profileName"
+                                width: parent.width
+                                elide: Text.ElideRight
                                 text: choice.modelData.name + (choice.modelData.isDefault ? "   ★ default" : "")
                                 color: Theme.text
                                 font.pixelSize: Theme.fontBody
@@ -247,6 +258,8 @@ FocusScope {
                             }
                             Text {
                                 textFormat: Text.PlainText
+                                width: parent.width
+                                elide: Text.ElideRight
                                 text: choice.modelData.detail
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.fontTiny

@@ -137,5 +137,61 @@ Item {
             tryVerify(function() { return list.activeFocus })
             compare(list.itemAtIndex(0).border.color, Theme.focusRing)
         }
+
+        function test_profilePickerTextStaysInsideThePanel() {
+            emulators.visible = true
+            const picker = root.findByName(emulators, "profilePicker")
+            picker.open("fake", "Fake", [{ id: "long", enabled: true,
+                                           name: "A very long launch profile name that cannot fit on one row at all" }])
+            tryVerify(function() { return picker.visible })
+            const subtitle = root.findByName(picker, "pickerSubtitle")
+            verify(subtitle.width <= subtitle.parent.width, subtitle.width + " > " + subtitle.parent.width)
+            verify(subtitle.lineCount > 1)
+            const profileList = root.findByName(picker, "profileList")
+            tryVerify(function() { return profileList.itemAtIndex(1) !== null })
+            const row = profileList.itemAtIndex(1)
+            const name = root.findByName(row, "profileName")
+            const right = name.mapToItem(row, name.width, 0).x
+            verify(right <= row.width, right + " > " + row.width)
+            compare(name.elide, Text.ElideRight)
+            compare(profileList.currentItem.border.color, Theme.focusRing)
+
+            compare(profileList.itemAtIndex(0).height, 60)
+            Theme.userScale = 2.25
+            for (let i = 0; i < 2; ++i) {
+                const choice = profileList.itemAtIndex(i)
+                const content = root.findByName(choice, "profileChoiceContent")
+                verify(choice.height >= content.implicitHeight, choice.height + " < " + content.implicitHeight)
+            }
+        }
+
+        function test_emulatorCardScales() {
+            card.visible = true
+            compare(card.width, 300)
+            compare(card.height, 360)
+            Theme.userScale = 1.5
+            compare(card.width, 450)
+            compare(card.height, 540)
+            const detail = root.findByName(card, "emulatorDetail")
+            verify(detail.visible)
+            const bottom = detail.mapToItem(card, 0, detail.height).y
+            verify(bottom <= card.height, "detail bottom " + bottom + " > card " + card.height)
+
+            emulators.visible = true
+            const list = root.findByName(emulators, "emulatorList")
+            compare(list.preferredHighlightEnd, list.width - 450 - Theme.spacing * 2)
+            const delegate = list.itemAtIndex(0)
+            compare(delegate.width, 450)
+        }
+
+        function test_emulatorCardFocusUnderReducedMotion() {
+            Theme.reducedMotion = true
+            Theme.highContrast = true
+            card.visible = true
+            card.forceActiveFocus()
+            tryVerify(function() { return card.selected })
+            compare(card.scale, 1.0)
+            compare(card.border.color, Theme.focusRing)
+        }
     }
 }
