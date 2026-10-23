@@ -225,7 +225,11 @@ Item {
             verify(editor.visible)
             compare(editor.notes, "Unsaved notes")
             tryVerify(function() { return save.activeFocus })
-            keyClick(Qt.Key_Escape)
+            keyClick(Qt.Key_Escape) // the notes are still unsaved: Back asks first
+            const dialog = root.findByName(editor, "confirmDiscardEdits")
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Right)
+            keyClick(Qt.Key_Return)
             verify(!editor.visible)
         }
 
@@ -247,6 +251,45 @@ Item {
             compare(root.findByName(editor, "metadataNotes").Accessible.role, Accessible.Button)
             keyClick(Qt.Key_Escape)
             verify(!editor.visible)
+        }
+
+        // Backspace is Back here too; with nothing changed the editor closes at once.
+        function test_backspaceClosesAnUnchangedEditor() {
+            const editor = openEditor()
+            keyClick(Qt.Key_Backspace)
+            verify(!editor.visible)
+            verify(details.visible)
+            tryVerify(function() { return root.findByName(details, "detailsEdit").activeFocus })
+        }
+
+        // Back with unsaved edits asks first: Cancel keeps the edits, Discard closes unsaved.
+        function test_backWithChangesAsksBeforeDiscarding() {
+            const editor = openEditor()
+            const id = editor.gameId
+            const original = testLibrary.gameDetails(id).title
+            editor.title = "Changed title"
+            keyClick(Qt.Key_Escape)
+            const dialog = root.findByName(editor, "confirmDiscardEdits")
+            verify(dialog !== null)
+            tryVerify(function() { return dialog.visible })
+            verify(editor.visible)
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+
+            keyClick(Qt.Key_Escape) // Cancel: the editor stays open with the edit
+            verify(!dialog.visible)
+            verify(editor.visible)
+            compare(editor.title, "Changed title")
+            tryVerify(function() { return root.findByName(editor, "metadataTitle").activeFocus })
+
+            keyClick(Qt.Key_Backspace) // Backspace asks the same way
+            tryVerify(function() { return dialog.visible })
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Right)
+            keyClick(Qt.Key_Return) // Discard
+            verify(!dialog.visible)
+            verify(!editor.visible)
+            verify(details.visible)
+            compare(testLibrary.gameDetails(id).title, original)
         }
 
         // Glass at 150 % on 720p: the panel stays between the floating bars.

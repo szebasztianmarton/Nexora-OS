@@ -243,7 +243,7 @@ Top-level tabs, in order (`Main.qml`): **Home, Games, Systems, Favorites, Recent
 
 ## States
 
-Every screen that loads data has a loading state (scan spinner, "Scanning… N files"), an empty state with the next step (add a folder, rescan, clear search, configure an emulator) and an error state (database unavailable, unknown game, emulator unavailable with reason). Disabled controls are drawn with `textFaint` and are skipped or explained in the hint bar. Failed edits (game details, system change, remove from library, default emulator) show an error notice with the reason; the metadata editor stays open with the edits after a failed save. Modal layers (dialogs, the input test panel) keep every key and close or cancel themselves when hidden from outside.
+Every screen that loads data has a loading state (scan spinner, "Scanning… N files"), an empty state with the next step (add a folder, rescan, clear search, configure an emulator) and an error state (database unavailable, unknown game, emulator unavailable with reason). Disabled controls are drawn with `textFaint` and are skipped or explained in the hint bar. Failed edits (game details, system change, remove from library, default emulator) show an error notice with the reason; the metadata editor stays open with the edits after a failed save, and Back (Escape, Backspace) with unsaved edits asks "Discard changes?" (Cancel by default) instead of closing. Modal layers (dialogs, the input test panel) keep every key and close or cancel themselves when hidden from outside.
 
 ## Icons and typography
 
