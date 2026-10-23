@@ -49,6 +49,21 @@ Item {
         updates: testUpdates
         visible: false
     }
+    Component {
+        id: unavailableCard
+        EmulatorCard {
+            index: 0
+            emulatorId: "fake"
+            name: "Fake Emulator"
+            status: "unavailable"
+            statusText: "Unavailable"
+            detail: "The executable /opt/emulators/fake/bin/fake-emulator was not found on this system, "
+                    + "install it or fix the path in the emulator configuration file"
+            available: false
+            profiles: [{ id: "a", name: "A", enabled: true }, { id: "b", name: "B", enabled: true }]
+            extensions: ".rom, .bin, .iso, .cue, .chd, .zip, .7z"
+        }
+    }
     EmulatorCard {
         id: card
         index: 0
@@ -75,6 +90,8 @@ Item {
             if (picker.visible)
                 picker.close()
             emulators.visible = false
+            emulators.chromeTop = 0
+            emulators.chromeBottom = 0
             system.visible = false
             card.visible = false
             Theme.userScale = 1.0
@@ -182,6 +199,38 @@ Item {
             compare(list.preferredHighlightEnd, list.width - 450 - Theme.spacing * 2)
             const delegate = list.itemAtIndex(0)
             compare(delegate.width, 450)
+        }
+
+        function verifyCardContentFits(card) {
+            const column = root.findByName(card, "emulatorDetail").parent
+            waitForItemPolished(column)
+            for (let i = 0; i < column.children.length; ++i) {
+                const child = column.children[i]
+                if (!child.visible)
+                    continue
+                const bottom = child.mapToItem(card, 0, child.height).y
+                verify(bottom <= card.height, "child " + i + " bottom " + bottom + " > card " + card.height)
+            }
+        }
+
+        // At 720p the docked header, tabs and hint bar leave the page about 489 px, and the list
+        // caps the cards to its height: at a 1.5 interface scale the content still fits.
+        function test_emulatorCardFitsTheCappedList() {
+            emulators.chromeTop = 150
+            emulators.chromeBottom = 81
+            Theme.userScale = 1.5
+            emulators.visible = true
+            const list = root.findByName(emulators, "emulatorList")
+            tryVerify(function() { return list.itemAtIndex(0) !== null })
+            const delegate = list.itemAtIndex(0)
+            verify(delegate.height < 540, "the list must cap the card, got " + delegate.height)
+            verifyCardContentFits(delegate)
+
+            const tight = createTemporaryObject(unavailableCard, root, { height: delegate.height })
+            const detail = root.findByName(tight, "emulatorDetail")
+            verify(detail.visible)
+            verify(detail.lineCount >= 1)
+            verifyCardContentFits(tight)
         }
 
         function test_emulatorCardFocusUnderReducedMotion() {
