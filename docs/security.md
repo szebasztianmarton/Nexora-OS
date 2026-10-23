@@ -44,14 +44,14 @@ The boundary that matters most is between the unprivileged `nexora` user (UI **a
 Someone with physical access plugs in a stick with a crafted update bundle or crafted game files.
 
 - **Crafted update bundle.** Accepted only if `manifest.json.sig` is a valid Ed25519 signature over the exact bytes of `manifest.json` by a key in the image. The manifest is parsed strictly, pins the image by size and SHA-256, must name the right product and board, and must be newer than the installed version. The root helper repeats every check itself, on a private copy of the manifest, and hashes the bytes that actually landed on the inactive slot before arming a trial boot. Nothing from a bundle is executed. See [mitigations](#signed-updates).
-- **Crafted game files.** Game files are never opened, parsed or executed by Nexora; only their names and `stat()` data are used. A file name reaches an emulator only as a single argument.
+- **Crafted game files.** Game files are never executed or parsed by Nexora. The scanner uses only their names and `stat()` data, with one exception: for `.iso` files whose candidate systems include `xbox360`, it opens the file read-only and reads at most three 20-byte blocks (the XDVDFS signature check), never past the end of the file. Nothing read is logged. A file name reaches an emulator only as a single argument.
 - **Out of scope / not mitigated:** an attacker with physical access and a keyboard can get a root shell on the current development image (empty root password on ttyS0/tty2, editable GRUB menu, no Secure Boot, no disk encryption). See [known limitations](#known-limitations).
 
 ### 2. Malicious ROM metadata and file names
 
 File names are attacker-controlled text: titles are derived from them, and they are shown in the UI, logged, and passed to emulators.
 
-- The scanner only lists directories and `stat()`s files (`apps/game-library/src/LibraryScanner.cpp`). It skips hidden entries, symlinks by default (and links that leave the library root when following is enabled), system directories, and bounds depth (16), file count (100 000) and issues (200). Tested: `tst_libraryscanner` (label `security`).
+- The scanner lists directories and `stat()`s files. The only content it reads is the Xbox 360 disc signature check: at most three 20-byte reads of `.iso` files whose candidates include `xbox360` (`apps/game-library/src/XboxDiscProbe.cpp`, called from `apps/game-library/src/LibraryScanner.cpp`), never past the end of the file and never logged. It skips hidden entries, symlinks by default (and links that leave the library root when following is enabled), system directories, and bounds depth (16), file count (100 000) and issues (200). Tested: `tst_libraryscanner` (label `security`).
 - Paths are stored canonicalised; the game path is passed to the emulator as one `QProcess` argument (`apps/emulator-manager/src/EmulatorManager.cpp`), never through a shell.
 - User-edited metadata (title ≤ 200 characters, notes ≤ 2000, no control characters except newline in notes) is validated in `GameDatabase::setMetadata()` (`apps/game-library/src/GameDatabase.cpp`).
 - The launch history stores the game **title** only, never its path (`apps/emulator-manager/src/LaunchHistory.cpp`; tested by `tst_launchhistory`).
