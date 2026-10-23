@@ -57,8 +57,9 @@ Rectangle {
          : kind === "primary" ? (activeFocus ? Theme.accent : Theme.accentSoft)
          : mouse.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
     border.width: activeFocus ? Theme.focusWidth : (glassy ? 0 : 1)
-    border.color: activeFocus ? (armed || kind === "danger" ? Theme.danger
-                                 : Theme.highContrast ? Theme.focusRing
+    // High contrast: always the yellow focus ring, also on danger buttons.
+    border.color: activeFocus ? (Theme.highContrast ? Theme.focusRing
+                                 : armed || kind === "danger" ? Theme.danger
                                  : (kind === "primary" ? Theme.text : Theme.accent))
                               : (armed ? Theme.danger : Theme.border)
     Behavior on color { ColorAnimation { duration: Theme.animFast } }

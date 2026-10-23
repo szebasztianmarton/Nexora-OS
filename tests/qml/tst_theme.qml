@@ -23,6 +23,7 @@ Item {
     Row {
         NxButton { id: primary; kind: "primary"; text: "Play" }
         NxButton { id: normal; text: "Other" }
+        NxButton { id: danger; kind: "danger"; text: "Remove" }
     }
 
     TestCase {
@@ -76,6 +77,16 @@ Item {
             compare(primary.border.color, Theme.focusRing)
             normal.forceActiveFocus()
             compare(normal.border.color, Theme.focusRing)
+        }
+
+        // A focused danger button keeps the yellow focus ring in high contrast (not a red one).
+        function test_highContrastDangerButtonUsesFocusRing() {
+            Theme.highContrast = true
+            danger.forceActiveFocus()
+            verify(danger.activeFocus)
+            compare(danger.border.color, Theme.focusRing)
+            Theme.highContrast = false
+            compare(danger.border.color, Theme.danger)
         }
 
         // The modal scrim is a Theme token: black 40 % in glass, the background in high contrast.
