@@ -70,7 +70,7 @@ FocusScope {
         objectName: "confirmDialogPanel"
         x: (parent.width - width) / 2
         y: dialog.chromeTop + (parent.height - dialog.chromeTop - dialog.chromeBottom - height) / 2
-        width: Math.min(parent.width - Theme.spacing * 4, 460)
+        width: Math.min(parent.width - Theme.spacing * 4, 460 * Theme.scale)
         height: content.implicitHeight + Theme.spacing * 3
         radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
@@ -106,16 +106,12 @@ FocusScope {
                 font.pixelSize: Theme.fontBody
                 wrapMode: Text.Wrap
             }
-            Row {
+            // Right-aligned (Confirm rightmost, Cancel to its left); when both do not fit on
+            // one line, Cancel wraps below instead of overflowing the panel.
+            Flow {
+                width: parent.width
                 spacing: Theme.spacing
-                NxButton {
-                    id: cancelButton
-                    objectName: "confirmDialogCancel"
-                    text: dialog.cancelText
-                    focus: true
-                    KeyNavigation.right: confirmButton
-                    onClicked: dialog.cancel()
-                }
+                layoutDirection: Qt.RightToLeft
                 NxButton {
                     id: confirmButton
                     objectName: "confirmDialogConfirm"
@@ -123,6 +119,14 @@ FocusScope {
                     kind: dialog.dangerous ? "danger" : "primary"
                     KeyNavigation.left: cancelButton
                     onClicked: dialog.accept()
+                }
+                NxButton {
+                    id: cancelButton
+                    objectName: "confirmDialogCancel"
+                    text: dialog.cancelText
+                    focus: true
+                    KeyNavigation.right: confirmButton
+                    onClicked: dialog.cancel()
                 }
             }
         }

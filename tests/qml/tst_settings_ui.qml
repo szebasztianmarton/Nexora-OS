@@ -62,6 +62,11 @@ Item {
                 dialog.close()
         }
 
+        // Theme is process-wide; leave the scale as found.
+        function cleanup() {
+            Theme.userScale = 1.0
+        }
+
         // Settings screen reachable sections count 7 (spec §6.8): General, Controllers,
         // Display, Audio, Library, Emulators, System.
         function test_sevenSectionsPresent() {
@@ -137,6 +142,24 @@ Item {
             compare(confirmedSpy.count, 1)
             compare(cancelledSpy.count, 0)
             verify(!dialog.visible)
+        }
+
+        // At 150 % interface scale both buttons (each at least 140 px x scale) still fit inside
+        // the panel, right-aligned within its content margins.
+        function test_confirmDialogButtonsFitThePanelAtLargeScale() {
+            Theme.userScale = 1.5
+            dialog.open()
+            waitForRendering(dialog) // positioners lay out on polish
+            const panel = findByName(dialog, "confirmDialogPanel")
+            verify(panel !== null)
+            const margin = Theme.spacing * 1.5
+            const confirmPos = dialog.confirmButton.mapToItem(panel, 0, 0)
+            const cancelPos = dialog.cancelButton.mapToItem(panel, 0, 0)
+            verify(confirmPos.x + dialog.confirmButton.width <= panel.width - margin + 0.5,
+                   "confirm right edge " + (confirmPos.x + dialog.confirmButton.width) + " panel " + panel.width)
+            verify(cancelPos.x >= margin - 0.5, "cancel x " + cancelPos.x)
+            compare(Math.round(confirmPos.x + dialog.confirmButton.width), Math.round(panel.width - margin))
+            verify(panel.width <= root.width)
         }
     }
 }
