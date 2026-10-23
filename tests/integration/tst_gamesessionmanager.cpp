@@ -78,7 +78,7 @@ struct Console
     }
 
     static void writeEmulator(const QString &root, const QString &extraArguments, bool saveStates,
-                              const QString &version)
+                              const QString &version, const QString &id = QStringLiteral("fake"))
     {
         const QString caps = saveStates
             ? QStringLiteral(",\"capabilities\":{\"pause\":true,\"saveState\":{\"adapter\":\"control-socket\","
@@ -87,10 +87,11 @@ struct Console
             : QString();
         const QString args = QStringLiteral("\"--sleep-ms\",\"30000\"")
             + (extraArguments.isEmpty() ? QString() : QStringLiteral(",") + extraArguments);
-        write(root + QStringLiteral("/emulators/fake.json"),
-              QStringLiteral("{\"id\":\"fake\",\"name\":\"Fake\",\"version\":\"%1\",\"executable\":\"%2\","
+        const QString name = id == QLatin1String("fake") ? QStringLiteral("Fake") : QStringLiteral("Fake ") + id;
+        write(root + QStringLiteral("/emulators/") + id + QStringLiteral(".json"),
+              QStringLiteral("{\"id\":\"%5\",\"name\":\"%6\",\"version\":\"%1\",\"executable\":\"%2\","
                              "\"arguments\":[%3],\"extensions\":[\".sfc\"]%4}")
-                  .arg(version, QStringLiteral(NEXORA_FAKE_EMULATOR), args, caps)
+                  .arg(version, QStringLiteral(NEXORA_FAKE_EMULATOR), args, caps, id, name)
                   .toUtf8());
     }
 
@@ -404,6 +405,46 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), Timeout);
         QVERIFY(*result);
         QVERIFY(!c.app->isBusy());
+    }
+
+    void differentEmulatorStartsANewSession()
+    {
+        QTemporaryDir dir;
+        QDir().mkpath(dir.filePath(QStringLiteral("emulators")));
+        Console::writeEmulator(dir.path(), {}, true, QStringLiteral("1.0"), QStringLiteral("other"));
+        Console c(dir.path());
+        const GameEntry game = c.game(dir.path(), 6, QStringLiteral("Twins"));
+        QVERIFY(c.startReady(game));
+        QVERIFY(c.suspend());
+        QCOMPARE(c.sessions->records().size(), 1);
+        const GameSessionManager::Record first = c.sessions->records().first();
+        const QString firstState = c.sessions->sessionDirectory(first.id) + u'/' + first.states.first().file;
+
+        // The same game on another emulator gets its own session; the first one is untouched.
+        QVERIFY(c.sessions->startGame(game, QStringLiteral("other"), {}, true, true));
+        QTRY_VERIFY_WITH_TIMEOUT(c.sessions->canSuspend(), Timeout);
+        QVERIFY(!c.app->manager()->capturedStdout().contains(QStringLiteral("loaded-state")));
+        QVERIFY(c.suspend());
+        QCOMPARE(c.sessions->records().size(), 2);
+        const GameSessionManager::Record second = c.sessions->records().first();
+        QVERIFY(second.id != first.id);
+        QCOMPARE(second.emulatorId, QStringLiteral("other"));
+        QCOMPARE(second.states.size(), 1);
+        const GameSessionManager::Record &kept = c.sessions->records().last();
+        QCOMPARE(kept.id, first.id);
+        QCOMPARE(kept.emulatorId, QStringLiteral("fake"));
+        QCOMPARE(kept.states.size(), 1);
+        QCOMPARE(kept.states.first().sha256, first.states.first().sha256);
+        QCOMPARE(read(firstState), QByteArray("fake-state 1\n"));
+
+        // Playing with the first emulator again resumes its own session, not the newest one.
+        QVERIFY(c.startReady(game));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            c.app->manager()->capturedStdout().contains(QStringLiteral("loaded-state: fake-state 1")), Timeout);
+        QVERIFY(c.suspend());
+        QCOMPARE(c.sessions->records().size(), 2);
+        QCOMPARE(c.sessions->records().first().id, first.id);
+        QCOMPARE(c.sessions->records().first().states.size(), 2);
     }
 };
 

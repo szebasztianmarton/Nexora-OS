@@ -34,7 +34,7 @@ class AppController;
 // emulator quit; "resume" starts the game again from that state. Every session with a state
 // is a directory <statesDir>/<session id>/ holding the state files and meta.json; there is
 // no other index, so a lost or damaged meta.json only affects that one session. One session
-// per game: starting a game that has a state resumes it.
+// per game and emulator: starting a game that has a state for that emulator resumes it.
 //
 // Safety rules: a failed save never stops the game; a state is only removed by an explicit
 // removeSession() (the UI asks first) or when a newer state of the same session has been
@@ -171,7 +171,7 @@ private:
     };
 
     Record *findRecord(const QString &sessionId);
-    Record *findRecordForGame(qint64 gameId);
+    Record *findRecordForGame(qint64 gameId, const QString &emulatorId);
     std::optional<shared::EmulatorConfig> emulator(const QString &emulatorId) const;
     QString quickProblem(const Record &record) const;
     bool launch(Record record, const QString &resumeFile, bool applyDefaultProfile);

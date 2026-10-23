@@ -27,7 +27,7 @@ Suspend a game and continue it later, also after a restart. Nexora asks the emul
 | Game options › **Quick Resume: on/off** | per game; when off, the game always starts fresh and cannot be suspended (`sessions.excludedGames`). |
 | "Can't resume" dialog | appears when a state cannot be resumed or did not load; **Start fresh** starts the game without it, **Not now** does nothing. The state is kept either way. |
 
-There is one session per game. Only one game runs at a time; suspending is how you switch.
+There is one session per game and emulator (the same game on another emulator gets its own session). Only one game runs at a time; suspending is how you switch.
 
 ## How it works
 
@@ -116,4 +116,4 @@ States are deleted only (a) by **Remove** on Home after a confirmation, and (b) 
 
 ## Tests
 
-`tst_gamesessionmanager` (fake emulator: suspend writes a verified state and `meta.json`, restart and resume load it, newest two states kept, save failure keeps the game running, limits refuse without deleting, excluded game and emulator without support, resume refused for a changed emulator version / changed game file / bad checksum with the state kept, start fresh, damaged `meta.json` moved aside, removal of one session only, save at shutdown, power request after a save or dropped on failure, power request closes a game without Quick Resume, power request closes an emulator started without a session), `tst_savestateadapter`, `tst_emulatormanager::shutdownTerminatesBeforeKilling`, and `tst_qmlsmoke::quickResumeFromQuickMenuAndHome` (Quick Menu › Suspend, Home row, resume, "Can't resume" dialog, remove with confirmation; both resolutions).
+`tst_gamesessionmanager` (fake emulator: suspend writes a verified state and `meta.json`, restart and resume load it, newest two states kept, save failure keeps the game running, limits refuse without deleting, excluded game and emulator without support, resume refused for a changed emulator version / changed game file / bad checksum with the state kept, start fresh, damaged `meta.json` moved aside, removal of one session only, save at shutdown, power request after a save or dropped on failure, power request closes a game without Quick Resume, power request closes an emulator started without a session, the same game on another emulator gets its own session), `tst_savestateadapter`, `tst_emulatormanager::shutdownTerminatesBeforeKilling`, and `tst_qmlsmoke::quickResumeFromQuickMenuAndHome` (Quick Menu › Suspend, Home row, resume, "Can't resume" dialog, remove with confirmation; both resolutions).
