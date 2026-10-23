@@ -165,9 +165,9 @@ FocusScope {
                     radius: 8
                     activeFocusOnTab: true
                     color: selected ? bar.barSelected : (hovered ? bar.barTileHover : bar.barTile)
-                    border.width: activeFocus ? 3 : 1
+                    border.width: activeFocus ? Theme.focusWidth : 1
                     border.color: activeFocus ? Theme.overlayFocus : (selected ? bar.barSelected : bar.barLine)
-                    scale: activeFocus ? 1.06 : 1.0
+                    scale: activeFocus && !Theme.reducedMotion ? 1.06 : 1.0
                     Behavior on scale { NumberAnimation { duration: Theme.animFast } }
                     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
@@ -526,7 +526,7 @@ FocusScope {
                         radius: 8
                         activeFocusOnTab: true
                         color: activeFocus ? bar.barTileHover : bar.barTile
-                        border.width: activeFocus ? 3 : 1
+                        border.width: activeFocus ? Theme.focusWidth : 1
                         border.color: activeFocus ? Theme.overlayFocus : bar.barLine
                         Accessible.role: Accessible.Slider
                         Accessible.name: "Volume"
@@ -783,9 +783,9 @@ FocusScope {
         activeFocusOnTab: true
         opacity: enabled ? 1.0 : 0.4
         color: armed ? Theme.overlayArmed : (artTitle.length > 0 ? Theme.artColor(artTitle, 0.3) : tone)
-        border.width: activeFocus ? 3 : 0
+        border.width: activeFocus ? Theme.focusWidth : 0
         border.color: Theme.overlayFocus
-        scale: activeFocus ? 1.06 : 1.0
+        scale: activeFocus && !Theme.reducedMotion ? 1.06 : 1.0
         Behavior on scale { NumberAnimation { duration: Theme.animFast } }
 
         Accessible.role: Accessible.Button
