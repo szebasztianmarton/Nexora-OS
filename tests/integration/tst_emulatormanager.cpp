@@ -736,6 +736,22 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(manager->capturedStdout().contains(QStringLiteral("ready")), Timeout);
         manager.reset(); // must kill the child without hanging or crashing
     }
+
+    // Destruction ends the run silently: an owner's slots may touch members that are already
+    // destroyed (members declared after the manager), so no signal may reach them.
+    void destroyWhileRunningNotifiesNothing()
+    {
+        auto manager = std::make_unique<EmulatorManager>();
+        manager->setStopTimeout(300ms);
+        QVERIFY(manager->launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager->capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        int notifications = 0;
+        connect(manager.get(), &EmulatorManager::stateChanged, [&notifications] { ++notifications; });
+        connect(manager.get(), &EmulatorManager::pausedChanged, [&notifications] { ++notifications; });
+        connect(manager.get(), &EmulatorManager::processFinished, [&notifications] { ++notifications; });
+        manager.reset();
+        QCOMPARE(notifications, 0);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestEmulatorManager)

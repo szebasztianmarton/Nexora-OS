@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QSignalBlocker>
 
 #include <cerrno>
 #include <csignal>
@@ -25,6 +26,9 @@ EmulatorManager::EmulatorManager(QObject *parent)
 
 EmulatorManager::~EmulatorManager()
 {
+    // The owner may be half destroyed already (members declared after the manager are
+    // gone), so the run ends without notifying anyone. Call shutdown() first to be notified.
+    const QSignalBlocker blocker(this);
     shutdown();
 }
 

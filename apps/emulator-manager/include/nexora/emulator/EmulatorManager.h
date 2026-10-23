@@ -106,7 +106,8 @@ public:
 
     // Application exit: SIGTERM to the process group, SIGKILL if it is still running after
     // min(stop timeout, ShutdownGraceLimit). Blocks (bounded); ends the run like stop()
-    // (Stopping, then Exited and processFinished, emitted from inside this call).
+    // (Stopping, then Exited and processFinished, emitted from inside this call). The
+    // destructor also ends an active run this way but emits nothing.
     void shutdown();
     static constexpr std::chrono::milliseconds ShutdownGraceLimit{3000};
 
