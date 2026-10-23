@@ -423,6 +423,7 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
 
     if (!db.commit()) {
         m_lastError = db.lastError().text();
+        db.rollback(); // a failed COMMIT leaves the transaction open on this connection
         return std::nullopt;
     }
     qCInfo(lcLibrary) << "Library update:" << stats.added << "added," << stats.updated << "updated," << stats.missing
