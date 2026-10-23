@@ -75,8 +75,9 @@ FocusScope {
         radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
         GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true }
-        border.width: Theme.focusWidth
-        border.color: Theme.focusRing
+        // A plain outline: the focused button carries the only focus ring.
+        border.width: 1
+        border.color: Theme.border
         // Absorb clicks inside the panel so they never fall through to the Cancel-on-outside-click area.
         MouseArea { anchors.fill: parent }
 

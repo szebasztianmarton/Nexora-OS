@@ -161,5 +161,14 @@ Item {
             compare(Math.round(confirmPos.x + dialog.confirmButton.width), Math.round(panel.width - margin))
             verify(panel.width <= root.width)
         }
+
+        // The panel outline is a plain 1 px border: the only focus ring in the dialog is the
+        // focused button's.
+        function test_confirmDialogPanelHasNoFocusRingBorder() {
+            dialog.open()
+            const panel = findByName(dialog, "confirmDialogPanel")
+            compare(panel.border.width, 1)
+            compare(panel.border.color, Theme.border)
+        }
     }
 }
