@@ -122,7 +122,7 @@ Every value is validated on load and on every change (`Settings::setValue()`).
 | Invalid value set from the UI | Rejected; the previous value stays; the error is shown (`SettingsController.lastError`). |
 | User file not parsable (invalid JSON, not an object, missing/wrong `version`, `settings` not an object, larger than 256 KiB, unreadable) | When the application starts (not with `--check-config`), the file is renamed to `settings.json.corrupt-<yyyyMMdd-HHmmss>` (kept for inspection, never deleted), all user overrides are dropped and defaults apply. Nothing is written until the next change. |
 | System defaults file not parsable | That whole file is ignored (an issue is recorded); it is never renamed or modified. |
-| Reset to defaults (`SettingsController.resetToDefaults()`) | All user overrides are dropped; the current user file is renamed to `settings.json.bak` (replacing an older `.bak`). Restore by renaming it back while Nexora is not running. |
+| Reset to defaults (`SettingsController.resetToDefaults()`) | All user overrides are dropped; the current user file is renamed to `settings.json.bak` (replacing an older `.bak`); if the file cannot be renamed, nothing is reset. Restore by renaming it back while Nexora is not running. |
 
 Issues are logged under the `nexora.config` category and listed on the settings screen (`SettingsController.issues`).
 

@@ -216,6 +216,29 @@ private slots:
         QCOMPARE(again.intValue(Settings::AudioVolume), 80);
     }
 
+    // A failed rename must leave the store as it was: no cleared overrides, no signals,
+    // and the user file still in place. A directory at <file>.bak cannot be removed or
+    // renamed over, which makes the rename fail deterministically.
+    void resetKeepsValuesWhenRenameFails()
+    {
+        QTemporaryDir dir;
+        const QString user = dir.filePath(QStringLiteral("settings.json"));
+        Settings s({{}, user});
+        s.load();
+        QVERIFY(s.setValue(Settings::AudioVolume, 5));
+        QVERIFY(s.save());
+        const QString backup = user + QStringLiteral(".bak");
+        write(backup + QStringLiteral("/blocker"), "x");
+        QVERIFY(QFileInfo(backup).isDir());
+        QSignalSpy changed(&s, &Settings::valueChanged);
+        QVERIFY(!s.resetToDefaults());
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(s.intValue(Settings::AudioVolume), 5);
+        QVERIFY(s.isOverridden(Settings::AudioVolume));
+        QVERIFY(QFile::exists(user));
+        QVERIFY(QFileInfo(backup).isDir());
+    }
+
     // Re-reading the file (e.g. after a backup restore) has to tell listeners which keys
     // actually changed, exactly like setValue() does, or they keep stale copies.
     void reloadEmitsValueChangedForChangedKeysOnly()

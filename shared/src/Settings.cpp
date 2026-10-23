@@ -396,8 +396,7 @@ bool Settings::save()
 
 bool Settings::resetToDefaults()
 {
-    const QVariantMap previous = m_user;
-    m_user.clear();
+    // File operations first: if the rename fails the in-memory overrides must survive.
     if (!m_paths.userFile.isEmpty() && QFile::exists(m_paths.userFile)) {
         const QString backup = m_paths.userFile + QStringLiteral(".bak");
         QFile::remove(backup);
@@ -406,6 +405,8 @@ bool Settings::resetToDefaults()
             return false;
         }
     }
+    const QVariantMap previous = m_user;
+    m_user.clear();
     for (auto it = previous.cbegin(); it != previous.cend(); ++it)
         emit valueChanged(it.key(), value(it.key()));
     qCInfo(lcConfig) << "Settings reset to defaults";
