@@ -89,6 +89,16 @@ Item {
             compare(danger.border.color, Theme.danger)
         }
 
+        // The documented minimum of 12 px holds at the smallest interface scale (75 %).
+        function test_smallFontsNeverGoBelowTwelvePixels() {
+            Theme.userScale = 0.75
+            verify(Theme.fontTiny >= 12, "fontTiny " + Theme.fontTiny)
+            verify(Theme.fontSmall >= 12, "fontSmall " + Theme.fontSmall)
+            Theme.userScale = 1.5
+            compare(Theme.fontTiny, 18)
+            compare(Theme.fontSmall, 21)
+        }
+
         // The modal scrim is a Theme token: black 40 % in glass, the background in high contrast.
         function test_modalScrimToken() {
             Theme.glass = true

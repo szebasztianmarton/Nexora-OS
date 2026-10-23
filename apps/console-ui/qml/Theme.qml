@@ -140,8 +140,9 @@ QtObject {
     readonly property real radiusXL: Math.round(24 * scale)
 
     // --- Typography (base px × scale) -----------------------------------------------------------
-    readonly property real fontTiny: Math.round(12 * scale)
-    readonly property real fontSmall: Math.round(14 * scale)
+    // Never below the 12 px minimum, also at the 75 % interface scale.
+    readonly property real fontTiny: Math.max(12, Math.round(12 * scale))
+    readonly property real fontSmall: Math.max(12, Math.round(14 * scale))
     readonly property real fontBody: Math.round(17 * scale)
     readonly property real fontLarge: Math.round(20 * scale)
     readonly property real fontTitle: Math.round(24 * scale)
