@@ -328,6 +328,19 @@ std::optional<QVariantMap> Settings::readLayer(const QString &file, Layer layer)
 
 bool Settings::load(LoadMode mode)
 {
+    // Listeners only ever hear valueChanged(); a reload (e.g. after a backup restore) has
+    // to tell them which effective values moved, exactly like setValue() does.
+    QVariantMap before;
+    for (const Spec &s : specs())
+        before.insert(s.key, value(s.key));
+    auto notifyChanged = [this, &before] {
+        for (auto it = before.cbegin(); it != before.cend(); ++it) {
+            const QVariant now = value(it.key());
+            if (now != it.value())
+                emit valueChanged(it.key(), now);
+        }
+    };
+
     m_issues.clear();
     m_system.clear();
     m_user.clear();
@@ -343,6 +356,7 @@ bool Settings::load(LoadMode mode)
         } else {
             ok = false;
             if (mode == LoadMode::Inspect) {
+                notifyChanged();
                 emit reloaded();
                 return ok;
             }
@@ -355,6 +369,7 @@ bool Settings::load(LoadMode mode)
     }
     qCInfo(lcConfig) << "Settings loaded:" << m_user.size() << "user override(s)," << m_system.size()
                      << "system default(s)," << m_issues.size() << "issue(s)";
+    notifyChanged();
     emit reloaded();
     return ok;
 }
