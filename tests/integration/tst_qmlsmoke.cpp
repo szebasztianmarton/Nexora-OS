@@ -1660,6 +1660,14 @@ private slots:
             QQuickItem *label = firstText(find(ui, tab));
             QVERIFY2(label && !label->property("truncated").toBool(), tab);
         }
+        // The grid's hints fit inside the hint bar (the ones that do not fit are left out).
+        auto *hintBar = find(ui, "hintBar");
+        const QList<QQuickItem *> hintItems = visibleWithPrefix(hintBar, QStringLiteral("hintItem"));
+        QVERIFY(!hintItems.isEmpty());
+        for (QQuickItem *item : hintItems)
+            QVERIFY2(sceneRect(hintBar).contains(sceneRect(item)),
+                     qPrintable(item->property("action").toString() + QDebug::toString(sceneRect(item))
+                                + QDebug::toString(sceneRect(hintBar))));
         shot(ui, qPrintable(QStringLiteral("large-scale-%1-games").arg(windowSize.height())));
 
         // Details -> Edit details -> keyboard.
