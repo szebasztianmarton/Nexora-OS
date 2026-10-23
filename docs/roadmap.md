@@ -29,6 +29,8 @@ These items turn "implemented" into "verified" and are the precondition for a fi
 | Getting content onto the image | no automounter, no file manager, no network | automount removable media read-only under `/media`; an import screen |
 | Console experience (MVP 4 brief) | steps 1–3 done: notifications, emulator capabilities and save-state adapters, Quick Resume with graceful shutdown ([console-experience.md](console-experience.md), [quick-resume.md](quick-resume.md)); collections, dashboard layout, per-game profiles, save-data manager and the rest are planned there | Quick Resume is verified only with the fake emulator |
 | Emulators | none packaged | the separate (Hungarian) plan for RetroArch with libretro cores and PPSSPP: [emulator-integracio.md](emulator-integracio.md); per-emulator save directories under `<data>/saves` |
+| Xenia, image side (sub-project B) | Buildroot 2026.08.x, Mesa anv and radv Vulkan with GLX, cage and Xwayland, UI as a Wayland client (EGLFS fallback) | required before Xenia can run on the image; design: [superpowers/specs/2026-10-23-xenia-integration-design.md](superpowers/specs/2026-10-23-xenia-integration-design.md) |
+| Xenia, package (sub-project C) | xenia-canary AppImage unpacked at build time; `xenia-launch` wrapper (AVX check, Vulkan fullscreen launch) | until it lands, Xenia health reports `ExecutableMissing` |
 | Emulator definitions on the image | live on the root slot, so hand-added ones are lost after an update | read additional definitions from the data partition (root-owned or validated) |
 | Data partition | fixed 1 GiB | grow to fill the disk on first boot |
 | Logs on the image | tmpfs | keep a bounded log on the data partition |
