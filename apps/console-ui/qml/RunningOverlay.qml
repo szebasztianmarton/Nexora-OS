@@ -8,6 +8,10 @@ FocusScope {
     id: overlay
     objectName: "runningOverlay"
     required property AppController app
+    property GameSessionManager sessions: null
+    // The game's title while a session runs; the emulator's name for a plain emulator launch.
+    readonly property string title: sessions !== null && sessions.active.title ? sessions.active.title
+                                                                            : app.activeEmulatorName
 
     signal quickMenuRequested()
 
@@ -55,7 +59,7 @@ FocusScope {
             width: Math.min(implicitWidth, overlay.width - 96)
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
-            text: overlay.app.activeEmulatorName
+            text: overlay.title
             color: Theme.text
             font.pixelSize: Theme.fontHero
             font.bold: true

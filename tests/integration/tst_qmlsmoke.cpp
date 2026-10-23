@@ -1286,9 +1286,20 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
         QTRY_VERIFY_WITH_TIMEOUT(sessions->canSuspend(), Timeout);
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        // The chrome names the game (not "Zelda (Emu qr)"), the header with a capitalized state.
+        const QString title = sessions->active().value(QStringLiteral("title")).toString();
+        QVERIFY(!title.isEmpty());
+        QCOMPARE(find(ui, "runningTitle")->property("text").toString(), title);
+        QCOMPARE(find(ui, "stateChip")->property("label").toString(), title + QStringLiteral(" · Running"));
+        ui.context->gameBar()->toggle();
+        QTRY_VERIFY(find(ui, "gameBar")->isVisible());
+        QCOMPARE(find(ui, "gameBarTitle")->property("text").toString(), title);
+        ui.context->gameBar()->toggle();
+        QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "stopButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         key(ui, Qt::Key_F1);
         auto *menu = find(ui, "quickMenu");
         QTRY_VERIFY(menu->isVisible());
+        QCOMPARE(find(ui, "quickMenuTitle")->property("text").toString(), title);
         auto *suspendRow = find(ui, "quickSuspend");
         QVERIFY(suspendRow->isVisible());
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "quickReturn")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);

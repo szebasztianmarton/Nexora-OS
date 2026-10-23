@@ -158,7 +158,10 @@ FocusScope {
                     objectName: "quickMenuTitle"
                     width: parent.width
                     elide: Text.ElideRight
-                    text: menu.app.activeEmulatorName.length > 0 ? menu.app.activeEmulatorName : "No game running"
+                    // The game's title while a session runs; the emulator's name for a plain
+                    // emulator launch.
+                    text: menu.sessionActive && menu.sessions.active.title ? menu.sessions.active.title
+                          : menu.app.activeEmulatorName.length > 0 ? menu.app.activeEmulatorName : "No game running"
                     color: Theme.overlayText
                     font.pixelSize: Theme.fontTitle
                     font.bold: true

@@ -17,6 +17,10 @@ FocusScope {
     required property LibraryController library
     required property SettingsController settings
     required property SystemController system
+    property GameSessionManager sessions: null
+    // The game's title while a session runs; the emulator's name for a plain emulator launch.
+    readonly property string title: sessions !== null && sessions.active.title ? sessions.active.title
+                                                                            : app.activeEmulatorName
 
     // Dashboard navigation from the Home and Settings panels (home, games, settings).
     signal navigate(string tab)
@@ -320,12 +324,12 @@ FocusScope {
                             height: 100
                             radius: 8
                             clip: true
-                            color: bar.app.busy ? Theme.artColor(bar.app.activeEmulatorName, 0.32) : Theme.overlayArtEmpty
+                            color: bar.app.busy ? Theme.artColor(bar.title, 0.32) : Theme.overlayArtEmpty
                             Text {
                                 textFormat: Text.PlainText
                                 visible: bar.app.busy
                                 anchors.centerIn: parent
-                                text: Theme.initials(bar.app.activeEmulatorName)
+                                text: Theme.initials(bar.title)
                                 color: Theme.overlayText
                                 font.pixelSize: Math.round(38 * Theme.scale)
                                 font.bold: true
@@ -359,7 +363,7 @@ FocusScope {
                                 objectName: "gameBarTitle"
                                 width: Math.min(implicitWidth, home.width - artwork.width - 22)
                                 elide: Text.ElideRight
-                                text: bar.app.busy ? bar.app.activeEmulatorName : "No game running"
+                                text: bar.app.busy ? bar.title : "No game running"
                                 color: Theme.overlayText
                                 font.pixelSize: Math.round(26 * Theme.scale)
                                 font.bold: true

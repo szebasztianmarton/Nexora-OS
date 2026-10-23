@@ -7,6 +7,10 @@ Rectangle {
     id: header
     required property AppController app
     required property LibraryController library
+    property GameSessionManager sessions: null
+    // The game's title while a session runs; the emulator's name for a plain emulator launch.
+    readonly property string title: sessions !== null && sessions.active.title ? sessions.active.title
+                                                                            : app.activeEmulatorName
 
     implicitHeight: Theme.headerHeight
     color: Theme.glassActive ? "transparent" : Theme.surface
@@ -134,7 +138,7 @@ Rectangle {
         Chip {
             objectName: "stateChip"
             visible: header.app.busy
-            label: header.app.activeEmulatorName + " · " + header.app.state
+            label: header.title + " · " + Theme.capitalize(header.app.state)
             tone: Theme.statusColor(header.app.state)
             pulsing: header.app.state !== "running"
         }
