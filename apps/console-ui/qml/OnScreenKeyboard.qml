@@ -117,7 +117,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        color: Theme.glassActive ? Theme.modalScrim : Theme.background
         opacity: Theme.glassActive ? 1.0 : 0.85
     }
     MouseArea { anchors.fill: parent; onClicked: osk.cancel() }

@@ -357,7 +357,7 @@ ApplicationWindow {
             Rectangle {
                 objectName: "glassModalScrim"
                 anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.40)
+                color: Theme.modalScrim
                 visible: window.glassModalOpen
             }
         }

@@ -117,6 +117,9 @@ QtObject {
     readonly property color overlayArtEmpty: highContrast ? "#000000" : glass ? Qt.rgba(0, 0, 0, 0.35) : "#0d0f14"
     // Translucent tints for warning panels and badges over artwork.
     readonly property color dangerTint: highContrast ? "#000000" : Qt.rgba(1, 0.39, 0.45, 0.10)
+    // Scrim behind glass modals (dialogs, keyboard, pickers, window-level overlays); docked
+    // themes dim with the background instead.
+    readonly property color modalScrim: highContrast ? background : Qt.rgba(0, 0, 0, 0.40)
     readonly property color badgeScrim: highContrast ? "#000000" : Qt.rgba(0, 0, 0, 0.6)
     readonly property color artInk: highContrast ? "#ffffff" : Qt.rgba(1, 1, 1, 0.85)
 

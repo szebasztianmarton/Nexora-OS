@@ -78,6 +78,14 @@ Item {
             compare(normal.border.color, Theme.focusRing)
         }
 
+        // The modal scrim is a Theme token: black 40 % in glass, the background in high contrast.
+        function test_modalScrimToken() {
+            Theme.glass = true
+            compare(Theme.modalScrim, Qt.rgba(0, 0, 0, 0.40))
+            Theme.highContrast = true
+            compare(Theme.modalScrim, Theme.background)
+        }
+
         function test_highContrastSwitchesPalette() {
             verify(Theme.background !== "#000000")
             Theme.highContrast = true
