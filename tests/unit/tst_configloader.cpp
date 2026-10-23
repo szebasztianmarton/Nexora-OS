@@ -5,6 +5,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+#include <optional>
+
 #include <unistd.h>
 
 using nexora::shared::ConfigIssue;
@@ -367,6 +370,24 @@ private slots:
         const auto same = parse(emu("'pausable':true,'capabilities':{'pause':true,'other':1}"), &errors, &warnings);
         QVERIFY(same->pausable);
         QVERIFY(warnings.last().contains(QStringLiteral("other")));
+    }
+
+    void shippedXeniaDefinitionLoads()
+    {
+        const auto catalog = nexora::shared::SystemCatalog::builtIn();
+        const auto result
+            = ConfigLoader::loadDirectory(QStringLiteral(NEXORA_SOURCE_DIR "/config/emulators"), &catalog);
+        QVERIFY(!result.hasErrors());
+        const auto it = std::find_if(result.emulators.cbegin(), result.emulators.cend(),
+                                     [](const auto &e) { return e.id == QStringLiteral("xenia"); });
+        QVERIFY(it != result.emulators.cend());
+        QCOMPARE(it->executable, QStringLiteral("/usr/lib/nexora/emulators/xenia/xenia-launch"));
+        QCOMPARE(it->arguments, QStringList{QStringLiteral("{file}")});
+        QCOMPARE(it->systems, QStringList{QStringLiteral("xbox360")});
+        QCOMPARE(it->extensions, QStringList({QStringLiteral(".iso"), QStringLiteral(".xex")}));
+        QVERIFY(!it->pausable);
+        QCOMPARE(it->stopTimeoutMs, std::optional<int>(10000));
+        QVERIFY(!it->saveState.has_value());
     }
 };
 

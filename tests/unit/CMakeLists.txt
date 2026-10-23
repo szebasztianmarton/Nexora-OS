@@ -1,4 +1,5 @@
 nexora_add_test(tst_configloader SOURCES tst_configloader.cpp LIBS nexora_shared LABELS unit)
+target_compile_definitions(tst_configloader PRIVATE NEXORA_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 nexora_add_test(tst_settings SOURCES tst_settings.cpp LIBS nexora_shared LABELS unit)
 nexora_add_test(tst_paths SOURCES tst_paths.cpp LIBS nexora_shared LABELS unit)
 nexora_add_test(tst_processstate SOURCES tst_processstate.cpp LIBS nexora_emulator_manager LABELS unit)

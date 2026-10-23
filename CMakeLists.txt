@@ -99,9 +99,11 @@ endif()
 
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/nexora)
 
-configure_file(config/emulators/example.json ${NEXORA_BUILD_CONFIG_DIR}/example.json COPYONLY)
-install(FILES config/emulators/example.json
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)
+foreach(definition example.json xenia.json)
+    configure_file(config/emulators/${definition} ${NEXORA_BUILD_CONFIG_DIR}/${definition} COPYONLY)
+    install(FILES config/emulators/${definition}
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)
+endforeach()
 
 configure_file(config/systems/systems.json ${PROJECT_BINARY_DIR}/share/nexora/systems.json COPYONLY)
 install(FILES config/systems/systems.json
