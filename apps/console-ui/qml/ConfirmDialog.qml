@@ -108,7 +108,8 @@ FocusScope {
                 wrapMode: Text.Wrap
             }
             // Right-aligned (Confirm rightmost, Cancel to its left); when both do not fit on
-            // one line, Cancel wraps below instead of overflowing the panel.
+            // one line, Cancel wraps below instead of overflowing the panel (a fallback; only then
+            // do Up/Down move between them).
             Flow {
                 width: parent.width
                 spacing: Theme.spacing
@@ -119,6 +120,7 @@ FocusScope {
                     text: dialog.confirmText
                     kind: dialog.dangerous ? "danger" : "primary"
                     KeyNavigation.left: cancelButton
+                    KeyNavigation.down: cancelButton.y > y ? cancelButton : null
                     onClicked: dialog.accept()
                 }
                 NxButton {
@@ -127,6 +129,7 @@ FocusScope {
                     text: dialog.cancelText
                     focus: true
                     KeyNavigation.right: confirmButton
+                    KeyNavigation.up: y > confirmButton.y ? confirmButton : null
                     onClicked: dialog.cancel()
                 }
             }

@@ -66,6 +66,7 @@ Item {
         function cleanup() {
             Theme.userScale = 1.0
             Theme.glass = false
+            dialog.confirmText = "Confirm"
         }
 
         // Settings screen reachable sections count 7 (spec §6.8): General, Controllers,
@@ -175,6 +176,25 @@ Item {
             verify(Theme.glassActive)
             compare(panel.border.width, 0)
             verify(!Qt.colorEqual(panel.border.color, Theme.focusRing))
+        }
+
+        // When the buttons wrap onto two lines (Cancel below Confirm), Up/Down move between
+        // them; side by side, Up/Down stay where they are.
+        function test_confirmDialogWrappedButtonsNavigateVertically() {
+            dialog.open()
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Up)
+            verify(dialog.cancelButton.activeFocus)
+            dialog.close()
+            dialog.confirmText = "Delete every save state and screenshot of this game"
+            dialog.open()
+            waitForRendering(dialog) // positioners lay out on polish
+            tryVerify(function() { return dialog.cancelButton.y > dialog.confirmButton.y })
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Up) // Cancel -> Confirm
+            tryVerify(function() { return dialog.confirmButton.activeFocus })
+            keyClick(Qt.Key_Down) // Confirm -> Cancel
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
         }
     }
 }
