@@ -610,6 +610,12 @@ void GameSessionManager::onSaveFinished(bool ok, const QString &file, const QStr
     QString hashError;
     SavedState state;
     state.file = QFileInfo(file).fileName();
+    // A verified state is never re-recorded: the emulator must have written a new file.
+    if (std::any_of(m_active->record.states.cbegin(), m_active->record.states.cend(),
+                    [&](const SavedState &s) { return s.file == state.file; })) {
+        failed(tr("the emulator reported an already recorded state file (%1)").arg(state.file));
+        return;
+    }
     state.bytes = QFileInfo(file).size();
     state.sha256 = sha256Of(file, &hashError);
     state.savedAt = QDateTime::currentDateTimeUtc();

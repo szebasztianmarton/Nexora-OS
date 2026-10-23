@@ -77,7 +77,8 @@ protected:
     bool begin();
     void endSave(bool ok, const QString &file, const QString &error);
     void endQuit(bool ok, const QString &error);
-    // Checks that |file| is a non-empty regular file directly or indirectly inside |directory|.
+    // Checks that |file| is a non-empty regular file directly inside |directory| (no
+    // subdirectory) and not the session's meta.json.
     static bool checkStateFile(const QString &file, const QString &directory, QString *error);
 
     QTimer m_timeout;

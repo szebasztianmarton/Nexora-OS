@@ -6,6 +6,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLocalSocket>
 #include <QNetworkDatagram>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -201,6 +202,41 @@ private slots:
         QVERIFY(manager.isActive()); // the caller falls back to SIGTERM
         manager.stop();
         QTRY_VERIFY(!manager.isActive());
+    }
+
+    void reportedStateFileMustBeDirectlyInTheDirectory_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("subdirectory") << QStringLiteral("sub/nested.state") << QStringLiteral("directly");
+        QTest::newRow("meta.json") << QStringLiteral("meta.json") << QStringLiteral("meta.json");
+    }
+
+    // A stand-in on the control socket answers SAVE with a file that is inside the session
+    // directory but not acceptable as a state.
+    void reportedStateFileMustBeDirectlyInTheDirectory()
+    {
+        QFETCH(QString, name);
+        QFETCH(QString, expected);
+        const QString states = m_dir.filePath(QStringLiteral("states-") + QString::fromLatin1(QTest::currentDataTag()));
+        QVERIFY(QDir().mkpath(states + QStringLiteral("/sub")));
+        ControlSocketAdapter adapter(controlSocket());
+        QString error;
+        QVERIFY(adapter.prepareLaunch({m_dir.path(), {}, m_game}, &error));
+        QLocalSocket emulator;
+        emulator.connectToServer(adapter.socketPath());
+        QVERIFY(emulator.waitForConnected(5000));
+        QTRY_VERIFY(adapter.isReady());
+        QSignalSpy saved(&adapter, &SaveStateAdapter::saveFinished);
+        adapter.save(states);
+        QTRY_VERIFY(emulator.bytesAvailable() > 0);
+        QVERIFY(emulator.readAll().startsWith("SAVE "));
+        const QString file = states + u'/' + name;
+        writeFile(file, "not a state");
+        emulator.write("OK " + file.toUtf8() + "\n");
+        QVERIFY(saved.wait(5000));
+        QVERIFY(!saved.first().at(0).toBool());
+        QVERIFY2(saved.first().at(2).toString().contains(expected), qPrintable(saved.first().at(2).toString()));
     }
 
     void controlSocketClosedDuringSaveFails()
