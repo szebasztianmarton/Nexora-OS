@@ -108,8 +108,8 @@ and the `install()` rule in `CMakeLists.txt`):
   "id": "xenia",
   "name": "Xenia (Xbox 360)",
   "version": "1.0",
-  "executable": "/usr/lib/nexora/emulators/xenia/xenia_canary",
-  "arguments": ["--fullscreen=true", "{file}"],
+  "executable": "/usr/lib/nexora/emulators/xenia/xenia-launch",
+  "arguments": ["{file}"],
   "extensions": [".iso", ".xex"],
   "systems": ["xbox360"],
   "pausable": false,
@@ -118,7 +118,11 @@ and the `install()` rule in `CMakeLists.txt`):
 }
 ```
 
-All keys are in `ConfigLoader`'s allowed set. There is no `capabilities` entry, so Quick
+`xenia-launch` is a wrapper delivered by sub-project C. It checks for AVX (xenia-canary is
+built with `-mavx`) and runs
+`xenia_canary --fullscreen=true --gpu=vulkan --discord=false --storage_root=<data>/emulators/xenia <file>`,
+so data-partition paths and Xenia flags stay out of the static definition. All keys are in
+`ConfigLoader`'s allowed set. There is no `capabilities` entry, so Quick
 Resume is not offered.
 
 ### 5. Tests (test-first)
