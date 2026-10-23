@@ -328,6 +328,24 @@ private:
         return actions;
     }
 
+    // "<button> <action>" for every hint the bar lists.
+    static QStringList hintPairs(Ui &ui)
+    {
+        QStringList pairs;
+        for (const QVariant &hint : find(ui, "hintBar")->property("hints").toList()) {
+            const QVariantMap map = hint.toMap();
+            pairs.append(map.value(QStringLiteral("button")).toString() + u' '
+                         + map.value(QStringLiteral("action")).toString());
+        }
+        return pairs;
+    }
+
+    // What every ConfirmDialog lists: focus starts on Cancel, so Accept selects, not confirms.
+    static QStringList confirmHints()
+    {
+        return {QStringLiteral("← → Choose"), QStringLiteral("A / Enter Select"), QStringLiteral("B / Esc Cancel")};
+    }
+
 #define CHECK_NO_WARNINGS() QVERIFY2(ui.warnings.isEmpty(), qPrintable(describe(ui.warnings)))
 
 private slots:
@@ -1462,7 +1480,9 @@ private slots:
             QVERIFY(panel->isVisible());
         }
         QVERIFY2(!hintActions(ui).contains(QStringLiteral("Confirm")), qPrintable(hintActions(ui).join(u',')));
-        QVERIFY2(hintActions(ui).contains(QStringLiteral("Close")), qPrintable(hintActions(ui).join(u',')));
+        // Back is reported as raw input in test mode; only Esc closes, holding Back exits.
+        QVERIFY2(hintPairs(ui).contains(QStringLiteral("Esc Close")), qPrintable(hintPairs(ui).join(u',')));
+        QVERIFY2(!hintPairs(ui).join(u',').contains(QStringLiteral("B / Esc")), qPrintable(hintPairs(ui).join(u',')));
         auto *help = find(ui, "inputTestHelp");
         QVERIFY(help);
         if (ui.app->input())
