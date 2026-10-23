@@ -9,6 +9,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <utility>
 
 #include <sys/stat.h>
 

@@ -272,7 +272,7 @@ Xenia (xenia-canary) is the Xbox 360 emulator. Its definition ships as `config/e
 
   Until C installs the binary, health reports `ExecutableMissing` with the expected path as the detail, and a launch is refused with "Emulator executable not found".
 - **Not tested:** no Xbox 360 title has been run through Nexora, on hardware or otherwise. xenia-canary on Linux is experimental upstream.
-- **Disc types:** original Xbox (XGD1) discs carry the same XDVDFS signature and are classified as `xbox360`, so Xenia is offered for them even though it does not run them. GOD/STFS containers are not detected.
+- **Disc types:** rebuilt (xiso) original Xbox images also carry the XDVDFS signature and are reported as `xbox360`, so Xenia is offered for them even though it does not run original Xbox games. Full original Xbox disc dumps (XGD1) are not probed at their partition offset (`0x18300000`). GOD/STFS containers are not detected.
 
 ## Limitations
 

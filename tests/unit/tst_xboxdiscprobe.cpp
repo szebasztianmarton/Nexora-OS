@@ -1,9 +1,12 @@
 // XboxDiscProbe against synthetic sparse disc images.
 #include "nexora/library/XboxDiscProbe.h"
 
+#include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <sys/stat.h>
 
 using nexora::library::isXboxDisc;
 
@@ -73,6 +76,22 @@ private slots:
         QTemporaryDir dir;
         QVERIFY(!isXboxDisc(image(dir, QStringLiteral("empty.iso"), 0, QByteArray(), 0)));
         QVERIFY(!isXboxDisc(dir.filePath(QStringLiteral("missing.iso"))));
+    }
+
+    // A FIFO swapped in for the image must be rejected without blocking on the open.
+    void rejectsFifo()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("pipe.iso"));
+        QVERIFY(::mkfifo(QFile::encodeName(path).constData(), 0600) == 0);
+        QVERIFY(!isXboxDisc(path));
+    }
+
+    void rejectsDirectory()
+    {
+        QTemporaryDir dir;
+        QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("game.iso")));
+        QVERIFY(!isXboxDisc(dir.filePath(QStringLiteral("game.iso"))));
     }
 };
 

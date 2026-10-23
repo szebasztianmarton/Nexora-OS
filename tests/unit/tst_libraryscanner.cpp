@@ -104,6 +104,7 @@ private slots:
         ScanOptions o = isoOptions(dir.path());
         o.extensionSystems[QStringLiteral(".iso")] = {QStringLiteral("ps2"), QStringLiteral("psp")};
         const auto r = LibraryScanner::scan(o);
+        QCOMPARE(r.files.size(), 1);
         QCOMPARE(r.files.first().systemIds, QStringList({QStringLiteral("ps2"), QStringLiteral("psp")}));
         QCOMPARE(r.files.first().emulatorIds.size(), 3);
     }

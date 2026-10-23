@@ -525,6 +525,21 @@ private slots:
         QCOMPARE(library.entries().first().emulatorId(), QStringLiteral("multi"));
         QVERIFY(!library.setFavorite(999999, true)); // unknown id
     }
+
+    void emulatorSystemsChangeRequiresRescan()
+    {
+        touch(games() + QStringLiteral("/Alpha.sfc"));
+        GameLibrary library;
+        QVERIFY(library.open(db()));
+        library.setScanOptions(options());
+        scan(library);
+        QVERIFY(!library.needsRescan());
+        // Only the emulator's declared systems change: candidates may change, so a rescan is due.
+        auto o = options();
+        o.emulatorSystems[QStringLiteral("snes")] = {QStringLiteral("snes")};
+        library.setScanOptions(o);
+        QVERIFY(library.needsRescan());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestGameLibrary)
