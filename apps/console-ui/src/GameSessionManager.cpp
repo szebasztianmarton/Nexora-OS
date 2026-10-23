@@ -664,8 +664,12 @@ void GameSessionManager::onCloseTimeout()
 
 void GameSessionManager::onProcessFinished(const emulator::ProcessOutcome &outcome)
 {
-    if (!m_active)
+    if (!m_active) {
+        // An emulator started without a session (Emulators screen) ended; a pending power
+        // request waits for exactly that.
+        finishPower(true);
         return;
+    }
     m_closeTimer.stop();
     Active finished = std::move(*m_active);
     m_active.reset();

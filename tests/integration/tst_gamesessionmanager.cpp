@@ -389,6 +389,22 @@ private slots:
         QVERIFY(*result);
         QVERIFY(!c.app->isBusy());
     }
+
+    void powerRequestClosesAnEmulatorStartedWithoutASession()
+    {
+        QTemporaryDir dir;
+        Console c(dir.path());
+        // Emulators screen: AppController starts the emulator directly, no game session exists.
+        const GameEntry game = c.game(dir.path(), 1, QStringLiteral("Direct"));
+        QVERIFY(c.app->launchGame(QStringLiteral("fake"), game.path, game.title));
+        QTRY_VERIFY_WITH_TIMEOUT(c.app->isBusy(), Timeout);
+        QVERIFY(!c.sessions->hasActiveGame());
+        std::optional<bool> result;
+        c.sessions->closeForPower([&](bool ok) { result = ok; });
+        QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), Timeout);
+        QVERIFY(*result);
+        QVERIFY(!c.app->isBusy());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestGameSessionManager)
