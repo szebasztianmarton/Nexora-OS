@@ -140,7 +140,7 @@ FocusScope {
                 color: cell.selected ? Theme.surfaceHover : Theme.surfaceRaised
                 border.width: cell.selected ? Theme.focusWidth : 1
                 border.color: cell.selected ? Theme.focusRing : Theme.border
-                scale: cell.selected ? 1.03 : 1.0
+                scale: cell.selected && !Theme.reducedMotion ? 1.03 : 1.0
                 Behavior on scale { NumberAnimation { duration: Theme.animFast } }
                 Accessible.role: Accessible.Button
                 Accessible.name: cell.modelData.name

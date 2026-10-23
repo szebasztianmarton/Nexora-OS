@@ -2,7 +2,8 @@ import QtQuick
 import QtTest
 import Nexora.Console
 
-// GameRow (the Home rows) passes every role GameTile shows.
+// GameRow (the Home rows) passes every role GameTile shows, and GameTile does not lift
+// itself under reduced motion.
 Item {
     id: root
     width: 1280
@@ -53,9 +54,22 @@ Item {
         title: "Row"
     }
 
+    GameTile {
+        id: tile
+        y: 400
+        width: Theme.cardWidth
+        height: Theme.cardHeight
+        title: "Tile"
+        selected: true
+    }
+
     TestCase {
         name: "GameRow"
         when: windowShown
+
+        function cleanup() {
+            Theme.reducedMotion = false
+        }
 
         function tileAt(index) {
             const list = root.findByName(gameRow, "testRowList")
@@ -76,6 +90,16 @@ Item {
             compare(t.systemShortName, "SNES")
             verify(!root.findByName(t, "missingBadge").visible)
             verify(root.findByName(t, "systemBadge").visible)
+        }
+
+        function test_selectedTileDoesNotScaleUnderReducedMotion() {
+            Theme.reducedMotion = true
+            compare(tile.scale, 1)
+        }
+
+        function test_selectedTileLiftsWithMotion() {
+            Theme.reducedMotion = false
+            tryCompare(tile, "scale", 1.05, 1000)
         }
     }
 }

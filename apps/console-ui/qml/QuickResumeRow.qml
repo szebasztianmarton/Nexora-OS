@@ -84,7 +84,7 @@ FocusScope {
             color: selected ? Theme.surfaceHover : Theme.surfaceRaised
             border.width: selected ? Theme.focusWidth : 1
             border.color: selected ? Theme.focusRing : Theme.border
-            scale: selected ? 1.04 : 1.0
+            scale: selected && !Theme.reducedMotion ? 1.04 : 1.0
             z: selected ? 2 : 1
             Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutQuad } }
 

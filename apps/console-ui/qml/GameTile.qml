@@ -29,7 +29,7 @@ Item {
     readonly property real infoHeight: Math.round(70 * Theme.scale)
 
     z: selected ? 2 : 1
-    scale: selected ? 1.05 : 1.0
+    scale: selected && !Theme.reducedMotion ? 1.05 : 1.0
     Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutQuad } }
 
     Rectangle {
