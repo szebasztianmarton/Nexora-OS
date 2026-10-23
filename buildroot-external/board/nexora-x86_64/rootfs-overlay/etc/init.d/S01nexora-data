@@ -8,8 +8,8 @@
 #   nexora-esp   -> /boot/efi  vfat, root only (GRUB, grubenv)
 #   nexora-data  -> /home      ext4, user data; "e2fsck -p" first
 #
-# Never blocks the boot for more than DATA_TIMEOUT seconds: if the data
-# partition does not appear in time it is skipped and /home stays on the
+# Never blocks the boot for long: if the data partition does not appear
+# within DATA_TIMEOUT seconds it is skipped and /home stays on the
 # root filesystem (NOT persistent across updates); if e2fsck takes too
 # long or reports uncorrected errors, the partition is mounted read-only
 # so the data is reachable but not changed further (repair it from a
@@ -22,6 +22,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
 DAEMON="nexora-data"
 DATA_TIMEOUT=10
+FSCK_TIMEOUT=10
 DATA_MOUNT=/home
 APP_USER=nexora
 FSCK_LOG=/run/nexora-data-fsck.log
@@ -65,7 +66,9 @@ mount_data() {
 		sleep 1
 	done
 
-	# e2fsck -p in the background so that it can be bounded in time.
+	# e2fsck -p in the background so that it can be bounded in time; its budget
+	# starts when the device appears, so a late device does not cut it short.
+	deadline=$(($(uptime_seconds) + FSCK_TIMEOUT))
 	e2fsck -p "${dev}" > "${FSCK_LOG}" 2>&1 &
 	fsck_pid=$!
 	timed_out=0
@@ -83,7 +86,7 @@ mount_data() {
 	options=rw,noatime
 	if [ "${timed_out}" = "1" ]; then
 		options=ro,noatime
-		note="e2fsck did not finish within ${DATA_TIMEOUT}s; read-only"
+		note="e2fsck did not finish within ${FSCK_TIMEOUT}s; read-only"
 	elif [ "${fsck_rc}" = "127" ]; then
 		note="e2fsck not available; not checked"
 	elif [ "${fsck_rc}" -ge 4 ]; then
