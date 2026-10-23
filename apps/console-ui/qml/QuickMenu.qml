@@ -24,12 +24,16 @@ FocusScope {
 
     property string page: "main" // main, display, info
     readonly property bool confirmOpen: confirmExit.visible
-    readonly property var hints: confirmExit.visible
+    readonly property var menuHints: confirmExit.visible
         ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
            { button: "B / Esc", action: "Cancel" }]
         : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Adjust" },
            { button: "A / Enter", action: "Select" },
            { button: "B / Guide", action: page === "main" ? "Back to game" : "Back" }]
+    // The menu lies above the dashboard's hint bar (its scrim would dim it, its panel cover part
+    // of it), so it draws its own bar, like the game bar; the dashboard's bar then gets nothing,
+    // or every key would be listed twice.
+    readonly property var hints: hintBar.visible ? [] : menuHints
 
     visible: gameBar.quickMenuOpen
     z: 30
@@ -96,7 +100,7 @@ FocusScope {
         objectName: "quickMenuPanel"
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
+        anchors.bottom: hintBar.visible ? hintBar.top : parent.bottom
         width: Math.min(parent.width * 0.42, 560 * Theme.scale)
         color: Theme.overlaySurface
         border.color: Theme.overlayLine
@@ -367,6 +371,17 @@ FocusScope {
                 }
             }
         }
+    }
+
+    HintBar {
+        id: hintBar
+        objectName: "quickMenuHints"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: menu.settings.showHints
+        color: Theme.overlayFooter // covers the dashboard's own hint bar underneath
+        hints: menu.menuHints
     }
 
     ConfirmDialog {
