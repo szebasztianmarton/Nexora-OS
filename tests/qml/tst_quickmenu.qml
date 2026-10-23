@@ -98,6 +98,7 @@ Item {
             running.visible = false
             header.visible = true
             Theme.userScale = 1.0
+            root.height = 720
             Theme.highContrast = false
             Theme.reducedMotion = false
             Theme.sessionActive = false
@@ -244,9 +245,10 @@ Item {
         }
 
         // System info's Back row sits outside the page's NavColumn: it is scrolled into view
-        // too (150 % at 720p: the page is taller than the panel).
+        // too (150 % on a short screen: the page is taller than the panel).
         function test_infoBackScrolledIntoViewAtLargeScale() {
             Theme.userScale = 1.5
+            root.height = 480
             startGame()
             verify(testGameBar.openQuickMenu())
             tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })

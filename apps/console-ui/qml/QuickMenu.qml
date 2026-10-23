@@ -110,12 +110,15 @@ FocusScope {
 
         Flickable {
             id: flick
+            objectName: "quickMenuFlick"
             anchors.fill: parent
             anchors.margins: Theme.space5
             contentWidth: width
             contentHeight: body.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            // The info rows grow once the hardware probe answers: keep its Back row in view.
+            onContentHeightChanged: if (infoBack.activeFocus) ensureVisible(infoBack)
 
             function ensureVisible(item) {
                 if (!item)
@@ -367,6 +370,14 @@ FocusScope {
                         label: "Back"
                         actionText: "‹ Quick menu"
                         onAccepted: menu.back()
+                        // Not in a NavColumn: scrolled into view here (a page change resets
+                        // contentY to 0; at a large scale the row may lie below the panel).
+                        onActiveFocusChanged: {
+                            if (activeFocus) {
+                                body.forceLayout()
+                                flick.ensureVisible(infoBack)
+                            }
+                        }
                     }
                 }
             }
