@@ -13,3 +13,9 @@ compile_commands.json
 
 # Release artifacts (scripts/release/make-release.sh)
 /dist/
+
+# Local game files used for manual testing (never committed)
+/.games/
+
+# Claude Code agent worktrees
+/.claude/worktrees/
