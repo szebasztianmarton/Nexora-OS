@@ -860,6 +860,33 @@ private slots:
             QVERIFY(!args.at(0).toString().isEmpty());
         }
     }
+
+    void directoryChangesThatCannotBeSavedAreNotKept()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        const QString extra = m_dir.filePath(QStringLiteral("more-games"));
+        QVERIFY(QDir().mkpath(extra));
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        // A directory where the settings file belongs: every save now fails.
+        QFile::remove(settingsFile());
+        QVERIFY(QDir().mkpath(settingsFile()));
+        QSignalSpy notices(ctx.library(), &ui::LibraryController::notice);
+
+        QVERIFY(!ctx.library()->addDirectory(extra));
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(notices.at(0).at(1).toBool()); // isError
+        QVERIFY(!notices.at(0).at(0).toString().startsWith(QStringLiteral("Added")));
+        QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+
+        QVERIFY(!ctx.library()->removeDirectory(gamesDir()));
+        QCOMPARE(notices.size(), 2);
+        QVERIFY(notices.at(1).at(1).toBool());
+        QVERIFY(!notices.at(1).at(0).toString().startsWith(QStringLiteral("Removed")));
+        QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+        waitForScan(ctx);
+    }
 };
 
 QTEST_MAIN(TestUiContext)

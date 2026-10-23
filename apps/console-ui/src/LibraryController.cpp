@@ -314,7 +314,8 @@ bool LibraryController::addDirectory(const QString &path)
         emit notice(QStringLiteral("\"%1\" is not an existing absolute directory").arg(path), true);
         return false;
     }
-    QStringList dirs = directories();
+    const QStringList previous = directories();
+    QStringList dirs = previous;
     if (dirs.contains(clean)) {
         emit notice(QStringLiteral("%1 is already in the library").arg(clean), false);
         return false;
@@ -325,20 +326,37 @@ bool LibraryController::addDirectory(const QString &path)
         emit notice(error, true);
         return false;
     }
-    m_settings->save();
+    if (!saveDirectories(previous))
+        return false;
     emit notice(QStringLiteral("Added %1").arg(clean), false);
     return true;
 }
 
 bool LibraryController::removeDirectory(const QString &path)
 {
-    QStringList dirs = directories();
+    const QStringList previous = directories();
+    QStringList dirs = previous;
     if (!dirs.removeOne(path))
         return false;
-    m_settings->setValue(Settings::LibraryDirectories, dirs);
-    m_settings->save();
+    QString error;
+    if (!m_settings->setValue(Settings::LibraryDirectories, dirs, &error)) {
+        emit notice(error, true);
+        return false;
+    }
+    if (!saveDirectories(previous))
+        return false;
     emit notice(QStringLiteral("Removed %1").arg(path), false);
     return true;
+}
+
+bool LibraryController::saveDirectories(const QStringList &previous)
+{
+    if (m_settings->save())
+        return true;
+    // Not on disk means not kept: the running library must not scan what a restart forgets.
+    m_settings->setValue(Settings::LibraryDirectories, previous);
+    emit notice(QStringLiteral("Could not save %1").arg(m_settings->paths().userFile), true);
+    return false;
 }
 
 int LibraryController::purgeMissing()
