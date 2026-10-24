@@ -245,7 +245,8 @@ Item {
         }
 
         // System info's Back row sits outside the page's NavColumn: it is scrolled into view
-        // too (150 % on a short screen: the page is taller than the panel).
+        // too (150 % on a short screen: the page is taller than the panel). The root is 480 px
+        // high, not 720: at 720 px the whole page still fits and nothing needs scrolling.
         function test_infoBackScrolledIntoViewAtLargeScale() {
             Theme.userScale = 1.5
             root.height = 480
