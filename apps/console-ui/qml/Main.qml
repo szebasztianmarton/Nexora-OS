@@ -140,7 +140,23 @@ ApplicationWindow {
     function openGameOptions(gameId) {
         gameOptions.open(gameId, window.activeFocusItem)
     }
+    // True while |item| is inside an open ConfirmDialog (it keeps focus until answered).
+    function inOpenDialog(item) {
+        for (let p = item; p; p = p.parent) {
+            if (p.isOpen === true)
+                return true
+        }
+        return false
+    }
     function restoreFocus() {
+        // A dialog opened before this deferred call ran (e.g. "Can't resume" right after a
+        // game ended) keeps its focus.
+        if (inOpenDialog(window.activeFocusItem))
+            return
+        if (resumeFailedDialog.visible) {
+            resumeFailedDialog.cancelButton.forceActiveFocus()
+            return
+        }
         if (window.gameBar.quickMenuOpen) {
             quickMenu.focusDefault()
             return
