@@ -276,6 +276,10 @@ Item {
             running.forceActiveFocus()
             tryVerify(function() { return stop.activeFocus })
             compare(stop.scale, 1.0)
+            // High contrast: the yellow focus ring, not the danger red.
+            Theme.highContrast = true
+            compare(stop.border.color, Theme.focusRing)
+            compare(stop.border.width, Theme.focusWidth)
         }
 
         // Header chips grow with the scale (32 px at 100 %) so their text never overflows; the

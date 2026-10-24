@@ -84,6 +84,8 @@ FocusScope {
             text: "Stop emulator"
             // Dimmed, not disabled, while stopping: a disabled button would drop focus.
             opacity: overlay.app.state === "stopping" ? 0.5 : 1.0
+            // High contrast keeps its yellow focus ring; NxButton would draw the danger red.
+            border.color: activeFocus ? (Theme.highContrast ? Theme.focusRing : Theme.danger) : Theme.border
             onClicked: overlay.requestStop()
         }
         Text {
