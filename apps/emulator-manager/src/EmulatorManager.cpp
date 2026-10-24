@@ -556,6 +556,7 @@ void EmulatorManager::finish(ProcessOutcome outcome)
     if (!outcome.endedAt.isValid())
         outcome.endedAt = QDateTime::currentDateTimeUtc();
     m_pid = 0;
+    outcome.runMs = m_runClock.isValid() ? m_runClock.elapsed() : -1;
     outcome.pausedMs = m_pausedTotalMs + (m_pauseClock.isValid() ? m_pauseClock.elapsed() : 0);
     m_pauseClock.invalidate();
     const bool wasPaused = std::exchange(m_paused, false);

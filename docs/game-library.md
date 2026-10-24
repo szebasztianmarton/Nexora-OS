@@ -256,12 +256,12 @@ Your own groups of games (schema v3, `collections` / `collection_games`). A coll
 | Home | any collection can be shown as a row (Settings › Home); games appear in the order they were added |
 | Settings › Library › Collections | rename (on-screen keyboard), delete (asks again; "Its games stay in the library"), New collection |
 
-Rules (`GameDatabase`): names 1–60 characters without control characters, unique ignoring case, surrounding spaces trimmed; at most 100 collections and 5000 games per collection. Errors (duplicate name, limit) are shown as notifications. Deleting a collection also removes it from the Home layout and clears a Games filter on it; **Remove missing games** drops the purged games' memberships. Counts include only games that are present and not removed. Tested: `tst_gamelibrary::collectionsGroupGamesWithoutOwningThem`, `tst_uicontext::collectionsPinningAndHomeLayout`, `tst_qmlsmoke::collectionsPinningAndHomeLayout`.
+Rules (`GameDatabase`): names 1–60 characters without control characters, unique ignoring case (Unicode case folding, so "Árkád" and "árkád" clash), stored NFC-normalised with surrounding spaces trimmed; at most 100 collections and 5000 games per collection. Errors (duplicate name, limit) are shown as notifications. Deleting a collection also removes it from the Home layout and clears a Games filter on it; **Remove missing games** drops the purged games' memberships. Counts include only games that are present and not removed. Tested: `tst_gamelibrary::collectionsGroupGamesWithoutOwningThem`, `tst_uicontext::collectionsPinningAndHomeLayout`, `tst_qmlsmoke::collectionsPinningAndHomeLayout`.
 
 ## Pinned games and play time
 
 - **Pin to Home** (Game options) adds the game to the **Pinned** row on Home, in the order pinned (at most 24); Unpin removes it. Pinning never changes the game.
-- **Play time** is the emulator's run time without the time Nexora paused it (Quick Menu › Pause, SIGSTOP), added to the game when its process ends; runs shorter than 1 s are not counted; emulators started without a game count for no game. It covers library launches and Quick Resume resumes. Shown in game details ("3 h 12 min", "Less than a minute", "Not played yet"). Tested: `tst_uicontext::playTimeExcludesPauses`, `tst_gamelibrary::pinningAndPlayTime`.
+- **Play time** is the emulator's run time without the time Nexora paused it (Quick Menu › Pause, SIGSTOP), added to the game when its process ends; measured with the monotonic clock, so a wall-clock change during the run (NTP sync on a board without RTC) does not count; runs shorter than 1 s are not counted; emulators started without a game count for no game. It covers library launches and Quick Resume resumes. Shown in game details ("3 h 12 min", "Less than a minute", "Not played yet"). Tested: `tst_uicontext::playTimeExcludesPauses`, `tst_gamelibrary::pinningAndPlayTime`.
 
 ## Limitations
 

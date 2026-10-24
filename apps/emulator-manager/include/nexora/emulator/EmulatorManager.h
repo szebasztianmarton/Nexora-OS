@@ -35,13 +35,11 @@ struct ProcessOutcome
     QDateTime startedAt; // UTC; invalid if the process never started
     QDateTime endedAt; // UTC
     qint64 pausedMs = 0; // time the process spent paused (SIGSTOP) by pause()
+    qint64 runMs = -1; // monotonic run time; -1 if the process never started
 
-    // Run time without pauses; 0 if the process never started.
-    qint64 activeMs() const
-    {
-        return startedAt.isValid() && endedAt.isValid() ? std::max<qint64>(0, startedAt.msecsTo(endedAt) - pausedMs)
-                                                        : 0;
-    }
+    // Run time without pauses; 0 if the process never started. Uses the monotonic clock, so
+    // a wall-clock change during the run (e.g. NTP on a board without RTC) does not count.
+    qint64 activeMs() const { return runMs >= 0 ? std::max<qint64>(0, runMs - pausedMs) : 0; }
 };
 
 // What to start: an emulator, optionally one of its launch profiles and a game file.

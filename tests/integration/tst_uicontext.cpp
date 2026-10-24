@@ -499,7 +499,9 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("exited"), Timeout);
         const qint64 played = ctx.gameLibrary().entry(id)->playSeconds;
         QVERIFY2(played >= 1 && played <= 2, qPrintable(QString::number(played))); // 3+ if pauses counted
-        QVERIFY(ctx.app()->manager()->lastOutcome().pausedMs >= 1900);
+        const auto outcome = ctx.app()->manager()->lastOutcome();
+        QVERIFY(outcome.pausedMs >= 1900);
+        QVERIFY(outcome.runMs >= outcome.pausedMs); // monotonic, independent of the wall clock
     }
 
     void launchGameFromLibrary()

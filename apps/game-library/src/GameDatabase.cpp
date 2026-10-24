@@ -683,20 +683,28 @@ bool GameDatabase::checkCollectionName(const QString &name, qint64 exceptId)
                           .arg(MaxCollectionNameLength);
         return false;
     }
+    // SQLite's NOCASE folds ASCII only, so names are compared here with Unicode case folding
+    // ("Á" and "á" are the same name); there are at most MaxCollections rows.
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
-    q.prepare(QStringLiteral("SELECT id FROM collections WHERE name = ? COLLATE NOCASE AND id <> ?"));
-    q.addBindValue(name);
+    q.prepare(QStringLiteral("SELECT name FROM collections WHERE id <> ?"));
     q.addBindValue(exceptId);
-    if (q.exec() && q.next()) {
-        m_lastError = QStringLiteral("a collection named \"%1\" already exists").arg(name);
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
         return false;
+    }
+    while (q.next()) {
+        const QString existing = q.value(0).toString().normalized(QString::NormalizationForm_C);
+        if (existing.compare(name, Qt::CaseInsensitive) == 0) {
+            m_lastError = QStringLiteral("a collection named \"%1\" already exists").arg(name);
+            return false;
+        }
     }
     return true;
 }
 
 std::optional<qint64> GameDatabase::createCollection(const QString &rawName)
 {
-    const QString name = rawName.trimmed();
+    const QString name = rawName.trimmed().normalized(QString::NormalizationForm_C);
     if (!checkCollectionName(name, 0))
         return std::nullopt;
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
@@ -718,7 +726,7 @@ std::optional<qint64> GameDatabase::createCollection(const QString &rawName)
 
 bool GameDatabase::renameCollection(qint64 id, const QString &rawName)
 {
-    const QString name = rawName.trimmed();
+    const QString name = rawName.trimmed().normalized(QString::NormalizationForm_C);
     if (!checkCollectionName(name, id))
         return false;
     QSqlQuery q(QSqlDatabase::database(m_connection, false));

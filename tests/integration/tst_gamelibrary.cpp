@@ -418,6 +418,12 @@ private slots:
         QVERIFY2(rpg, qPrintable(library.lastError()));
         QVERIFY(!library.createCollection(QStringLiteral("rpg"))); // unique ignoring case
         QVERIFY(library.lastError().contains(QStringLiteral("already exists")));
+        // Unicode case folding and normalisation, not SQLite's ASCII-only NOCASE.
+        const auto accented = library.createCollection(QStringLiteral("\u00c1rk\u00e1d"));
+        QVERIFY2(accented, qPrintable(library.lastError()));
+        QVERIFY(!library.createCollection(QStringLiteral("\u00e1rk\u00c1d")));
+        QVERIFY(!library.createCollection(QStringLiteral("a\u0301rka\u0301d"))); // decomposed
+        QVERIFY(library.deleteCollection(*accented));
         QVERIFY(!library.createCollection(QString()));
         QVERIFY(!library.createCollection(QString(61, u'x')));
         QVERIFY(!library.createCollection(QStringLiteral("tab\there")));
