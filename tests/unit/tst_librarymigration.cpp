@@ -1,4 +1,4 @@
-// Library database schema migration v1 -> v2 against real SQLite files.
+// Library database schema migrations (v1 -> v3, v2 -> v3) against real SQLite files.
 #include "nexora/library/GameDatabase.h"
 
 #include <QDir>
@@ -102,7 +102,7 @@ private slots:
         GameDatabase database;
         QVERIFY2(database.open(db()), qPrintable(database.lastError()));
         QCOMPARE(sql(db(), {QStringLiteral("PRAGMA user_version")}).toInt(), GameDatabase::SchemaVersion);
-        QCOMPARE(GameDatabase::SchemaVersion, 2);
+        QCOMPARE(GameDatabase::SchemaVersion, 3);
 
         const auto list = database.entries();
         QCOMPARE(list.size(), 2);
@@ -119,9 +119,47 @@ private slots:
         QCOMPARE(alpha.displayTitle(), QStringLiteral("Alpha"));
         QCOMPARE(database.meta(QStringLiteral("scan-signature")), QStringLiteral("abc"));
 
-        // The new columns are usable.
+        QCOMPARE(alpha.playSeconds, qint64(0));
+        QCOMPARE(alpha.pinned, 0);
+
+        // The new columns and tables are usable.
         QVERIFY(database.setMetadata(alpha.id, QStringLiteral("Alpha Edition"), QStringLiteral("note")));
         QCOMPARE(database.entry(alpha.id)->displayTitle(), QStringLiteral("Alpha Edition"));
+        QVERIFY(database.addPlayTime(alpha.id, 90));
+        QCOMPARE(database.entry(alpha.id)->playSeconds, qint64(90));
+        const auto collection = database.createCollection(QStringLiteral("RPG"));
+        QVERIFY2(collection, qPrintable(database.lastError()));
+        QVERIFY(database.setInCollection(*collection, alpha.id, true));
+        QCOMPARE(database.collectionGameIds(*collection), QList<qint64>{alpha.id});
+    }
+
+    // A v2 database (MVP 4) gains play time, pinning and collections; v2 data stays.
+    void migratesV2KeepingUserData()
+    {
+        createV1();
+        {
+            GameDatabase toV2;
+            QVERIFY(toV2.open(db()));
+        }
+        // Back to exactly the v2 layout: drop what v3 added.
+        sql(db(),
+            {QStringLiteral("DROP TABLE collection_games"), QStringLiteral("DROP TABLE collections"),
+             QStringLiteral("ALTER TABLE games DROP COLUMN play_seconds"),
+             QStringLiteral("ALTER TABLE games DROP COLUMN pinned"),
+             QStringLiteral("UPDATE games SET title_override = 'Edited', hidden = 0 WHERE title = 'Alpha'"),
+             QStringLiteral("PRAGMA user_version = 2")});
+        GameDatabase database;
+        QVERIFY2(database.open(db()), qPrintable(database.lastError()));
+        QCOMPARE(sql(db(), {QStringLiteral("PRAGMA user_version")}).toInt(), 3);
+        QCOMPARE(QDir(m_dir.path()).entryList({QStringLiteral("library.sqlite.v2-backup-*")}, QDir::Files).size(), 1);
+        QCOMPARE(sql(database.lastBackupPath(), {QStringLiteral("PRAGMA user_version")}).toInt(), 2);
+        const auto list = database.entries();
+        QCOMPARE(list.size(), 2);
+        const auto alpha = list.at(0).title == QStringLiteral("Alpha") ? list.at(0) : list.at(1);
+        QCOMPARE(alpha.displayTitle(), QStringLiteral("Edited"));
+        QVERIFY(alpha.favorite);
+        QVERIFY(database.setPinned(alpha.id, true));
+        QCOMPARE(database.entry(alpha.id)->pinned, 1);
     }
 
     void writesAReadableV1Backup()
@@ -189,7 +227,7 @@ private slots:
         GameDatabase database;
         QVERIFY(database.open(db()));
         QVERIFY(database.lastBackupPath().isEmpty());
-        QCOMPARE(sql(db(), {QStringLiteral("PRAGMA user_version")}).toInt(), 2);
+        QCOMPARE(sql(db(), {QStringLiteral("PRAGMA user_version")}).toInt(), 3);
         QVERIFY(backups().isEmpty());
     }
 

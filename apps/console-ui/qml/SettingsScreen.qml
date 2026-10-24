@@ -2,8 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import Nexora.Console
 
-// Settings: one vertical list of rows, grouped into General, Controllers, Display, Audio,
-// Library, Emulators and System. Up/Down move, Left/Right change values, Accept activates
+// Settings: one vertical list of rows, grouped into General, Home, Controllers, Display, Audio,
+// Library (incl. collections), Emulators and System. Home lists every Home section: Accept
+// shows/hides it, Left/Right move a shown one. Up/Down move, Left/Right change values, Accept activates
 // actions (remap, remove folder, reset, power, backups…). Read-only information (device
 // lists, output modes, storage, emulator health) is plain text, not a focus stop: nothing
 // about it can be "operated".
@@ -27,9 +28,10 @@ FocusScope {
 
     readonly property var focusedItem: Window.activeFocusItem
     readonly property bool inTextField: addDirField.activeFocus
-    readonly property bool overlayOpen: testPanel.visible || confirmRestart.visible
+    readonly property bool overlayOpen: testPanel.visible || nameKeyboard.visible || confirmRestart.visible
                                         || confirmPowerOff.visible || confirmRestore.visible
     readonly property var hints: testPanel.visible ? testPanel.hints
+        : nameKeyboard.visible ? nameKeyboard.hints
         : overlayOpen
         ? confirmRestart.hints
         : inTextField
@@ -106,6 +108,38 @@ FocusScope {
     }
 
     function focusDefault() { languageRow.focus = true }
+
+    // --- Home layout and collections ---------------------------------------------------------
+    function focusRow(repeater, name) {
+        for (let i = 0; i < repeater.count; ++i) {
+            const row = repeater.itemAt(i)
+            if (row && row.objectName === name) {
+                row.forceActiveFocus()
+                return
+            }
+        }
+    }
+    function homeRowName(id) { return "homeSection_" + id.replace(":", "_") }
+    function moveHomeSection(id, delta) {
+        if (screen.library.moveHomeSection(id, delta))
+            Qt.callLater(focusRow, homeRepeater, homeRowName(id))
+    }
+    function toggleHomeSection(id, visible) {
+        if (screen.library.setHomeSectionVisible(id, visible))
+            Qt.callLater(focusRow, homeRepeater, homeRowName(id))
+    }
+    // The on-screen keyboard names a new collection ("new") or renames one (its id).
+    property real renamingCollection: -1
+    function newCollection() {
+        renamingCollection = -1
+        nameKeyboard.maxLength = 60
+        nameKeyboard.open("New collection", "")
+    }
+    function renameCollection(id, name) {
+        renamingCollection = id
+        nameKeyboard.maxLength = 60
+        nameKeyboard.open("Rename collection", name)
+    }
     // Deep link from Home / the quick menu: focuses the first control of a section
     // ("General", "Controllers", "Display", "Audio", "Library", "Emulators", "System").
     function focusSection(name) {
@@ -420,6 +454,35 @@ FocusScope {
                 onIncrement: screen.settings.cycle("library.sortOrder", 1)
             }
 
+            // --- Home ------------------------------------------------------------------------
+            SectionTitle { text: "Home" }
+            Repeater {
+                id: homeRepeater
+                model: screen.library.homeSectionRows
+                delegate: SettingRow {
+                    required property var modelData
+                    objectName: screen.homeRowName(modelData.id)
+                    label: modelData.label
+                    description: modelData.visible ? "← → moves it · A / Enter hides it"
+                                                   : "A / Enter shows it at the end of Home"
+                    value: modelData.visible ? "Shown" : "Hidden"
+                    valueColor: modelData.visible ? Theme.success : Theme.textMuted
+                    adjustable: modelData.visible
+                    onDecrement: screen.moveHomeSection(modelData.id, -1)
+                    onIncrement: screen.moveHomeSection(modelData.id, 1)
+                    onAccepted: screen.toggleHomeSection(modelData.id, !modelData.visible)
+                }
+            }
+            SettingRow {
+                objectName: "resetHomeLayoutRow"
+                label: "Reset Home layout"
+                description: "Shows the built-in sections in their original order; collections are hidden"
+                actionText: "Reset"
+                requireConfirm: true
+                confirmText: "Press A / Enter again to reset the Home layout"
+                onAccepted: screen.library.resetHomeLayout()
+            }
+
             // --- Controllers -----------------------------------------------------------------
             SectionTitle { text: "Controllers" }
             SettingRow {
@@ -694,6 +757,52 @@ FocusScope {
                 actionText: "Restore"
                 onAccepted: screen.lastRestoredCount = screen.library.restoreRemovedGames()
             }
+            Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                topPadding: Theme.space2
+                text: "Collections"
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontSmall
+                font.bold: true
+            }
+            Repeater {
+                id: collectionRepeater
+                model: screen.library.collections
+                delegate: Column {
+                    required property var modelData
+                    required property int index
+                    width: parent ? parent.width : 0
+                    SettingRow {
+                        objectName: "collection_" + index
+                        width: parent.width
+                        label: modelData.name
+                        description: modelData.count === 1 ? "1 game" : modelData.count + " games"
+                        actionText: "Rename"
+                        onAccepted: screen.renameCollection(modelData.id, modelData.name)
+                    }
+                    SettingRow {
+                        objectName: "deleteCollection_" + index
+                        width: parent.width
+                        label: "Delete “" + modelData.name + "”"
+                        description: "Its games stay in the library"
+                        labelColor: Theme.danger
+                        actionText: "Delete"
+                        requireConfirm: true
+                        confirmText: "Press A / Enter again to delete this collection"
+                        onAccepted: screen.library.deleteCollection(modelData.id)
+                    }
+                }
+            }
+            SettingRow {
+                objectName: "newCollectionRow"
+                label: "New collection"
+                description: screen.library.collections.length === 0
+                             ? "Group games into your own collections; add games from their options (Select / O)"
+                             : "Add games from their options (Select / O)"
+                actionText: "Create"
+                onAccepted: screen.newCollection()
+            }
 
             // --- Emulators -----------------------------------------------------------------------
             SectionTitle { text: "Emulators" }
@@ -902,5 +1011,16 @@ FocusScope {
         id: testPanel
         app: screen.app
         backButton: screen.backButtonName()
+    }
+
+    OnScreenKeyboard {
+        id: nameKeyboard
+        objectName: "collectionNameKeyboard"
+        onAccepted: (value) => {
+            if (screen.renamingCollection > 0)
+                screen.library.renameCollection(screen.renamingCollection, value)
+            else
+                screen.library.createCollection(value)
+        }
     }
 }

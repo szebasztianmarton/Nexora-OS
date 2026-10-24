@@ -145,6 +145,8 @@ LaunchResult EmulatorManager::launch(const LaunchRequest &request)
     m_terminatePending = false;
     m_activePausable = config.pausable;
     m_paused = false;
+    m_pausedTotalMs = 0;
+    m_pauseClock.invalidate();
     m_pid = 0;
     m_startedAt = QDateTime();
     m_runClock.invalidate();
@@ -267,6 +269,10 @@ void EmulatorManager::setPaused(bool paused)
     if (m_paused == paused)
         return;
     m_paused = paused;
+    if (paused)
+        m_pauseClock.start();
+    else if (m_pauseClock.isValid())
+        m_pausedTotalMs += std::exchange(m_pauseClock, QElapsedTimer()).elapsed();
     emit pausedChanged(m_paused);
 }
 
@@ -556,6 +562,9 @@ void EmulatorManager::finish(ProcessOutcome outcome)
     if (!outcome.endedAt.isValid())
         outcome.endedAt = QDateTime::currentDateTimeUtc();
     m_pid = 0;
+    outcome.runMs = m_runClock.isValid() ? m_runClock.elapsed() : -1;
+    outcome.pausedMs = m_pausedTotalMs + (m_pauseClock.isValid() ? m_pauseClock.elapsed() : 0);
+    m_pauseClock.invalidate();
     const bool wasPaused = std::exchange(m_paused, false);
     m_lastOutcome = outcome;
     // State is updated (and the process released) before notifying, so listeners may

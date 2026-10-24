@@ -364,7 +364,59 @@ int GameLibrary::purgeMissing()
     ++m_writeGeneration;
     const int removed = m_db.purgeMissing();
     reloadEntries();
+    if (removed > 0)
+        emit collectionsChanged(); // memberships of purged games are gone
     return removed;
+}
+
+bool GameLibrary::addPlayTime(qint64 id, qint64 seconds)
+{
+    ++m_writeGeneration;
+    if (!m_db.addPlayTime(id, seconds))
+        return false;
+    updateCached(id, [seconds](GameEntry &e) { e.playSeconds += seconds; });
+    return true;
+}
+
+bool GameLibrary::setPinned(qint64 id, bool pinned)
+{
+    ++m_writeGeneration;
+    if (!m_db.setPinned(id, pinned))
+        return false;
+    refreshCached(id);
+    return true;
+}
+
+std::optional<qint64> GameLibrary::createCollection(const QString &name)
+{
+    const auto id = m_db.createCollection(name);
+    if (id)
+        emit collectionsChanged();
+    return id;
+}
+
+bool GameLibrary::renameCollection(qint64 id, const QString &name)
+{
+    if (!m_db.renameCollection(id, name))
+        return false;
+    emit collectionsChanged();
+    return true;
+}
+
+bool GameLibrary::deleteCollection(qint64 id)
+{
+    if (!m_db.deleteCollection(id))
+        return false;
+    emit collectionsChanged();
+    return true;
+}
+
+bool GameLibrary::setInCollection(qint64 collectionId, qint64 gameId, bool member)
+{
+    if (!m_db.setInCollection(collectionId, gameId, member))
+        return false;
+    emit collectionsChanged();
+    return true;
 }
 
 } // namespace nexora::library

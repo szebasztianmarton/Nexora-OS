@@ -36,6 +36,8 @@ QList<GameEntry> LibraryQuery::apply(QList<GameEntry> entries, const QueryOption
             return true;
         if (!options.emulatorId.isEmpty() && !e.emulatorCandidates.contains(options.emulatorId))
             return true;
+        if (options.gameIds && !options.gameIds->contains(e.id))
+            return true;
         if (options.systemId == UnknownSystemFilter) {
             if (!e.systemId.isEmpty())
                 return true;

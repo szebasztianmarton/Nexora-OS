@@ -1,6 +1,6 @@
 # Game library
 
-The game library finds game files in directories you configure, remembers them in a local SQLite database (schema version 2), assigns them to gaming systems, keeps your corrections (title, notes, system, emulator, removed entries) across rescans, and starts them with a matching emulator. It never downloads anything, never executes or opens game files, never deletes them, and never scans outside the configured directories.
+The game library finds game files in directories you configure, remembers them in a local SQLite database (schema version 3), assigns them to gaming systems, keeps your corrections (title, notes, system, emulator, removed entries), your collections, pinned games and play time across rescans, and starts them with a matching emulator. It never downloads anything, never executes or opens game files, never deletes them, and never scans outside the configured directories.
 
 Code: `apps/game-library/` (`LibraryScanner`, `GameDatabase`, `LibraryQuery`, `GameLibrary`), UI glue in `apps/console-ui/src/LibraryController.cpp`, launching in `apps/emulator-manager/` and `apps/console-ui/src/AppController.cpp`.
 
@@ -16,6 +16,8 @@ Code: `apps/game-library/` (`LibraryScanner`, `GameDatabase`, `LibraryQuery`, `G
 - [Emulator assignment](#emulator-assignment)
 - [Game details](#game-details)
 - [Removing and restoring entries](#removing-and-restoring-entries)
+- [Collections](#collections)
+- [Pinned games and play time](#pinned-games-and-play-time)
 - [Launch options](#launch-options)
 - [Launching a game](#launching-a-game)
 - [Limitations](#limitations)
@@ -91,7 +93,7 @@ New, removed or renamed files inside an already configured directory do **not** 
 
 ## Database
 
-SQLite file, default `$XDG_DATA_HOME/nexora/library.sqlite`, overridable with `--library-db` (location and corruption handling: [settings.md](settings.md#game-library-database); backups: [user-data.md](user-data.md#backup-and-restore)). Schema version 2 (`PRAGMA user_version`); version 1 is the table below without the last six columns:
+SQLite file, default `$XDG_DATA_HOME/nexora/library.sqlite`, overridable with `--library-db` (location and corruption handling: [settings.md](settings.md#game-library-database); backups: [user-data.md](user-data.md#backup-and-restore)). Schema version 3 (`PRAGMA user_version`); version 1 is the `games` table below without the columns added in versions 2 and 3, version 2 has no `play_seconds`, `pinned` or collection tables:
 
 ```sql
 CREATE TABLE games (
@@ -115,8 +117,21 @@ CREATE TABLE games (
   system_candidates TEXT NOT NULL DEFAULT '',  -- comma-separated system ids
   title_override TEXT NOT NULL DEFAULT '',     -- user-edited title (≤ 200 chars)
   notes TEXT NOT NULL DEFAULT '',              -- user notes (≤ 2000 chars)
-  hidden INTEGER NOT NULL DEFAULT 0);          -- removed from the library by the user
+  hidden INTEGER NOT NULL DEFAULT 0,           -- removed from the library by the user
+  -- added in version 3:
+  play_seconds INTEGER NOT NULL DEFAULT 0,     -- emulator run time without Nexora's pauses
+  pinned INTEGER NOT NULL DEFAULT 0);          -- 0 = not pinned, otherwise the pin order
 CREATE INDEX games_present ON games(present);
+CREATE TABLE collections (                     -- version 3
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,    -- 1-60 characters
+  created_at INTEGER NOT NULL);
+CREATE TABLE collection_games (                -- version 3; never owns the game rows
+  collection_id INTEGER NOT NULL,
+  game_id INTEGER NOT NULL,
+  position INTEGER NOT NULL,                   -- order the games were added
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY (collection_id, game_id));
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);  -- scan-signature, last-scan
 ```
 
@@ -126,11 +141,11 @@ A game is identified by its canonical path. On each completed scan:
 | --- | --- |
 | `title`, `extension`, `root`, `size`, `modified`, `emulator_candidates`, `system_id`, `system_candidates` | Updated from the file system / current emulator definitions / system catalog |
 | `present` | Set to 1 for every file found; see [missing files](#missing-files-and-unmounted-drives) |
-| `id`, `added_at`, `favorite`, `play_count`, `last_played`, `emulator_override`, `system_override`, `title_override`, `notes`, `hidden` | **Kept** (never touched by a scan) |
+| `id`, `added_at`, `favorite`, `play_count`, `last_played`, `emulator_override`, `system_override`, `title_override`, `notes`, `hidden`, `play_seconds`, `pinned`, collection memberships | **Kept** (never touched by a scan) |
 
 A renamed or moved file is a new path, so it becomes a new entry; the old one becomes missing and its favorite/history are not transferred.
 
-**Migration from version 1:** on first open with the MVP 4 code, the database is copied to `library.sqlite.v1-backup-<yyyyMMdd-hhmmss>` (after a WAL checkpoint), then the six columns and the version bump are applied in one transaction. A failure leaves the original usable; a database with a newer version than 2 is refused and left untouched. Details: [user-data.md](user-data.md#versioned-formats-and-migrations); tested by `tst_librarymigration`.
+**Migration from version 1 or 2:** on first open, the database is copied to `library.sqlite.v<N>-backup-<yyyyMMdd-hhmmss>` (after a WAL checkpoint), then every missing column and table and the version bump are applied in one transaction (v1 goes straight to v3). A failure leaves the original usable; a database with a newer version than 3 is refused and left untouched. Details: [user-data.md](user-data.md#versioned-formats-and-migrations); tested by `tst_librarymigration`.
 
 ## Missing files and unmounted drives
 
@@ -181,7 +196,7 @@ The order comes from `library.sortOrder`. Choosing a sort order on the Games tab
 
 ## Game details
 
-Accept on a game tile (Games, Favorites, Recent, Home rows) opens `GameDetailsScreen`; Back closes it and focus returns to the same tile. It shows the artwork placeholder, title, system, emulator, last played, play count and notes, and offers:
+Accept on a game tile (Games, Favorites, Recent, Home rows) opens `GameDetailsScreen`; Back closes it and focus returns to the same tile. It shows the artwork placeholder, title, system, emulator, last played, play count, play time and notes, and offers:
 
 | Action | Effect |
 | --- | --- |
@@ -193,7 +208,7 @@ Accept on a game tile (Games, Favorites, Recent, Home rows) opens `GameDetailsSc
 | Change system | chooses among the system candidates or any catalog system (`setGameSystem()`), or back to automatic |
 | Remove from library | confirmation dialog stating "The game file is not deleted", default button Cancel |
 
-The data comes from `LibraryController.gameDetails(id)` (`id, title, originalTitle, path` (redacted), `systemId, systemName, systemCandidates, emulatorId, emulatorName, emulatorCandidates, favorite, playCount, lastPlayed, addedAt, present, notes`). An unknown id shows an error state. Title, notes and every other value are rendered as plain text (markup in a file name or note is shown literally). When saving details, changing the system or removing the game fails, `LibraryController` emits an error notice with the reason (e.g. "Could not save the game details: the game is no longer in the library"); a failed save keeps the editor open with the edits. Tested: `tst_gamedetails.qml`, `tst_uicontext` (`failedEditsEmitNotices`).
+The data comes from `LibraryController.gameDetails(id)` (`id, title, originalTitle, path` (redacted), `systemId, systemName, systemCandidates, emulatorId, emulatorName, emulatorCandidates, favorite, playCount, lastPlayed, addedAt, present, notes, playSeconds, playTimeText, pinned`). An unknown id shows an error state. Title, notes and every other value are rendered as plain text (markup in a file name or note is shown literally). When saving details, changing the system or removing the game fails, `LibraryController` emits an error notice with the reason (e.g. "Could not save the game details: the game is no longer in the library"); a failed save keeps the editor open with the edits. Tested: `tst_gamedetails.qml`, `tst_uicontext` (`failedEditsEmitNotices`).
 
 ## Removing and restoring entries
 
@@ -232,6 +247,24 @@ The Options button (default Select; keyboard `O`; remappable as `options`) on a 
 
 Starting an emulator **without** a game (from the emulator list) drops every argument that contains `{file}`.
 
+## Collections
+
+Your own groups of games (schema v3, `collections` / `collection_games`). A collection never owns its games: deleting it, or taking a game out of it, leaves the games in the library.
+
+| Where | What |
+| --- | --- |
+| Game options (Select / O on a game) | one row per collection with a check mark (Accept adds/removes the game) and **New collection…** (name typed on the on-screen keyboard; the new collection contains the game) |
+| Games tab | collection chips after the system chips: Accept filters the grid to that collection (again to clear); "All systems" clears both filters |
+| Home | any collection can be shown as a row (Settings › Home); games appear in the order they were added |
+| Settings › Library › Collections | rename (on-screen keyboard), delete (asks again; "Its games stay in the library"), New collection |
+
+Rules (`GameDatabase`): names 1–60 characters without control characters, unique ignoring case (Unicode case folding, so "Árkád" and "árkád" clash), stored NFC-normalised with surrounding spaces trimmed; at most 100 collections and 5000 games per collection. Errors (duplicate name, limit) are shown as notifications. Deleting a collection also removes it from the Home layout and clears a Games filter on it; **Remove missing games** drops the purged games' memberships. Counts include only games that are present and not removed. Tested: `tst_gamelibrary::collectionsGroupGamesWithoutOwningThem`, `tst_uicontext::collectionsPinningAndHomeLayout`, `tst_qmlsmoke::collectionsPinningAndHomeLayout`.
+
+## Pinned games and play time
+
+- **Pin to Home** (Game options) adds the game to the **Pinned** row on Home, in the order pinned (at most 24); Unpin removes it. Pinning never changes the game.
+- **Play time** is the emulator's run time without the time Nexora paused it (Quick Menu › Pause, SIGSTOP), added to the game when its process ends; measured with the monotonic clock, so a wall-clock change during the run (NTP sync on a board without RTC) does not count; runs shorter than 1 s are not counted; emulators started without a game count for no game. It covers library launches and Quick Resume resumes. Shown in game details ("3 h 12 min", "Less than a minute", "Not played yet"). Tested: `tst_uicontext::playTimeExcludesPauses`, `tst_gamelibrary::pinningAndPlayTime`.
+
 ## Limitations
 
 - No metadata scraping, descriptions or artwork download; titles come from file names unless you edit them; covers are generated placeholders.
@@ -239,7 +272,8 @@ Starting an emulator **without** a game (from the emulator list) drops every arg
 - No ROMs, BIOS files or emulators are provided; you must supply legally obtained files and install emulators yourself.
 - No automatic detection of new files (manual refresh), no archive inspection (a `.zip` is one file), no multi-disc grouping.
 - Renamed/moved files lose their favorite and history.
-- Adding a folder and searching require a keyboard (the on-screen keyboard is used only for editing a game's title and notes); there is no folder browser.
+- Adding a folder and searching require a keyboard (the on-screen keyboard is used for game titles and notes and collection names); there is no folder browser.
+- Collections cannot be reordered by hand yet, and a game's play time cannot be edited or reset.
 - Not tested with real collections. A synthetic measurement (Release build, 4-core container, 10 000 files, `NEXORA_LIBRARY_BENCH=1 tst_gamelibrary benchmarkEventLoopStall`): scan + merge 0.16–0.25 s, all on the worker thread; the longest stall of the UI event loop during a scan is 5–6 ms (the timer resolution of the measurement), down from 118–139 ms (first scan) and 72–95 ms (unchanged rescan) when the merge ran on the UI thread. Rebuilding the visible lists afterwards (search + sort) takes about 8 ms on the UI thread. The 100 000-file and depth limits are enforced.
 
 ## Future plan: RetroArch and PPSSPP

@@ -429,6 +429,98 @@ private slots:
         QCOMPARE(input.mapping().buttonFor(input::NavAction::Accept), std::optional(input::GamepadButton::West));
     }
 
+    // Collections, pinning and the Home layout through LibraryController.
+    void collectionsPinningAndHomeLayout()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        auto *lib = ctx.library();
+        QVERIFY(lib->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 alpha = lib->games()->gameIdAt(0);
+        const qint64 quest = lib->games()->gameIdAt(1);
+        QSignalSpy notices(lib, &ui::LibraryController::notice);
+
+        const qint64 rpg = lib->createCollection(QStringLiteral("RPG"), quest);
+        QVERIFY(rpg > 0);
+        QCOMPARE(lib->collections().size(), 1);
+        QCOMPARE(lib->collections().first().toMap().value(QStringLiteral("count")).toInt(), 1);
+        QCOMPARE(lib->createCollection(QStringLiteral("rpg")), qint64(0)); // duplicate name
+        QVERIFY(notices.last().at(1).toBool());
+        auto *games = lib->collectionGames(rpg);
+        QVERIFY(games);
+        QCOMPARE(games->rowCount(), 1);
+        QVERIFY(lib->setInCollection(alpha, rpg, true));
+        QTRY_COMPARE(games->rowCount(), 2);
+        QCOMPARE(games->gameIdAt(0), quest); // order added
+        QCOMPARE(lib->collectionsOf(alpha), QVariantList{double(rpg)});
+        QVERIFY(!lib->collectionGames(424242));
+
+        // Games tab filter.
+        lib->setCollectionFilter(rpg);
+        QTRY_COMPARE(lib->games()->rowCount(), 2);
+        QVERIFY(lib->setInCollection(alpha, rpg, false));
+        QTRY_COMPARE(lib->games()->rowCount(), 1);
+
+        // Pinning.
+        QVERIFY(lib->setPinned(alpha, true));
+        QTRY_COMPARE(lib->pinnedGames()->rowCount(), 1);
+        QVERIFY(lib->gameDetails(alpha).value(QStringLiteral("pinned")).toBool());
+        QCOMPARE(lib->gameDetails(alpha).value(QStringLiteral("playTimeText")).toString(),
+                 QStringLiteral("Not played yet"));
+
+        // Home layout: default order, show a collection, move, hide, reset.
+        QCOMPARE(lib->homeSections().first(), QStringLiteral("statusCards"));
+        const QString section = QStringLiteral("collection:%1").arg(rpg);
+        QVERIFY(lib->setHomeSectionVisible(section, true));
+        QCOMPARE(lib->homeSections().last(), section);
+        QVERIFY(lib->moveHomeSection(section, -1));
+        QCOMPARE(lib->homeSections().indexOf(section), lib->homeSections().size() - 2);
+        QVERIFY(!lib->moveHomeSection(QStringLiteral("statusCards"), -1)); // already first
+        QVERIFY(lib->setHomeSectionVisible(QStringLiteral("favorites"), false));
+        QVERIFY(!lib->homeSections().contains(QStringLiteral("favorites")));
+        const QVariantList rows = lib->homeSectionRows();
+        QCOMPARE(lib->property("homeSectionRows").toList(), rows);
+        QCOMPARE(rows.size(), 8); // 7 built-in + 1 collection
+        QVERIFY(!rows.last().toMap().value(QStringLiteral("visible")).toBool()); // hidden ones last
+        // Persisted in settings, and survives a restart of the controller graph.
+        QVERIFY(ctx.settingsStore().stringListValue(Settings::HomeSections).contains(section));
+
+        // Deleting the collection removes it from Home and clears the filter; games stay.
+        QVERIFY(lib->deleteCollection(rpg));
+        QVERIFY(!lib->homeSections().contains(section));
+        QCOMPARE(lib->collectionFilter(), qint64(0));
+        QCOMPARE(lib->totalCount(), 2);
+
+        lib->resetHomeLayout();
+        QCOMPARE(lib->homeSections().size(), 7);
+        QVERIFY(lib->homeSections().contains(QStringLiteral("favorites")));
+    }
+
+    // Play time: run time without Nexora's pauses, added to the launched game.
+    void playTimeExcludesPauses()
+    {
+        writeEmulator(",\"pausable\":true");
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+        QVERIFY(ctx.library()->launchWithProfile(id, QStringLiteral("long")));
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("running"), Timeout);
+        QTest::qWait(1200);
+        QVERIFY(ctx.app()->pause());
+        QTest::qWait(2000);
+        QVERIFY(ctx.app()->resume());
+        QVERIFY(ctx.app()->stop());
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.app()->state(), QStringLiteral("exited"), Timeout);
+        const qint64 played = ctx.gameLibrary().entry(id)->playSeconds;
+        QVERIFY2(played >= 1 && played <= 2, qPrintable(QString::number(played))); // 3+ if pauses counted
+        const auto outcome = ctx.app()->manager()->lastOutcome();
+        QVERIFY(outcome.pausedMs >= 1900);
+        QVERIFY(outcome.runMs >= outcome.pausedMs); // monotonic, independent of the wall clock
+    }
+
     void launchGameFromLibrary()
     {
         ui::UiContext ctx(options());

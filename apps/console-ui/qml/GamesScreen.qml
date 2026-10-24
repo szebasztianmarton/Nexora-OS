@@ -276,7 +276,7 @@ FocusScope {
         }
     }
 
-    // --- Row 2: system filter chips (only systems that have games) ----------------------------
+    // --- Row 2: system filter chips (only systems that have games), then collection chips ------
     FocusScope {
         id: systemChips
         objectName: "systemChips"
@@ -285,7 +285,7 @@ FocusScope {
         anchors.left: toolbar.left
         anchors.right: toolbar.right
         height: visible ? Theme.chipHeight : 0
-        visible: entries.length > 2 || screen.library.systemFilter.length > 0
+        visible: entries.length > 2 || screen.library.systemFilter.length > 0 || screen.library.collectionFilter > 0
         property int lastFocused: -1
         // All systems, every system with games, "Other" (games without a recognised
         // system), and the active filter even when it has no games (opened from Systems).
@@ -308,11 +308,27 @@ FocusScope {
                 list.push(filter === otherFilter ? { systemId: filter, shortName: "Other", gameCount: 0 }
                           : { systemId: filter, shortName: active ? active.shortName : filter,
                               gameCount: active ? active.gameCount : 0 })
+            // Collections filter on top of the system filter; Accept toggles one.
+            for (const c of screen.library.collections)
+                list.push({ systemId: "", collectionId: c.id, shortName: "▤ " + c.name, gameCount: c.count })
             return list
+        }
+        function isSelected(entry) {
+            return entry.collectionId ? screen.library.collectionFilter === entry.collectionId
+                                      : entry.systemId === screen.library.systemFilter
+        }
+        function choose(entry) {
+            if (entry.collectionId) {
+                screen.library.collectionFilter = isSelected(entry) ? 0 : entry.collectionId
+            } else {
+                screen.library.systemFilter = entry.systemId
+                if (entry.systemId.length === 0)
+                    screen.library.collectionFilter = 0 // "All systems" clears both filters
+            }
         }
         function selectedIndex() {
             for (let i = 0; i < entries.length; ++i) {
-                if (entries[i].systemId === screen.library.systemFilter)
+                if (!entries[i].collectionId && entries[i].systemId === screen.library.systemFilter)
                     return i
             }
             return 0
@@ -338,11 +354,14 @@ FocusScope {
                 id: sysChip
                 required property var modelData
                 required property int index
-                readonly property bool selected: screen.library.systemFilter === modelData.systemId
+                readonly property bool selected: modelData.collectionId
+                                                 ? screen.library.collectionFilter === modelData.collectionId
+                                                 : screen.library.systemFilter === modelData.systemId
                 readonly property bool current: ListView.isCurrentItem && systemList.activeFocus
-                objectName: "systemChip_" + (modelData.systemId.length === 0 ? "all"
-                                             : modelData.systemId === screen.library.otherSystemFilter ? "other"
-                                             : modelData.systemId)
+                objectName: modelData.collectionId ? "collectionChip_" + modelData.collectionId
+                            : "systemChip_" + (modelData.systemId.length === 0 ? "all"
+                                               : modelData.systemId === screen.library.otherSystemFilter ? "other"
+                                               : modelData.systemId)
                 height: systemList.height
                 width: sysLabel.implicitWidth + Theme.space6
                 radius: height / 2
@@ -365,12 +384,12 @@ FocusScope {
                     anchors.fill: parent
                     onClicked: {
                         systemChips.focusChip(sysChip.index)
-                        screen.library.systemFilter = sysChip.modelData.systemId
+                        systemChips.choose(sysChip.modelData)
                     }
                 }
             }
-            Keys.onReturnPressed: screen.library.systemFilter = systemChips.entries[currentIndex].systemId
-            Keys.onEnterPressed: screen.library.systemFilter = systemChips.entries[currentIndex].systemId
+            Keys.onReturnPressed: systemChips.choose(systemChips.entries[currentIndex])
+            Keys.onEnterPressed: systemChips.choose(systemChips.entries[currentIndex])
         }
     }
 

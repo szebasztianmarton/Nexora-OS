@@ -48,6 +48,24 @@ bool hasControlCharacters(const QString &text, bool allowNewline)
     });
 }
 
+QString collectionsTable()
+{
+    return QStringLiteral("CREATE TABLE IF NOT EXISTS collections ("
+                          " id INTEGER PRIMARY KEY,"
+                          " name TEXT NOT NULL UNIQUE COLLATE NOCASE,"
+                          " created_at INTEGER NOT NULL)");
+}
+
+QString collectionGamesTable()
+{
+    return QStringLiteral("CREATE TABLE IF NOT EXISTS collection_games ("
+                          " collection_id INTEGER NOT NULL,"
+                          " game_id INTEGER NOT NULL,"
+                          " position INTEGER NOT NULL,"
+                          " added_at INTEGER NOT NULL,"
+                          " PRIMARY KEY (collection_id, game_id))");
+}
+
 bool isUnder(const QString &path, const QString &root)
 {
     return path == root || path.startsWith(root + u'/');
@@ -174,11 +192,11 @@ bool GameDatabase::migrate()
     // From here on the file is a real Nexora database: whatever goes wrong must not be
     // mistaken for corruption and must not move it aside.
     m_recoverable = false;
-    if (version != 1) {
+    if (version != 1 && version != 2) {
         m_lastError = QStringLiteral("unsupported library database schema %1").arg(version);
         return false;
     }
-    if (!backupBeforeMigration(version) || !migrateV1ToV2())
+    if (!backupBeforeMigration(version) || !migrateFrom(version))
         return false;
     if (!m_backupPath.isEmpty()) {
         m_issues.append(QStringLiteral("library database upgraded to schema %1; the previous version was saved as %2")
@@ -211,8 +229,12 @@ bool GameDatabase::createSchema()
                        " system_candidates TEXT NOT NULL DEFAULT '',"
                        " title_override TEXT NOT NULL DEFAULT '',"
                        " notes TEXT NOT NULL DEFAULT '',"
-                       " hidden INTEGER NOT NULL DEFAULT 0)"),
+                       " hidden INTEGER NOT NULL DEFAULT 0,"
+                       " play_seconds INTEGER NOT NULL DEFAULT 0,"
+                       " pinned INTEGER NOT NULL DEFAULT 0)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS games_present ON games(present)"),
+        collectionsTable(),
+        collectionGamesTable(),
         QStringLiteral("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
         QStringLiteral("PRAGMA user_version = %1").arg(SchemaVersion),
     };
@@ -247,23 +269,30 @@ bool GameDatabase::backupBeforeMigration(int fromVersion)
     return true;
 }
 
-bool GameDatabase::migrateV1ToV2()
+bool GameDatabase::migrateFrom(int version)
 {
-    const QStringList statements{
-        QStringLiteral("ALTER TABLE games ADD COLUMN system_id TEXT NOT NULL DEFAULT ''"),
-        QStringLiteral("ALTER TABLE games ADD COLUMN system_override TEXT NOT NULL DEFAULT ''"),
-        QStringLiteral("ALTER TABLE games ADD COLUMN system_candidates TEXT NOT NULL DEFAULT ''"),
-        QStringLiteral("ALTER TABLE games ADD COLUMN title_override TEXT NOT NULL DEFAULT ''"),
-        QStringLiteral("ALTER TABLE games ADD COLUMN notes TEXT NOT NULL DEFAULT ''"),
-        QStringLiteral("ALTER TABLE games ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"),
-        QStringLiteral("PRAGMA user_version = %1").arg(SchemaVersion),
-    };
+    // Every step of the chain in one transaction: a failure leaves the old schema intact.
+    QStringList statements;
+    if (version <= 1) {
+        statements << QStringLiteral("ALTER TABLE games ADD COLUMN system_id TEXT NOT NULL DEFAULT ''")
+                   << QStringLiteral("ALTER TABLE games ADD COLUMN system_override TEXT NOT NULL DEFAULT ''")
+                   << QStringLiteral("ALTER TABLE games ADD COLUMN system_candidates TEXT NOT NULL DEFAULT ''")
+                   << QStringLiteral("ALTER TABLE games ADD COLUMN title_override TEXT NOT NULL DEFAULT ''")
+                   << QStringLiteral("ALTER TABLE games ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
+                   << QStringLiteral("ALTER TABLE games ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+    }
+    if (version <= 2) {
+        statements << QStringLiteral("ALTER TABLE games ADD COLUMN play_seconds INTEGER NOT NULL DEFAULT 0")
+                   << QStringLiteral("ALTER TABLE games ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+                   << collectionsTable() << collectionGamesTable();
+    }
+    statements << QStringLiteral("PRAGMA user_version = %1").arg(SchemaVersion);
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
     if (!db.transaction()) {
         m_lastError = db.lastError().text();
         return false;
     }
-    for (const QString &sql : statements) {
+    for (const QString &sql : std::as_const(statements)) {
         if (!exec(sql)) {
             db.rollback();
             return false;
@@ -455,6 +484,8 @@ GameEntry entryFromQuery(const QSqlQuery &q)
     e.titleOverride = q.value(15).toString();
     e.notes = q.value(16).toString();
     e.hidden = q.value(17).toBool();
+    e.playSeconds = q.value(18).toLongLong();
+    e.pinned = q.value(19).toInt();
     return e;
 }
 
@@ -462,7 +493,7 @@ const QString selectColumns
     = QStringLiteral("SELECT id, path, title, extension, root, size, emulator_candidates, emulator_override, present, "
                      "favorite, play_count, last_played, added_at, "
                      "CASE WHEN system_override <> '' THEN system_override ELSE system_id END, "
-                     "system_candidates, title_override, notes, hidden FROM games");
+                     "system_candidates, title_override, notes, hidden, play_seconds, pinned FROM games");
 
 } // namespace
 
@@ -584,10 +615,221 @@ int GameDatabase::restoreHidden()
 
 int GameDatabase::purgeMissing()
 {
-    QSqlQuery q(QSqlDatabase::database(m_connection, false));
-    if (!q.exec(QStringLiteral("DELETE FROM games WHERE present = 0 AND hidden = 0")))
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    if (!db.transaction())
         return 0;
-    return q.numRowsAffected();
+    QSqlQuery q(db);
+    if (!q.exec(QStringLiteral("DELETE FROM collection_games WHERE game_id IN "
+                               "(SELECT id FROM games WHERE present = 0 AND hidden = 0)"))
+        || !q.exec(QStringLiteral("DELETE FROM games WHERE present = 0 AND hidden = 0"))) {
+        db.rollback();
+        return 0;
+    }
+    const int removed = q.numRowsAffected();
+    return db.commit() ? removed : 0;
+}
+
+bool GameDatabase::addPlayTime(qint64 id, qint64 seconds)
+{
+    if (seconds <= 0)
+        return false;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("UPDATE games SET play_seconds = play_seconds + ? WHERE id = ?"));
+    q.addBindValue(seconds);
+    q.addBindValue(id);
+    return q.exec() && q.numRowsAffected() == 1;
+}
+
+bool GameDatabase::setPinned(qint64 id, bool pinned)
+{
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    if (!pinned) {
+        q.prepare(QStringLiteral("UPDATE games SET pinned = 0 WHERE id = ?"));
+        q.addBindValue(id);
+        return q.exec() && q.numRowsAffected() == 1;
+    }
+    const auto current = entry(id);
+    if (!current) {
+        m_lastError = QStringLiteral("no such game");
+        return false;
+    }
+    if (current->pinned > 0)
+        return true;
+    if (!q.exec(QStringLiteral("SELECT count(*), coalesce(max(pinned), 0) FROM games WHERE pinned > 0")) || !q.next())
+        return false;
+    if (q.value(0).toInt() >= MaxPinned) {
+        m_lastError = QStringLiteral("at most %1 games can be pinned").arg(MaxPinned);
+        return false;
+    }
+    const int next = q.value(1).toInt() + 1;
+    q.finish();
+    q.prepare(QStringLiteral("UPDATE games SET pinned = ? WHERE id = ?"));
+    q.addBindValue(next);
+    q.addBindValue(id);
+    return q.exec() && q.numRowsAffected() == 1;
+}
+
+QList<GameDatabase::Collection> GameDatabase::collections() const
+{
+    QList<Collection> list;
+    if (!isOpen())
+        return list;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.exec(QStringLiteral("SELECT c.id, c.name, c.created_at, count(g.id) FROM collections c "
+                          "LEFT JOIN collection_games cg ON cg.collection_id = c.id "
+                          "LEFT JOIN games g ON g.id = cg.game_id AND g.present = 1 AND g.hidden = 0 "
+                          "GROUP BY c.id ORDER BY c.name COLLATE NOCASE"));
+    while (q.next()) {
+        list.append({q.value(0).toLongLong(), q.value(1).toString(),
+                     QDateTime::fromSecsSinceEpoch(q.value(2).toLongLong(), Qt::UTC), q.value(3).toInt()});
+    }
+    return list;
+}
+
+bool GameDatabase::checkCollectionName(const QString &name, qint64 exceptId)
+{
+    if (name.isEmpty() || name.size() > MaxCollectionNameLength || hasControlCharacters(name, false)) {
+        m_lastError = QStringLiteral("collection names have 1-%1 characters and no control characters")
+                          .arg(MaxCollectionNameLength);
+        return false;
+    }
+    // SQLite's NOCASE folds ASCII only, so names are compared here with Unicode case folding
+    // ("Á" and "á" are the same name); there are at most MaxCollections rows.
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("SELECT name FROM collections WHERE id <> ?"));
+    q.addBindValue(exceptId);
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    while (q.next()) {
+        const QString existing = q.value(0).toString().normalized(QString::NormalizationForm_C);
+        if (existing.compare(name, Qt::CaseInsensitive) == 0) {
+            m_lastError = QStringLiteral("a collection named \"%1\" already exists").arg(name);
+            return false;
+        }
+    }
+    return true;
+}
+
+std::optional<qint64> GameDatabase::createCollection(const QString &rawName)
+{
+    const QString name = rawName.trimmed().normalized(QString::NormalizationForm_C);
+    if (!checkCollectionName(name, 0))
+        return std::nullopt;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    if (q.exec(QStringLiteral("SELECT count(*) FROM collections")) && q.next()
+        && q.value(0).toInt() >= MaxCollections) {
+        m_lastError = QStringLiteral("at most %1 collections").arg(MaxCollections);
+        return std::nullopt;
+    }
+    q.finish();
+    q.prepare(QStringLiteral("INSERT INTO collections (name, created_at) VALUES (?, ?)"));
+    q.addBindValue(name);
+    q.addBindValue(QDateTime::currentSecsSinceEpoch());
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return std::nullopt;
+    }
+    return q.lastInsertId().toLongLong();
+}
+
+bool GameDatabase::renameCollection(qint64 id, const QString &rawName)
+{
+    const QString name = rawName.trimmed().normalized(QString::NormalizationForm_C);
+    if (!checkCollectionName(name, id))
+        return false;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("UPDATE collections SET name = ? WHERE id = ?"));
+    q.addBindValue(name);
+    q.addBindValue(id);
+    if (!q.exec() || q.numRowsAffected() != 1) {
+        m_lastError = QStringLiteral("no such collection");
+        return false;
+    }
+    return true;
+}
+
+bool GameDatabase::deleteCollection(qint64 id)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    if (!db.transaction())
+        return false;
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral("DELETE FROM collection_games WHERE collection_id = ?"));
+    q.addBindValue(id);
+    bool ok = q.exec();
+    q.prepare(QStringLiteral("DELETE FROM collections WHERE id = ?"));
+    q.addBindValue(id);
+    ok = ok && q.exec() && q.numRowsAffected() == 1;
+    if (!ok) {
+        db.rollback();
+        m_lastError = QStringLiteral("no such collection");
+        return false;
+    }
+    return db.commit();
+}
+
+bool GameDatabase::setInCollection(qint64 collectionId, qint64 gameId, bool member)
+{
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    if (!member) {
+        q.prepare(QStringLiteral("DELETE FROM collection_games WHERE collection_id = ? AND game_id = ?"));
+        q.addBindValue(collectionId);
+        q.addBindValue(gameId);
+        return q.exec();
+    }
+    q.prepare(QStringLiteral("SELECT (SELECT count(*) FROM collections WHERE id = ?), "
+                             "(SELECT count(*) FROM games WHERE id = ?), "
+                             "(SELECT count(*) FROM collection_games WHERE collection_id = ?), "
+                             "(SELECT coalesce(max(position), 0) FROM collection_games WHERE collection_id = ?)"));
+    q.addBindValue(collectionId);
+    q.addBindValue(gameId);
+    q.addBindValue(collectionId);
+    q.addBindValue(collectionId);
+    if (!q.exec() || !q.next() || q.value(0).toInt() != 1 || q.value(1).toInt() != 1) {
+        m_lastError = QStringLiteral("no such collection or game");
+        return false;
+    }
+    if (q.value(2).toInt() >= MaxGamesPerCollection) {
+        m_lastError = QStringLiteral("a collection holds at most %1 games").arg(MaxGamesPerCollection);
+        return false;
+    }
+    const int position = q.value(3).toInt() + 1;
+    q.finish();
+    q.prepare(QStringLiteral("INSERT OR IGNORE INTO collection_games (collection_id, game_id, position, added_at) "
+                             "VALUES (?, ?, ?, ?)"));
+    q.addBindValue(collectionId);
+    q.addBindValue(gameId);
+    q.addBindValue(position);
+    q.addBindValue(QDateTime::currentSecsSinceEpoch());
+    return q.exec();
+}
+
+QList<qint64> GameDatabase::collectionGameIds(qint64 collectionId) const
+{
+    QList<qint64> ids;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("SELECT game_id FROM collection_games WHERE collection_id = ? ORDER BY position"));
+    q.addBindValue(collectionId);
+    if (q.exec()) {
+        while (q.next())
+            ids.append(q.value(0).toLongLong());
+    }
+    return ids;
+}
+
+QList<qint64> GameDatabase::collectionsOf(qint64 gameId) const
+{
+    QList<qint64> ids;
+    QSqlQuery q(QSqlDatabase::database(m_connection, false));
+    q.prepare(QStringLiteral("SELECT collection_id FROM collection_games WHERE game_id = ? ORDER BY collection_id"));
+    q.addBindValue(gameId);
+    if (q.exec()) {
+        while (q.next())
+            ids.append(q.value(0).toLongLong());
+    }
+    return ids;
 }
 
 int GameDatabase::missingCount() const

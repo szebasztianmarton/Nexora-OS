@@ -239,6 +239,8 @@ FocusScope {
                 }
                 Fact { text: "Times played" }
                 Value { objectName: "gameDetailsPlayCount"; text: String(details.info.playCount || 0) }
+                Fact { text: "Play time" }
+                Value { objectName: "gameDetailsPlayTime"; text: details.info.playTimeText || "Not played yet" }
                 Fact { text: "Added" }
                 Value { text: details.formatIso(details.info.addedAt) }
                 Fact { text: "File" }
