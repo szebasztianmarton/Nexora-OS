@@ -556,6 +556,8 @@ FocusScope {
 
     ConfirmDialog {
         id: confirmRemoveState
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         objectName: "confirmRemoveQuickResume"
         property string sessionId
         title: "Remove Quick Resume state?"
