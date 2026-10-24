@@ -22,7 +22,7 @@ Ez a leírás lépésről lépésre bemutatja, hogyan lehet a Nexora OS-t egy Wi
 
 | Rész | Hely | Leírás |
 | --- | --- | --- |
-| **Fő alkalmazás (MVP 1–4)** | gyökérkönyvtár (`apps/`, `shared/`, `tests/`, `CMakePresets.json`) | Kontrollerrel vezérelhető dashboard (Home, Games, Emulators, Settings, Diagnostics), Emulator Manager, játékkönyvtár (SQLite), beállítások, evdev/SDL3 bemenet. 49 automatizált CTest-teszt. |
+| **Fő alkalmazás (MVP 1–4)** | gyökérkönyvtár (`apps/`, `shared/`, `tests/`, `CMakePresets.json`) | Kontrollerrel vezérelhető dashboard (Home, Games, Emulators, Settings, Diagnostics), Emulator Manager, játékkönyvtár (SQLite), beállítások, evdev/SDL3 bemenet. 50 automatizált CTest-teszt. |
 | **Buildroot image** | `buildroot-external/` | Bootolható x86-64 UEFI disk image, amely közvetlenül a fő alkalmazásba indul. |
 | **Console UI prototípus** | `prototypes/console-ui/` | A `claude/nexora-console-ui` ágon készült, külön fejlesztett konzolfelület (Kezdőlap, Könyvtár, Kedvencek, Emulátorok, 8 beállítási kategória, első indítási varázsló, SDL2). Önálló CMake-projekt. |
 
@@ -109,7 +109,7 @@ scripts/build.sh ci --test
 Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `ctest`-et. **Elvárt eredmény:**
 
 ```
-100% tests passed, 0 tests failed out of 49
+100% tests passed, 0 tests failed out of 50
 ```
 
 Az 5 `system` tesztből 4 (image-segédszkriptek, `S90nexora stop`, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. Az ötödik, a `check_line_endings`, mindig regisztrálódik.
@@ -362,7 +362,7 @@ qemu-system-x86_64 \
 Másold ki és pipáld ki az eredményeket (dátum, Windows-build, GPU):
 
 - [ ] WSL 2 + Ubuntu 24.04 telepítve, nem root felhasználó
-- [ ] `scripts/build.sh ci --test` → 49/49 teszt sikeres
+- [ ] `scripts/build.sh ci --test` → 50/50 teszt sikeres
 - [ ] `--check-config` mindkét példakonfigurációra 0-s kóddal tér vissza
 - [ ] Fő alkalmazás elindul ablakban (WSLg), billentyűzettel navigálható
 - [ ] `fake-ok` / `fake-fail` / `fake-crash` / `fake-long` indítása és visszatérés rendben (`NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` build)
