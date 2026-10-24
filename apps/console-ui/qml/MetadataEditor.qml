@@ -32,8 +32,7 @@ FocusScope {
 
     readonly property bool keyboardOpen: keyboard.visible
     readonly property var hints: keyboard.visible ? keyboard.hints
-        : confirmDiscard.visible ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
-                                    { button: "B / Esc", action: "Cancel" }]
+        : confirmDiscard.visible ? confirmDiscard.hints
         : [{ button: "↑ ↓", action: "Move" }, { button: "A / Enter", action: "Edit" },
            { button: "B / Esc", action: "Cancel" }]
 
