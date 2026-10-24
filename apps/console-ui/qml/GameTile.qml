@@ -29,7 +29,7 @@ Item {
     readonly property real infoHeight: Math.round(70 * Theme.scale)
 
     z: selected ? 2 : 1
-    scale: selected ? 1.05 : 1.0
+    scale: selected && !Theme.reducedMotion ? 1.05 : 1.0
     Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutQuad } }
 
     Rectangle {
@@ -63,7 +63,7 @@ Item {
             anchors.top: parent.top
             anchors.margins: tile.selected ? Theme.focusWidth : 1
             height: parent.height - tile.infoHeight - anchors.margins
-            radius: Theme.radius - 3
+            radius: Theme.radius - Math.round(3 * Theme.scale)
             gradient: Gradient {
                 GradientStop { position: 0.0; color: Theme.artColor(tile.title, 0.34) }
                 GradientStop { position: 1.0; color: Theme.artColor(tile.title + "~", 0.16) }
@@ -168,7 +168,7 @@ Item {
                 anchors.centerIn: parent
                 text: "★"
                 color: Theme.favorite
-                font.pixelSize: Math.round(18 * Theme.scale)
+                font.pixelSize: Theme.fontBody
             }
             MouseArea { anchors.fill: parent; onClicked: tile.favoriteClicked() }
         }
@@ -177,10 +177,10 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            anchors.bottomMargin: 10
-            spacing: 2
+            anchors.leftMargin: Theme.space3
+            anchors.rightMargin: Theme.space3
+            anchors.bottomMargin: Math.round(10 * Theme.scale)
+            spacing: Math.round(2 * Theme.scale)
 
             Text {
                 objectName: "gameTileTitle"

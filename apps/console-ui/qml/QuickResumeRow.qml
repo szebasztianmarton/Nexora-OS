@@ -14,7 +14,7 @@ FocusScope {
     signal removeRequested(string sessionId, string title, string savedAt)
 
     visible: hasSessions
-    implicitHeight: heading.height + 10 + cardHeight + 24
+    implicitHeight: heading.height + Math.round(10 * Theme.scale) + cardHeight + Theme.space5
     readonly property real cardWidth: Math.round(Theme.cardWidth * 1.5)
     readonly property real cardHeight: Math.round(116 * Theme.scale)
 
@@ -29,7 +29,7 @@ FocusScope {
 
     Row {
         id: heading
-        spacing: 12
+        spacing: Theme.space3
         Text {
             id: headingLabel
             textFormat: Text.PlainText
@@ -51,21 +51,21 @@ FocusScope {
         id: list
         objectName: "quickResumeList"
         anchors.top: heading.bottom
-        anchors.topMargin: 10
+        anchors.topMargin: Math.round(10 * Theme.scale)
         anchors.left: parent.left
         anchors.right: parent.right
-        height: row.cardHeight + 24
+        height: row.cardHeight + Theme.space5
         focus: true
         orientation: ListView.Horizontal
         spacing: Theme.spacing
-        leftMargin: 8
-        rightMargin: 8
-        topMargin: 12
+        leftMargin: Theme.space2
+        rightMargin: Theme.space2
+        topMargin: Theme.space3
         clip: false
         keyNavigationEnabled: true
         highlightMoveDuration: Theme.animMove
-        preferredHighlightBegin: 8
-        preferredHighlightEnd: width - row.cardWidth - 8
+        preferredHighlightBegin: Theme.space2
+        preferredHighlightEnd: width - row.cardWidth - Theme.space2
         highlightRangeMode: ListView.ApplyRange
         boundsBehavior: Flickable.StopAtBounds
         model: row.entries
@@ -84,7 +84,7 @@ FocusScope {
             color: selected ? Theme.surfaceHover : Theme.surfaceRaised
             border.width: selected ? Theme.focusWidth : 1
             border.color: selected ? Theme.focusRing : Theme.border
-            scale: selected ? 1.04 : 1.0
+            scale: selected && !Theme.reducedMotion ? 1.04 : 1.0
             z: selected ? 2 : 1
             Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutQuad } }
 

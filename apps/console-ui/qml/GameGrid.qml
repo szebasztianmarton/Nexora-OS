@@ -125,7 +125,7 @@ GridView {
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height - Theme.space3
                 width: height * 1.4
-                radius: Theme.space1 + 2
+                radius: Math.round(6 * Theme.scale)
                 opacity: cell.available && cell.present ? 1.0 : 0.45
                 color: Theme.artColor(cell.title, 0.28)
                 Text {
@@ -143,7 +143,7 @@ GridView {
                 anchors.right: badges.left
                 anchors.rightMargin: Theme.space3
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 2
+                spacing: Math.round(2 * Theme.scale)
                 Text {
                     textFormat: Text.PlainText
                     width: parent.width

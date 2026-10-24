@@ -17,7 +17,8 @@ FocusScope {
     signal activated(real gameId)
     signal optionsRequested(real gameId)
 
-    implicitHeight: heading.height + 10 + (hasGames ? tileHeight + 24 : emptyBox.height)
+    implicitHeight: heading.height + Math.round(10 * Theme.scale)
+                    + (hasGames ? tileHeight + Theme.space5 : emptyBox.height)
     readonly property real tileWidth: Theme.cardWidth
     readonly property real tileHeight: Theme.cardHeight
 
@@ -37,7 +38,7 @@ FocusScope {
 
     Row {
         id: heading
-        spacing: 12
+        spacing: Theme.space3
         Text {
             textFormat: Text.PlainText
             id: headingLabel
@@ -60,22 +61,22 @@ FocusScope {
         id: list
         objectName: row.objectName + "List"
         anchors.top: heading.bottom
-        anchors.topMargin: 10
+        anchors.topMargin: Math.round(10 * Theme.scale)
         anchors.left: parent.left
         anchors.right: parent.right
-        height: row.tileHeight + 24
+        height: row.tileHeight + Theme.space5
         visible: row.hasGames
         focus: true
         orientation: ListView.Horizontal
         spacing: Theme.spacing
-        leftMargin: 8
-        rightMargin: 8
-        topMargin: 12
+        leftMargin: Theme.space2
+        rightMargin: Theme.space2
+        topMargin: Theme.space3
         clip: false
         keyNavigationEnabled: true
         highlightMoveDuration: Theme.animMove
-        preferredHighlightBegin: 8
-        preferredHighlightEnd: width - row.tileWidth - 8
+        preferredHighlightBegin: Theme.space2
+        preferredHighlightEnd: width - row.tileWidth - Theme.space2
         highlightRangeMode: ListView.ApplyRange
         boundsBehavior: Flickable.StopAtBounds
 
@@ -97,6 +98,8 @@ FocusScope {
             required lastPlayed
             required available
             required unavailableReason
+            required present
+            required systemShortName
             width: row.tileWidth
             height: row.tileHeight
             selected: ListView.isCurrentItem && list.activeFocus
@@ -132,9 +135,9 @@ FocusScope {
         id: emptyBox
         visible: !row.hasGames
         anchors.top: heading.bottom
-        anchors.topMargin: 10
+        anchors.topMargin: Math.round(10 * Theme.scale)
         width: parent.width
-        height: 64
+        height: Math.round(64 * Theme.scale)
         radius: Theme.radius
         color: "transparent"
         border.color: Theme.border
