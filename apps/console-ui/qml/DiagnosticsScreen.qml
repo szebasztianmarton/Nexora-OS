@@ -194,16 +194,6 @@ FocusScope {
         Keys.onEnterPressed: screen.reload()
         Behavior on contentY { NumberAnimation { duration: Theme.animFast } }
 
-        Rectangle {
-            anchors.fill: parent
-            visible: flick.activeFocus
-            color: "transparent"
-            border.width: Theme.focusWidth
-            border.color: Theme.focusRing
-            radius: Theme.radiusSmall
-            z: 5
-        }
-
         Column {
             id: content
             width: flick.width
@@ -247,7 +237,9 @@ FocusScope {
                         font.pixelSize: section.mono ? Theme.fontTiny + 1 : Theme.fontSmall + 1
                         font.family: section.mono ? "monospace" : Qt.application.font.family
                         lineHeight: 1.15
-                        wrapMode: Text.WrapAnywhere
+                        // Log lines are often one long token; prose breaks between words (and a
+                        // long path still breaks inside itself when it has to).
+                        wrapMode: section.mono ? Text.WrapAnywhere : Text.Wrap
                     }
                 }
             }
@@ -362,5 +354,17 @@ FocusScope {
             Section { heading: "Last emulator output"; body: screen.app.lastOutput; mono: true }
             Section { heading: "Recent log"; body: screen.logLines.join("\n"); mono: true }
         }
+    }
+
+    // A sibling of the view, not part of the scrolled content: the whole frame stays on screen.
+    Rectangle {
+        objectName: "systemDetailsFocus"
+        anchors.fill: flick
+        z: 1
+        visible: flick.activeFocus
+        color: "transparent"
+        border.width: Theme.focusWidth
+        border.color: Theme.focusRing
+        radius: Theme.radiusSmall
     }
 }

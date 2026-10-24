@@ -313,6 +313,17 @@ Item {
             verify(label.font.pixelSize >= Theme.fontTiny, "key label " + label.font.pixelSize + " px")
         }
 
+        // One emulator handles *.rom: "Automatic" and that emulator start the same thing, so the
+        // row neither adjusts nor promises "← →".
+        function test_singleEmulatorRowDoesNotOfferChoice() {
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return details.visible })
+            const row = root.findByName(details, "detailsEmulator")
+            compare(row.choices.length, 2)
+            verify(!row.adjustable)
+            compare(row.description.indexOf("←"), -1, row.description)
+        }
+
         function test_unknownGameShowsErrorState() {
             details.open(-12345, grid)
             verify(details.visible)
