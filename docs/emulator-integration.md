@@ -2,7 +2,7 @@
 
 Nexora does not contain emulators. It launches native Linux emulator executables that you configure, supervises the process, and brings the shell back when it ends. This page describes the emulator definition format (the "adapter" description), the availability checks, the launch lifecycle, pausing, failure handling and the launch history.
 
-> **Compatibility:** no real emulator has been tested with Nexora. All behaviour below is verified with `nexora-fake-emulator` (`tests/fixtures/fake-emulator/`), a small program that can start slowly, print, crash, ignore SIGTERM or exit with any code. No emulator is shipped in the image; its only definition, `example.json`, runs `/bin/true`.
+> **Compatibility:** no real emulator has been tested with Nexora. All behaviour below is verified with `nexora-fake-emulator` (`tests/fixtures/fake-emulator/`), a small program that can start slowly, print, crash, ignore SIGTERM or exit with any code. No emulator binary is shipped in the image. The two definitions shipped are `example.json`, which runs `/bin/true`, and `xenia.json` ([Xenia](#xenia-xbox-360)), whose binary arrives with sub-project C.
 
 Code: `shared/include/nexora/shared/EmulatorConfig.h`, `shared/src/ConfigLoader.cpp`, `apps/emulator-manager/` (`EmulatorManager`, `EmulatorProcessState`, `EmulatorHealth`, `LaunchHistory`), `apps/console-ui/src/AppController.cpp`, `LibraryController.cpp`.
 
@@ -19,6 +19,7 @@ Code: `shared/include/nexora/shared/EmulatorConfig.h`, `shared/src/ConfigLoader.
 - [Launch history and output logs](#launch-history-and-output-logs)
 - [Choosing the emulator for a game](#choosing-the-emulator-for-a-game)
 - [Failure handling](#failure-handling)
+- [Xenia (Xbox 360)](#xenia-xbox-360)
 - [Limitations](#limitations)
 - [Future plan: RetroArch and PPSSPP](#future-plan-retroarch-and-ppsspp)
 
@@ -67,7 +68,7 @@ Files over 256 KiB are rejected; an invalid file is skipped and reported while v
 
 ## Gaming systems
 
-The built-in catalog (`config/systems/systems.json`, compiled in as a resource, format version 1) defines 19 systems: `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `nds`, `genesis`, `sms`, `gamegear`, `psx`, `ps2`, `psp`, `gamecube`, `wii`, `pce`, `atari2600`, `arcade`, `dos`, each with a name, short name and extensions. Extensions such as `.iso`, `.chd` and `.zip` deliberately map to several systems; such games get a list of candidates and no automatic system until you pick one in the game details. An extension alone never makes a file "compatible": a game can only be launched with an emulator that declares its extension.
+The built-in catalog (`config/systems/systems.json`, compiled in as a resource, format version 1) defines 20 systems: `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `nds`, `genesis`, `sms`, `gamegear`, `psx`, `ps2`, `psp`, `gamecube`, `wii`, `xbox360`, `pce`, `atari2600`, `arcade`, `dos`, each with a name, short name and extensions. Extensions such as `.iso`, `.chd` and `.zip` deliberately map to several systems; such games get a list of candidates and no automatic system until you pick one in the game details. An extension alone never makes a file "compatible": a game can only be launched with an emulator that declares its extension.
 
 ## Health and availability
 
@@ -210,7 +211,7 @@ A save succeeds only when the answer arrives within `timeoutMs` and the file is 
 - Quick menu › Exit game (confirmation: unsaved progress may be lost), the running overlay's Stop (same confirmation, default Cancel), the game bar's Stop emulator (second press), or holding **Select + Start** for 1 s (no confirmation; [controller-support.md](controller-support.md)).
 - The emulator is started as the leader of its own **process group** (`setpgid(0, 0)` between fork and exec), and every signal goes to the whole group (falling back to the direct child if the group is gone), so wrapper scripts and helper processes it spawns are stopped, paused and resumed with it.
 - `stop()` sends SIGTERM to the group and arms a timer with the emulator's `stopTimeoutMs`; if the process is still alive, SIGKILL to the group. A `stop()` during `Starting`, before the pid is known, sends SIGTERM as soon as the process has started instead of waiting for the kill timer. When the emulator exits after a requested stop, anything left in its group (e.g. a helper that ignores SIGTERM) gets SIGKILL. Tested: `tst_emulatormanager::stopTerminatesGrandchildren`, `stopDuringStartingIsFast` (fake emulator `--spawn-child`).
-- On application exit the session manager first saves the running game for [Quick Resume](quick-resume.md#shutdown-and-power) when its emulator supports it; then `shutdown()` sends SIGTERM to the emulator's group and SIGKILL only if it is still running after min(`stopTimeoutMs`, 3 s) (`tst_emulatormanager::shutdownTerminatesBeforeKilling`). `PR_SET_PDEATHSIG` sends SIGTERM to the direct child if the UI dies (grandchildren are not covered by that).
+- On application exit the session manager first saves the running game for [Quick Resume](quick-resume.md#shutdown-and-power) when its emulator supports it; then `shutdown()` sends SIGTERM to the emulator's group and SIGKILL only if it is still running after min(`stopTimeoutMs`, 3 s) (`tst_emulatormanager::shutdownTerminatesBeforeKilling`); the run then ends as `Exited` like a stop and is recorded in the launch history (`shutdownEndsTheRunLikeStop`). `PR_SET_PDEATHSIG` sends SIGTERM to the direct child if the UI dies (grandchildren are not covered by that).
 
 ## Launch history and output logs
 
@@ -241,6 +242,37 @@ The launch profile is `emulators.defaultProfiles[<emulator>]` when it exists and
 | Duplicate launch | refused while a process is active (`AlreadyActive`) |
 | Controller disconnected while playing | notice "Controller disconnected: <name>"; the emulator keeps running |
 | Shell exits while an emulator runs | the emulator's process group is killed (bounded wait), or, if the UI crashes, the direct child receives SIGTERM via `PR_SET_PDEATHSIG` |
+
+## Xenia (Xbox 360)
+
+Xenia (xenia-canary) is the Xbox 360 emulator. Its definition ships as `config/emulators/xenia.json` next to `example.json`:
+
+```json
+{
+  "id": "xenia",
+  "name": "Xenia (Xbox 360)",
+  "version": "1.0",
+  "executable": "/usr/lib/nexora/emulators/xenia/xenia-launch",
+  "arguments": ["{file}"],
+  "extensions": [".iso", ".xex"],
+  "systems": ["xbox360"],
+  "pausable": false,
+  "stopTimeoutMs": 10000,
+  "enabled": true
+}
+```
+
+- **Launch:** the executable is `xenia-launch`, a wrapper delivered by sub-project C. It checks that the CPU supports AVX (xenia-canary is built with AVX and does not run without it) and then runs `xenia_canary --fullscreen=true --gpu=vulkan --discord=false --storage_root=<data>/emulators/xenia <file>`. The data path and Xenia flags stay in the wrapper, so the static definition does not depend on the data partition.
+- **Not pausable:** `pausable` is `false`. SIGSTOP on a Vulkan process is untested, so the quick menu never offers pause for Xenia.
+- **No Quick Resume:** the definition has no `capabilities` block. Xenia has no external save-state API for Nexora to drive, so [Quick Resume](quick-resume.md) is not offered. Stopping sends SIGTERM and SIGKILL after 10 s ([Stopping](#stopping)).
+- **Candidates:** `.iso` and `.xex`. A `.xex` file maps only to `xbox360`. An `.iso` reaches Xenia only when the Xbox disc probe identifies it as `xbox360` ([game-library.md](game-library.md#gaming-systems)).
+- **Status on the image:** Xenia cannot run on the image yet. It needs:
+  - sub-project B (image): Buildroot 2026.08.x, Mesa anv and radv Vulkan with GLX, cage and Xwayland, with the UI as a Wayland client and EGLFS as the fallback;
+  - sub-project C (package): the xenia-canary AppImage unpacked at build time, and the `xenia-launch` wrapper.
+
+  Until C installs the binary, health reports `ExecutableMissing` with the expected path as the detail, and a launch is refused with "Emulator executable not found".
+- **Not tested:** no Xbox 360 title has been run through Nexora, on hardware or otherwise. xenia-canary on Linux is experimental upstream.
+- **Disc types:** rebuilt (xiso) original Xbox images also carry the XDVDFS signature and are reported as `xbox360`, so Xenia is offered for them even though it does not run original Xbox games. Full original Xbox disc dumps (XGD1) are not probed at their partition offset (`0x18300000`). GOD/STFS containers are not detected.
 
 ## Limitations
 

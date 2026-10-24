@@ -29,23 +29,25 @@ FocusScope {
     property bool listMode: false
     readonly property var sortOrders: ["title", "recent", "emulator", "added"]
     readonly property var hints: searchField.activeFocus
-        ? [{ button: "Type", action: "Search" }, { button: "Enter / ↓", action: "Results" },
-           { button: "B / Esc", action: "Leave search" }]
+        ? [{ button: "Type", action: "Search" }, { button: "Enter", action: "Results" },
+           { button: "↓", action: "Next row" }, { button: "B / Esc", action: "Leave search" }]
         : sortSelector.activeFocus
           ? [{ button: "← →", action: "Change sort" }, { button: "↓", action: "Games" },
-             { button: "↑", action: "Filters" }, { button: "L1 / R1", action: "Switch tab" }]
+             { button: "↑", action: "Filters" }, { button: "L1 / R1", action: "Switch tab" },
+             { button: "B / Esc", action: "Tabs" }]
           : emptyAction.activeFocus
             ? [{ button: "A / Enter", action: emptyAction.text }, { button: "↑", action: "Search & sort" },
-               { button: "L1 / R1", action: "Switch tab" }]
+               { button: "L1 / R1", action: "Switch tab" }, { button: "B / Esc", action: "Tabs" }]
           : chips.activeFocus || systemChips.activeFocus
             ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Apply" },
-               { button: "↑ ↓", action: "Rows" }, { button: "L1 / R1", action: "Switch tab" }]
+               { button: "↑ ↓", action: "Rows" }, { button: "L1 / R1", action: "Switch tab" },
+               { button: "B / Esc", action: "Tabs" }]
           : cancelScanButton.activeFocus
             ? [{ button: "A / Enter", action: "Cancel scan" }, { button: "↑ ↓", action: "Rows" }]
             : [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Details" },
                { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
                { button: "X / “/”", action: "Search" },
-               { button: "L1 / R1", action: "Switch tab" }]
+               { button: "L1 / R1", action: "Switch tab" }, { button: "B / Esc", action: "Tabs" }]
 
     // Systems that actually have games (the catalog lists every supported one).
     property int systemsRevision: 0
@@ -174,7 +176,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "⌕"
                     color: searchField.activeFocus ? Theme.accent : Theme.textMuted
-                    font.pixelSize: Math.round(22 * Theme.scale)
+                    font.pixelSize: Theme.fontLarge
                 }
             }
 
@@ -247,7 +249,7 @@ FocusScope {
                             anchors.centerIn: parent
                             text: chip.modelData.title
                             color: chip.selected ? Theme.text : Theme.textMuted
-                            font.pixelSize: Theme.fontSmall + 1
+                            font.pixelSize: Theme.fontSmall
                             font.bold: chip.selected
                         }
                         MouseArea {
@@ -356,7 +358,7 @@ FocusScope {
                     anchors.centerIn: parent
                     text: sysChip.modelData.shortName + "  " + sysChip.modelData.gameCount
                     color: sysChip.selected ? Theme.text : Theme.textMuted
-                    font.pixelSize: Theme.fontSmall + 1
+                    font.pixelSize: Theme.fontSmall
                     font.bold: sysChip.selected
                 }
                 MouseArea {
@@ -397,7 +399,7 @@ FocusScope {
             text: "Scanning" + (screen.library.scanCurrentRoot.length > 0 ? " " + screen.library.scanCurrentRoot : "")
                   + "…  " + screen.library.scanFilesSeen + (screen.library.scanFilesSeen === 1 ? " file" : " files") + " seen"
             color: Theme.text
-            font.pixelSize: Theme.fontSmall + 1
+            font.pixelSize: Theme.fontSmall
         }
         NxButton {
             id: cancelScanButton
@@ -431,7 +433,7 @@ FocusScope {
                   ? grid.count + (grid.count === 1 ? " game" : " games")
                   : grid.count + " of " + screen.library.totalCount + " games"
             color: Theme.textMuted
-            font.pixelSize: Theme.fontSmall + 1
+            font.pixelSize: Theme.fontSmall
         }
 
         Text {
@@ -495,7 +497,7 @@ FocusScope {
                     horizontalAlignment: Text.AlignHCenter
                     text: Theme.sortLabel(screen.library.sortOrder)
                     color: Theme.text
-                    font.pixelSize: Theme.fontSmall + 1
+                    font.pixelSize: Theme.fontSmall
                     font.bold: true
                     anchors.verticalCenter: parent.verticalCenter
                 }

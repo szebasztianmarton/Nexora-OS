@@ -17,7 +17,6 @@ FocusScope {
     required property SystemController system
     anchors.fill: parent
     visible: false
-    z: 40
 
     property var candidates: []
     property bool scanned: false
@@ -27,11 +26,16 @@ FocusScope {
 
     readonly property string updateState: updates.state
     readonly property bool busy: updateState === "checking" || updateState === "verifying" || updateState === "installing"
-    readonly property var hints: confirmInstall.visible
-        ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
-           { button: "B / Esc", action: "Cancel" }]
-        : [{ button: "↑ ↓", action: "Move" }, { button: "A / Enter", action: "Select" },
-           { button: "B / Esc", action: "Close" }]
+    // Back / Close work except while a bundle is checked or installed (verifying can be cancelled).
+    readonly property bool closable: !busy || updateState === "verifying"
+    readonly property var hints: confirmInstall.visible ? confirmInstall.hints : stateHints(updateState)
+
+    function stateHints(state) {
+        if (state === "checking" || state === "installing")
+            return [{ button: "", action: state === "installing" ? "Installing, please wait" : "Checking, please wait" }]
+        return [{ button: "↑ ↓", action: "Move" }, { button: "A / Enter", action: "Select" },
+                { button: "B / Esc", action: "Close" }]
+    }
 
     function open() {
         restoreFocusItem = Window.activeFocusItem
@@ -277,7 +281,7 @@ FocusScope {
                     }
                     SettingRow {
                         objectName: "updateClose"
-                        enabled: !panel.busy || panel.updateState === "verifying"
+                        enabled: panel.closable
                         label: "Close"
                         actionText: "Close"
                         onAccepted: panel.close()
@@ -304,7 +308,7 @@ FocusScope {
     })
 
     Keys.onPressed: (event) => {
-        if ((event.key === Qt.Key_Escape || event.key === Qt.Key_Back) && (!panel.busy || panel.updateState === "verifying"))
+        if ((event.key === Qt.Key_Escape || event.key === Qt.Key_Back) && panel.closable)
             panel.close()
         event.accepted = true
     }

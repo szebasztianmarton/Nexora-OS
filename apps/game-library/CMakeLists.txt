@@ -4,10 +4,12 @@ add_library(nexora_library STATIC
     include/nexora/library/GameDatabase.h
     include/nexora/library/LibraryQuery.h
     include/nexora/library/GameLibrary.h
+    include/nexora/library/XboxDiscProbe.h
     src/LibraryScanner.cpp
     src/GameDatabase.cpp
     src/LibraryQuery.cpp
     src/GameLibrary.cpp
+    src/XboxDiscProbe.cpp
 )
 add_library(Nexora::Library ALIAS nexora_library)
 

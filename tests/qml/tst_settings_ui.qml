@@ -62,6 +62,13 @@ Item {
                 dialog.close()
         }
 
+        // Theme is process-wide; leave the scale as found.
+        function cleanup() {
+            Theme.userScale = 1.0
+            Theme.glass = false
+            dialog.confirmText = "Confirm"
+        }
+
         // Settings screen reachable sections count 7 (spec §6.8): General, Controllers,
         // Display, Audio, Library, Emulators, System.
         function test_sevenSectionsPresent() {
@@ -137,6 +144,57 @@ Item {
             compare(confirmedSpy.count, 1)
             compare(cancelledSpy.count, 0)
             verify(!dialog.visible)
+        }
+
+        // At 150 % interface scale both buttons (each at least 140 px x scale) still fit inside
+        // the panel, right-aligned within its content margins.
+        function test_confirmDialogButtonsFitThePanelAtLargeScale() {
+            Theme.userScale = 1.5
+            dialog.open()
+            waitForRendering(dialog) // positioners lay out on polish
+            const panel = findByName(dialog, "confirmDialogPanel")
+            verify(panel !== null)
+            const margin = Theme.spacing * 1.5
+            const confirmPos = dialog.confirmButton.mapToItem(panel, 0, 0)
+            const cancelPos = dialog.cancelButton.mapToItem(panel, 0, 0)
+            verify(confirmPos.x + dialog.confirmButton.width <= panel.width - margin + 0.5,
+                   "confirm right edge " + (confirmPos.x + dialog.confirmButton.width) + " panel " + panel.width)
+            verify(cancelPos.x >= margin - 0.5, "cancel x " + cancelPos.x)
+            compare(Math.round(confirmPos.x + dialog.confirmButton.width), Math.round(panel.width - margin))
+            verify(panel.width <= root.width)
+        }
+
+        // The panel outline is a plain 1 px border: the only focus ring in the dialog is the
+        // focused button's. In glass the GlassSurface rim replaces the border.
+        function test_confirmDialogPanelHasNoFocusRingBorder() {
+            dialog.open()
+            const panel = findByName(dialog, "confirmDialogPanel")
+            compare(panel.border.width, 1)
+            compare(panel.border.color, Theme.border)
+            verify(!Qt.colorEqual(panel.border.color, Theme.focusRing))
+            Theme.glass = true
+            verify(Theme.glassActive)
+            compare(panel.border.width, 0)
+            verify(!Qt.colorEqual(panel.border.color, Theme.focusRing))
+        }
+
+        // When the buttons wrap onto two lines (Cancel below Confirm), Up/Down move between
+        // them; side by side, Up/Down stay where they are.
+        function test_confirmDialogWrappedButtonsNavigateVertically() {
+            dialog.open()
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Up)
+            verify(dialog.cancelButton.activeFocus)
+            dialog.close()
+            dialog.confirmText = "Delete every save state and screenshot of this game"
+            dialog.open()
+            waitForRendering(dialog) // positioners lay out on polish
+            tryVerify(function() { return dialog.cancelButton.y > dialog.confirmButton.y })
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Up) // Cancel -> Confirm
+            tryVerify(function() { return dialog.confirmButton.activeFocus })
+            keyClick(Qt.Key_Down) // Confirm -> Cancel
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
         }
     }
 }

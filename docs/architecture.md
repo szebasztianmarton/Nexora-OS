@@ -227,7 +227,7 @@ Nothing on the GUI thread waits for disk-heavy work or emulator discovery; healt
 ## Safety rules
 
 - No shell: every process is started with `QProcess` and an argument list; no command strings from metadata.
-- Executables are absolute, validated, never looked up in `PATH`, re-validated before each launch; game files are never opened or executed by Nexora.
+- Executables are absolute, validated, never looked up in `PATH`, re-validated before each launch; game files are never executed by Nexora, and the only file opened during a scan is the read-only Xbox 360 disc signature check on `.iso` files (see [security.md](security.md#2-malicious-rom-metadata-and-file-names)).
 - The UI refuses to run as root; privileged work is limited to two fixed-format FIFO protocols whose root helpers re-verify everything.
 - Every owned file is written atomically (0600) inside owner-only directories; corrupt files are moved aside; every persistent format carries a version.
 - Inputs are bounded (file sizes, record counts, log sizes, scan depth and count).

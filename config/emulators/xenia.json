@@ -1,0 +1,12 @@
+{
+  "id": "xenia",
+  "name": "Xenia (Xbox 360)",
+  "version": "1.0",
+  "executable": "/usr/lib/nexora/emulators/xenia/xenia-launch",
+  "arguments": ["{file}"],
+  "extensions": [".iso", ".xex"],
+  "systems": ["xbox360"],
+  "pausable": false,
+  "stopTimeoutMs": 10000,
+  "enabled": true
+}

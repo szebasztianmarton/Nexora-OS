@@ -357,7 +357,7 @@ ApplicationWindow {
             Rectangle {
                 objectName: "glassModalScrim"
                 anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.40)
+                color: Theme.modalScrim
                 visible: window.glassModalOpen
             }
         }
@@ -380,6 +380,7 @@ ApplicationWindow {
                 width: chrome.width - 2 * chrome.inset
                 app: window.app
                 library: window.library
+                sessions: window.sessions
             }
             NavTabBar {
                 id: tabBar
@@ -402,6 +403,7 @@ ApplicationWindow {
                 width: chrome.width - 2 * chrome.inset
                 visible: window.settings.showHints
                 hints: window.gameBar.quickMenuOpen ? quickMenu.hints
+                       : resumeFailedDialog.visible ? resumeFailedDialog.hints
                        : window.app.busy ? overlay.hints
                        : tutorial.visible ? tutorial.hints
                        : updatePanel.visible ? updatePanel.hints
@@ -439,8 +441,9 @@ ApplicationWindow {
                 window.focusSearch()
                 break
             case Qt.Key_F:
-                if (ctrl)
-                    window.focusSearch()
+                if (!ctrl)
+                    return
+                window.focusSearch()
                 break
             case Qt.Key_Slash:
                 window.focusSearch()
@@ -510,9 +513,12 @@ ApplicationWindow {
         sessions: window.sessions
     }
 
+    // Below the tutorial and the running-emulator overlay: a game started meanwhile (e.g. from
+    // the game bar) shows its overlay on top; the panel closes then unless it cannot be left.
     UpdatePanel {
         id: updatePanel
         parent: overlayArea
+        z: 8
         glassBackdrop: sceneLayer
         updates: window.updates
         system: window.system
@@ -547,10 +553,13 @@ ApplicationWindow {
         anchors.fill: parent
         z: 10
         app: window.app
+        sessions: window.sessions
         visible: window.app.busy
         onQuickMenuRequested: window.gameBar.openQuickMenu()
         onVisibleChanged: {
             if (visible) {
+                if (updatePanel.visible && updatePanel.closable)
+                    updatePanel.close()
                 const item = window.activeFocusItem
                 if (item && (window.pageIndexOf(item) >= 0 || window.inLayer(item, details)))
                     window.focusBeforeOverlay = item
@@ -571,6 +580,7 @@ ApplicationWindow {
         library: window.library
         settings: window.settings
         system: window.system
+        sessions: window.sessions
         onNavigate: (tab) => window.navigate(tab)
     }
     Connections {

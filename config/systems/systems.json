@@ -16,6 +16,7 @@
     { "id": "psp", "name": "Sony PlayStation Portable", "shortName": "PSP", "extensions": [".iso", ".cso"] },
     { "id": "gamecube", "name": "Nintendo GameCube", "shortName": "GameCube", "extensions": [".iso", ".rvz", ".gcm"] },
     { "id": "wii", "name": "Nintendo Wii", "shortName": "Wii", "extensions": [".wbfs", ".rvz"] },
+    { "id": "xbox360", "name": "Microsoft Xbox 360", "shortName": "Xbox 360", "extensions": [".iso", ".xex"] },
     { "id": "pce", "name": "NEC PC Engine / TurboGrafx-16", "shortName": "PC Engine", "extensions": [".pce"] },
     { "id": "atari2600", "name": "Atari 2600", "shortName": "Atari 2600", "extensions": [".a26"] },
     { "id": "arcade", "name": "Arcade", "shortName": "Arcade", "extensions": [".zip"] },

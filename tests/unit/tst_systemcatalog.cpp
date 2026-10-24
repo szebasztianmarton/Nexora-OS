@@ -25,9 +25,9 @@ private slots:
     void builtInLoads()
     {
         const SystemCatalog catalog = SystemCatalog::builtIn();
-        QVERIFY2(catalog.systems().size() >= 19, qPrintable(QString::number(catalog.systems().size())));
+        QVERIFY2(catalog.systems().size() >= 20, qPrintable(QString::number(catalog.systems().size())));
         for (const char *id : {"nes", "snes", "n64", "gb", "gbc", "gba", "nds", "genesis", "sms", "gamegear", "psx",
-                               "ps2", "psp", "gamecube", "wii", "pce", "atari2600", "arcade", "dos"})
+                               "ps2", "psp", "gamecube", "wii", "xbox360", "pce", "atari2600", "arcade", "dos"})
             QVERIFY2(catalog.find(QLatin1String(id)), id);
         QVERIFY(catalog.find(QStringLiteral("nope")) == nullptr);
         QCOMPARE(catalog.find(QStringLiteral("snes"))->shortName, QStringLiteral("SNES"));
@@ -47,6 +47,9 @@ private slots:
         QCOMPARE(catalog.systemsForExtension(QStringLiteral(".sfc")), QStringList{QStringLiteral("snes")});
         QCOMPARE(catalog.systemsForExtension(QStringLiteral(".SFC")), QStringList{QStringLiteral("snes")});
         QVERIFY(catalog.systemsForExtension(QStringLiteral(".iso")).size() >= 2);
+        QCOMPARE(catalog.systemsForExtension(QStringLiteral(".xex")), QStringList{QStringLiteral("xbox360")});
+        QVERIFY(catalog.systemsForExtension(QStringLiteral(".iso")).contains(QStringLiteral("xbox360")));
+        QCOMPARE(catalog.find(QStringLiteral("xbox360"))->shortName, QStringLiteral("Xbox 360"));
         QVERIFY(catalog.systemsForExtension(QStringLiteral(".zzz")).isEmpty());
     }
 

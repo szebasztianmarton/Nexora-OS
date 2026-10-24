@@ -24,7 +24,7 @@ graph TD
     fw[UEFI firmware] --> grub["GRUB (EFI/BOOT/bootx64.efi)<br/>grub.cfg + grubenv on nexora-esp"]
     grub -->|"slot A or B: /boot/bzImage<br/>root=PARTUUID, nexora.slot=X"| kernel[Linux kernel]
     kernel --> init[BusyBox init, rcS]
-    init --> data["<b>S01nexora-data</b><br/>mount ESP on /boot/efi,<br/>e2fsck -p + mount nexora-data on /home<br/>(≤ 10 s, never fails the boot)"]
+    init --> data["<b>S01nexora-data</b><br/>mount ESP on /boot/efi,<br/>e2fsck -p + mount nexora-data on /home<br/>(≤ 10 s wait + ≤ 10 s e2fsck, never fails the boot)"]
     data --> logd["S01syslogd, S02klogd, S02sysctl"]
     logd --> udev["S10udevd<br/>coldplug, GPU/input modules"]
     udev --> powerd["<b>S80nexora-powerd</b><br/>FIFO /run/nexora/power-request"]
@@ -145,7 +145,7 @@ Current files are moved aside as `*.pre-restore-<timestamp>` before anything is 
 
 ### Get a root shell
 
-The serial console (ttyS0, 115200 baud) and tty2 always offer a login; on the development image root has no password. Or boot "maintenance shell: no console UI". From a shell: `/etc/init.d/S90nexora stop|start|restart`, and `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to keep the UI off.
+The serial console (ttyS0, 115200 baud) and tty2 always offer a login; on the development image root has no password. Or boot "maintenance shell: no console UI". From a shell: `/etc/init.d/S90nexora stop|start|restart`, and `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to keep the UI off. `stop` waits up to 35 s (`NEXORA_STOP_TIMEOUT`) for the UI to exit, which covers saving a running game for Quick Resume with the default 10 s `timeoutMs` (the UI needs up to 2 × `timeoutMs` + 8 s), then KILLs the UI and its supervisor.
 
 ### Repair the data partition
 

@@ -140,11 +140,11 @@ FocusScope {
                 color: cell.selected ? Theme.surfaceHover : Theme.surfaceRaised
                 border.width: cell.selected ? Theme.focusWidth : 1
                 border.color: cell.selected ? Theme.focusRing : Theme.border
-                scale: cell.selected ? 1.03 : 1.0
+                scale: cell.selected && !Theme.reducedMotion ? 1.03 : 1.0
                 Behavior on scale { NumberAnimation { duration: Theme.animFast } }
                 Accessible.role: Accessible.Button
                 Accessible.name: cell.modelData.name
-                Accessible.description: cell.modelData.gameCount + " games"
+                Accessible.description: cell.modelData.gameCount === 1 ? "1 game" : cell.modelData.gameCount + " games"
 
                 Rectangle {
                     id: badge
@@ -207,11 +207,43 @@ FocusScope {
     }
 
     Column {
+        id: loading
         objectName: "systemsLoading"
         anchors.centerIn: grid
         visible: grid.count === 0 && screen.library.scanning
+        spacing: Theme.space3
+        Item {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.round(56 * Theme.scale)
+            height: width
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: "transparent"
+                border.color: Theme.border
+                border.width: Math.round(5 * Theme.scale)
+            }
+            Rectangle {
+                width: Math.round(14 * Theme.scale)
+                height: width
+                radius: width / 2
+                color: Theme.accent
+                x: parent.width / 2 - width / 2
+                y: -width / 4
+            }
+            RotationAnimation on rotation {
+                // A continuous spin, not a discrete transition: reducedMotion stops it
+                // outright rather than collapsing its duration to 0 (the Games screen's spinner).
+                running: loading.visible && !Theme.reducedMotion
+                from: 0
+                to: 360
+                duration: 1100
+                loops: Animation.Infinite
+            }
+        }
         Text {
             textFormat: Text.PlainText
+            anchors.horizontalCenter: parent.horizontalCenter
             text: "Scanning your library…"
             color: Theme.text
             font.pixelSize: Theme.fontLarge

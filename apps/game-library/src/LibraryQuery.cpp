@@ -64,7 +64,8 @@ QList<GameEntry> LibraryQuery::apply(QList<GameEntry> entries, const QueryOption
     case SortOrder::Recent: std::sort(entries.begin(), entries.end(), byRecent); break;
     case SortOrder::Emulator:
         std::sort(entries.begin(), entries.end(), [&](const GameEntry &a, const GameEntry &b) {
-            const int c = a.emulatorId().compare(b.emulatorId());
+            const int c = effectiveEmulatorId(a, options.systemDefaultEmulators)
+                              .compare(effectiveEmulatorId(b, options.systemDefaultEmulators));
             return c != 0 ? c < 0 : byTitle(a, b);
         });
         break;
@@ -78,6 +79,18 @@ QList<GameEntry> LibraryQuery::apply(QList<GameEntry> entries, const QueryOption
         entries.resize(options.recentLimit);
     }
     return entries;
+}
+
+QString LibraryQuery::effectiveEmulatorId(const GameEntry &entry, const QHash<QString, QString> &systemDefaultEmulators)
+{
+    if (!entry.emulatorOverride.isEmpty() && entry.emulatorCandidates.contains(entry.emulatorOverride))
+        return entry.emulatorOverride;
+    if (!entry.systemId.isEmpty()) {
+        const QString systemDefault = systemDefaultEmulators.value(entry.systemId);
+        if (!systemDefault.isEmpty() && entry.emulatorCandidates.contains(systemDefault))
+            return systemDefault;
+    }
+    return entry.emulatorCandidates.value(0);
 }
 
 SortOrder LibraryQuery::sortOrderFromString(const QString &name, SortOrder fallback)

@@ -83,7 +83,7 @@ The disk has a separate ext4 partition `nexora-data` (1 GiB, created empty) that
 | Application log | `/var/log/nexora/console-ui.log` (**tmpfs**, lost on reboot: the session supervisor passes `--log-file` there) |
 | Supervisor log | `/run/nexora-session/session.log` (tmpfs) |
 
-If the data partition does not appear within 10 s, `S01nexora-data` gives up and `/home` stays on the root filesystem: the UI still starts, but **its data is not persistent across updates** and is lost when the slot is rewritten. The recovery menu's "Show slots and versions" says whether the data partition is mounted. If `e2fsck -p` does not finish within the same budget or reports uncorrected errors, the partition is mounted read-only (settings changes and scans then fail to save; repair from a root shell with `e2fsck -f /dev/disk/by-partlabel/nexora-data`).
+If the data partition does not appear within 10 s, `S01nexora-data` gives up and `/home` stays on the root filesystem: the UI still starts, but **its data is not persistent across updates** and is lost when the slot is rewritten. The recovery menu's "Show slots and versions" says whether the data partition is mounted. If `e2fsck -p` does not finish within its own 10 s budget (`FSCK_TIMEOUT`, counted from when the device appears) or reports uncorrected errors, the partition is mounted read-only (settings changes and scans then fail to save; repair from a root shell with `e2fsck -f /dev/disk/by-partlabel/nexora-data`).
 
 None of this has run on a booted image yet <!-- TASK12-RESULT: replace with the observed first-boot behaviour once the A/B image has been booted -->; the layout is implemented in `genimage.cfg`, `post-image.sh` and `S01nexora-data`. Resizing the data partition to fill a larger disk is **not implemented**.
 
@@ -146,7 +146,7 @@ Restore is all or nothing:
 1. The manifest is read and **every** file is verified first: each path must be relative, must not contain `..`, must not be a symlink, must map to a known location, and its SHA-256 must match; a file in the backup that the manifest does not list is also a reason to refuse. Any problem → nothing is changed.
 2. The UI cancels and waits for a running scan and closes the library database.
 3. Each current file is renamed to `<file>.pre-restore-<timestamp>`, then the backup copy is put in place. If any step fails, every file already swapped in this restore is rolled back to its previous content.
-4. The database is reopened, settings are reloaded and re-applied (volume, mute, mapping, dead zone, log level).
+4. The database is reopened, settings are reloaded and re-applied (volume, mute, mapping, dead zone, log level), and every setting whose value the restore changed is announced to its listeners (library directories and scan options, default profiles, notification options, display mode).
 
 Tested: `tst_backupservice` (hash verification, tampered file refused with nothing changed, `../../etc/passwd` entry refused, saves only on request, `.pre-restore-*` left behind, listing order, multi-file rollback) and `tst_uicontext` (round trip through the controller, settings re-applied).
 

@@ -61,7 +61,8 @@ buildroot-external/
 ├── scripts/
 │   ├── check-defconfig.sh        defconfig symbol-survival check
 │   └── check-kernel-fragment.sh  kernel fragment survival check
-└── tests/test-update-helper.sh   host test of nexora-updated / nexora-bootok (CTest test_update_helper)
+├── tests/test-update-helper.sh   host test of nexora-updated / nexora-bootok (CTest test_update_helper)
+└── tests/test-s90nexora-stop.sh  host test of "S90nexora stop" (CTest test_s90nexora_stop)
 ```
 
 ### The `nexora-os` package
@@ -129,7 +130,7 @@ buildroot-external/scripts/check-kernel-fragment.sh ~/br/out
 
 [`.github/workflows/buildroot.yml`](../.github/workflows/buildroot.yml):
 
-- **validate** (push/PR touching `buildroot-external/**`, and manual runs): shallow-clones the pinned Buildroot, runs `check-package --br2-external` on the whole tree and `scripts/check-defconfig.sh`.
+- **validate** (push/PR touching `buildroot-external/**`, and manual runs): shallow-clones the pinned Buildroot, runs `check-package --br2-external` on the whole tree and `buildroot-external/scripts/check-defconfig.sh`.
 - **image** (only `workflow_dispatch` with `full_build: true`): full build on `/mnt`, caches `dl/`, uploads `disk.img.xz` and the build log. A cold build **may exceed the 6-hour limit of GitHub-hosted runners**; it has not been run on GitHub yet.
 
 ## Running in QEMU
@@ -192,7 +193,7 @@ GPU drivers are modules on purpose: built-in amdgpu/i915 would request their fir
 
 Boot sequence (BusyBox init → `/etc/init.d/rcS`):
 
-1. **`S01nexora-data`** — before udev, finds the partitions by GPT name on the boot disk through sysfs, mounts the ESP on `/boot/efi` (root only) and, after `e2fsck -p`, the data partition on `/home`; never blocks for more than 10 s and never fails the boot (details in [user-data.md](user-data.md#on-the-image)).
+1. **`S01nexora-data`** — before udev, finds the partitions by GPT name on the boot disk through sysfs, mounts the ESP on `/boot/efi` (root only) and, after `e2fsck -p`, the data partition on `/home`; waits at most 10 s for the partition (`DATA_TIMEOUT`) and gives `e2fsck` another 10 s (`FSCK_TIMEOUT`) counted from when the device appears, so it blocks for about 20 s at most, and never fails the boot (details in [user-data.md](user-data.md#on-the-image)).
 2. `S01syslogd`, `S02klogd`, `S02sysctl`, `S10udevd` (coldplug, module loading, `udevadm settle`), …
 3. **`S80nexora-powerd`** — starts the root power-request daemon (below).
 4. **`S85nexora-updated`** — starts the root update install daemon (FIFO `/run/nexora/update-request`, [update-system.md](update-system.md#the-root-helper-nexora-updated)).
@@ -234,7 +235,7 @@ Login prompts are never disabled:
 - **GRUB entry "Nexora OS (maintenance shell: no console UI)"** — boots with `nexora.noui`, so tty1 shows the normal console and the logins above are available. Press any arrow key during the 3 s GRUB timeout to select it.
 - **GRUB entry "Nexora OS (recovery menu)"** — boots with `nexora.recovery`: a keyboard-driven text menu (slots and versions, boot the previous slot, reset preferences, export diagnostics, restore the latest backup, repair the boot environment, reboot, shell). See [recovery.md](recovery.md).
 - **GRUB entry "Nexora OS (previous slot)"** — boots the other root slot once.
-- From a root shell: `/etc/init.d/S90nexora stop|start|restart`; set `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to disable autostart persistently.
+- From a root shell: `/etc/init.d/S90nexora stop|start|restart`; set `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to disable autostart persistently. `stop` waits up to 35 s (`NEXORA_STOP_TIMEOUT`) for the UI to exit, which covers saving a running game for Quick Resume with the default 10 s `timeoutMs` (the UI needs up to 2 × `timeoutMs` + 8 s), then KILLs the UI and its supervisor.
 
 **Root password:** this is a development image — `BR2_TARGET_GENERIC_ROOT_PASSWD` is empty, so **root logs in without a password** on ttyS0/tty2. There are no network services (no SSH, no telnet), so access requires physical/serial access. Before distributing an image, set a password with `make menuconfig` → *System configuration* → *Root password* (or add `BR2_TARGET_GENERIC_ROOT_PASSWD="..."` to a local copy of the defconfig), or run `passwd` on the device (the root filesystem is writable ext4). The `nexora` user cannot log in (password field `*`).
 
@@ -310,10 +311,10 @@ Checks done before MVP 4 (single-root tree), in a container (Ubuntu 24.04 host, 
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Kconfig symbols | `scripts/check-defconfig.sh <buildroot> <out>` | all options of `nexora_x86_64_defconfig` present unchanged in the generated `.config` (0 problems). A negative test with two non-existent/unsatisfiable symbols reported both. |
+| Kconfig symbols | `buildroot-external/scripts/check-defconfig.sh <buildroot> <out>` | all options of `nexora_x86_64_defconfig` present unchanged in the generated `.config` (0 problems). A negative test with two non-existent/unsatisfiable symbols reported both. |
 | Every symbol exists in 2026.02.3 | grep of `Config.in` files | yes (Qt6, Mesa, eudev, GRUB2, Bootlin toolchain, linux-firmware, dejavu, alsa-utils, system options) |
 | `savedefconfig` round trip | `make savedefconfig` | the committed defconfig *is* the `savedefconfig` output |
-| Kernel fragment | `make linux-configure` + `scripts/check-kernel-fragment.sh` | all 68 options of `linux.fragment` present in the kernel `.config` of Linux 6.12.91 |
+| Kernel fragment | `make linux-configure` + `buildroot-external/scripts/check-kernel-fragment.sh` | all 68 options of `linux.fragment` present in the kernel `.config` of Linux 6.12.91 |
 | Lint | `utils/check-package --br2-external` on every file of the tree | 0 warnings (covers `Config.in`, `.mk`, defconfig, `.hash`, init scripts incl. shellcheck, all shell scripts) |
 | Supervisor logic | `nexora-session` run under BusyBox `sh` with a fake application (paths substituted) | correct arguments/environment; the app is a session leader with the VT as stdin; restart with 1/2/4 s backoff; gives up after the configured number of rapid failures; SIGTERM stops supervisor and app |
 | Source downloads | `make source` (with `BR2_DOWNLOAD_FORCE_CHECK_HASHES=y`) | exit 0, no errors: every package source was fetched and matched its hash, including Linux 6.12.91 against the tree's own `patches/linux/linux.hash`, Qt 6.9.1, Mesa 26.0.1 and GRUB 2.12 (2026-10-11) |

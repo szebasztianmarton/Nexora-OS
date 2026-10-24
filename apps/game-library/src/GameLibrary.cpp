@@ -94,6 +94,8 @@ QString GameLibrary::optionsSignature() const
         exts.append(it.key() + u'=' + it.value().join(u'|'));
     for (auto it = options.extensionSystems.cbegin(); it != options.extensionSystems.cend(); ++it)
         exts.append(QStringLiteral("system:") + it.key() + u'=' + it.value().join(u'|'));
+    for (auto it = options.emulatorSystems.cbegin(); it != options.emulatorSystems.cend(); ++it)
+        exts.append(QStringLiteral("emusys:") + it.key() + u'=' + it.value().join(u'|'));
     exts.sort();
     parts += exts;
     parts.append(m_options.followSymlinks ? QStringLiteral("follow") : QStringLiteral("nofollow"));

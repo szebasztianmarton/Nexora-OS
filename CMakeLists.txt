@@ -21,6 +21,11 @@ endif()
 option(BUILD_TESTING "Build the Nexora test suite" ON)
 option(NEXORA_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(NEXORA_BUILD_FAKE_EMULATOR "Build the fake emulator used by tests and dev runs" ON)
+option(NEXORA_DEV_FAKE_EMULATOR_CONFIGS
+       "Generate fake-ok/fake-fail/fake-crash/fake-long emulator definitions into the build tree for dev runs" OFF)
+# Game folder preset as library.directories for dev runs through <build>/share/nexora/settings-defaults.json.
+# Empty: <source>/.games when that folder exists (it is git-ignored), otherwise no preset.
+set(NEXORA_DEV_LIBRARY_DIR "" CACHE PATH "Game folder preset for dev runs (default: <source>/.games if present)")
 set(NEXORA_WITH_SDL3 "AUTO" CACHE STRING "Build the optional SDL3 gamepad backend (AUTO, ON, OFF)")
 set_property(CACHE NEXORA_WITH_SDL3 PROPERTY STRINGS AUTO ON OFF)
 
@@ -87,6 +92,12 @@ add_subdirectory(apps/console-ui)
 
 if(NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING)
     add_subdirectory(tests/fixtures/fake-emulator)
+else()
+    # The fake emulator is not built: remove the development definitions an earlier configure
+    # with NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON wrote, which would point at a missing binary.
+    foreach(id fake-ok fake-fail fake-crash fake-long)
+        file(REMOVE ${NEXORA_BUILD_CONFIG_DIR}/${id}.json)
+    endforeach()
 endif()
 
 if((NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING) AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -99,11 +110,33 @@ endif()
 
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/nexora)
 
-configure_file(config/emulators/example.json ${NEXORA_BUILD_CONFIG_DIR}/example.json COPYONLY)
-install(FILES config/emulators/example.json
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)
+foreach(definition example.json xenia.json)
+    configure_file(config/emulators/${definition} ${NEXORA_BUILD_CONFIG_DIR}/${definition} COPYONLY)
+    install(FILES config/emulators/${definition}
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora/emulators)
+endforeach()
 
 configure_file(config/systems/systems.json ${PROJECT_BINARY_DIR}/share/nexora/systems.json COPYONLY)
+
+# Development library folder: the console UI reads <appDir>/../share/nexora/settings-defaults.json as
+# its system-defaults layer (docs/settings.md), so a dev run scans the folder without any setup.
+# Never installed: the image gets no settings-defaults.json from here.
+set(_nexora_dev_library_dir "${NEXORA_DEV_LIBRARY_DIR}")
+if(_nexora_dev_library_dir STREQUAL "" AND IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.games")
+    set(_nexora_dev_library_dir "${PROJECT_SOURCE_DIR}/.games")
+endif()
+set(_nexora_dev_settings_defaults ${PROJECT_BINARY_DIR}/share/nexora/settings-defaults.json)
+if(_nexora_dev_library_dir)
+    get_filename_component(_nexora_dev_library_dir "${_nexora_dev_library_dir}" ABSOLUTE)
+    string(REPLACE "\\" "\\\\" _nexora_dev_library_json "${_nexora_dev_library_dir}")
+    string(REPLACE "\"" "\\\"" _nexora_dev_library_json "${_nexora_dev_library_json}")
+    file(CONFIGURE OUTPUT ${_nexora_dev_settings_defaults}
+         CONTENT "{\n  \"version\": 1,\n  \"settings\": {\n    \"library.directories\": [\"@_nexora_dev_library_json@\"]\n  }\n}\n"
+         @ONLY)
+    message(STATUS "Dev library folder: ${_nexora_dev_library_dir}")
+else()
+    file(REMOVE ${_nexora_dev_settings_defaults})
+endif()
 install(FILES config/systems/systems.json
         DESTINATION ${CMAKE_INSTALL_DATADIR}/nexora)
 

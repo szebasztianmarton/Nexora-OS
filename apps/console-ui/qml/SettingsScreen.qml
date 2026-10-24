@@ -31,12 +31,13 @@ FocusScope {
                                         || confirmPowerOff.visible || confirmRestore.visible
     readonly property var hints: testPanel.visible ? testPanel.hints
         : overlayOpen
-        ? [{ button: "A / Enter", action: "Confirm" }, { button: "B / Esc", action: "Cancel" }]
+        ? confirmRestart.hints
         : inTextField
           ? [{ button: "Type", action: "Folder path" }, { button: "Enter", action: "Add folder" },
              { button: "B / Esc", action: "Leave field" }]
           : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Change" },
-             { button: "A / Enter", action: "Select" }, { button: "L1 / R1", action: "Switch tab" }]
+             { button: "A / Enter", action: "Select" }, { button: "L1 / R1", action: "Switch tab" },
+             { button: "B / Esc", action: "Tabs" }]
 
     // Action feedback (export/backup paths or why they failed, restore count) shown under
     // their own row only; there is no settings-level property for any of these, so it is
@@ -169,7 +170,7 @@ FocusScope {
         if (!item || !isInside(item))
             return
         const p = item.mapToItem(flick.contentItem, 0, 0)
-        const top = p.y - 48
+        const top = p.y - Math.round(48 * Theme.scale)
         const bottom = p.y + item.height + Theme.spacing * 3
         // The list scrolls under the glass bars: only the part between them counts.
         if (top < flick.contentY + screen.chromeTop)
@@ -264,7 +265,7 @@ FocusScope {
 
         Column {
             id: column
-            width: Math.min(flick.width - Theme.spacing * 4, 980)
+            width: Math.min(flick.width - Theme.spacing * 4, 980 * Theme.scale)
             x: (flick.width - width) / 2
             y: Theme.spacing * 1.5 + screen.chromeTop
             spacing: Theme.space2

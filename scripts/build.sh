@@ -17,10 +17,10 @@ for arg in "$@"; do
 done
 
 for tool in cmake ninja; do
-    command -v "$tool" >/dev/null 2>&1 || { echo "error: '$tool' not found; see docs/development.md" >&2; exit 1; }
+    command -v "$tool" >/dev/null 2>&1 || { echo "error: '$tool' not found; see docs/building.md" >&2; exit 1; }
 done
 command -v c++ >/dev/null 2>&1 || command -v g++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1 \
-    || { echo "error: no C++ compiler found; see docs/development.md" >&2; exit 1; }
+    || { echo "error: no C++ compiler found; see docs/building.md" >&2; exit 1; }
 
 cd "$(dirname "$0")/.."
 cmake --preset "$preset"

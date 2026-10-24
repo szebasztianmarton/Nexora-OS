@@ -86,7 +86,7 @@ public:
     std::chrono::milliseconds dedupWindow() const { return m_dedupWindow; }
 
     // Reads historyFile (warnings and criticals of earlier runs). Missing file is fine; an
-    // unreadable one is moved aside.
+    // unreadable one is moved aside. Nothing is written to historyFile before this runs.
     void loadHistory();
 
     static QString categoryName(Category category);
@@ -113,6 +113,7 @@ private:
     QList<Notification> m_history; // newest first
     QTimer m_hideTimer;
     quint64 m_nextId = 1;
+    bool m_historyLoaded = false; // persist() waits for loadHistory()
     bool m_quiet = false;
     QList<Category> m_hidden;
     int m_durationMs = 3500;

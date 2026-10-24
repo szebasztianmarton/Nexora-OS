@@ -24,8 +24,9 @@ FocusScope {
     readonly property var hints: grid.activeFocus
         ? [{ button: "↑ ↓ ← →", action: "Move" }, { button: "A / Enter", action: "Details" },
            { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
-           { button: "L1 / R1", action: "Switch tab" }]
-        : [{ button: "A / Enter", action: "Browse games" }, { button: "L1 / R1", action: "Switch tab" }]
+           { button: "L1 / R1", action: "Switch tab" }, { button: "B / Esc", action: "Tabs" }]
+        : [{ button: "A / Enter", action: browseButton.text }, { button: "L1 / R1", action: "Switch tab" },
+           { button: "B / Esc", action: "Tabs" }]
 
     function focusDefault() {
         if (grid.count > 0)
@@ -94,10 +95,40 @@ FocusScope {
     }
 
     Column {
+        id: loading
         objectName: screen.objectName + "Loading"
         anchors.centerIn: grid
         visible: grid.count === 0 && screen.library.scanning && screen.library.totalCount === 0
         spacing: Theme.space3
+        Item {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.round(56 * Theme.scale)
+            height: width
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: "transparent"
+                border.color: Theme.border
+                border.width: Math.round(5 * Theme.scale)
+            }
+            Rectangle {
+                width: Math.round(14 * Theme.scale)
+                height: width
+                radius: width / 2
+                color: Theme.accent
+                x: parent.width / 2 - width / 2
+                y: -width / 4
+            }
+            RotationAnimation on rotation {
+                // A continuous spin, not a discrete transition: reducedMotion stops it
+                // outright rather than collapsing its duration to 0 (the Games screen's spinner).
+                running: loading.visible && !Theme.reducedMotion
+                from: 0
+                to: 360
+                duration: 1100
+                loops: Animation.Infinite
+            }
+        }
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter

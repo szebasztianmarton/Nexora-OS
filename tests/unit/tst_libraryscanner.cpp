@@ -41,7 +41,74 @@ private:
         return n;
     }
 
+    // An .iso declared by ps2 and xbox360, handled by pcsx2, xenia and a generic emulator.
+    static ScanOptions isoOptions(const QString &root)
+    {
+        ScanOptions o;
+        o.roots = {root};
+        o.extensionMap = {{QStringLiteral(".iso"), {QStringLiteral("pcsx2"), QStringLiteral("xenia"),
+                                                     QStringLiteral("generic")}},
+                          {QStringLiteral(".xex"), {QStringLiteral("xenia")}}};
+        o.extensionSystems = {{QStringLiteral(".iso"), {QStringLiteral("ps2"), QStringLiteral("xbox360")}},
+                              {QStringLiteral(".xex"), {QStringLiteral("xbox360")}}};
+        o.emulatorSystems = {{QStringLiteral("pcsx2"), {QStringLiteral("ps2")}},
+                             {QStringLiteral("xenia"), {QStringLiteral("xbox360")}},
+                             {QStringLiteral("generic"), {}}};
+        return o;
+    }
+
+    static void xboxImage(const QString &path)
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QVERIFY(f.resize(0x20000));
+        QVERIFY(f.seek(0x10000));
+        f.write("MICROSOFT*XBOX*MEDIA");
+    }
+
 private slots:
+    void xboxIsoIsNarrowedToXbox()
+    {
+        QTemporaryDir dir;
+        xboxImage(dir.filePath(QStringLiteral("halo.iso")));
+        const auto r = LibraryScanner::scan(isoOptions(dir.path()));
+        QCOMPARE(r.files.size(), 1);
+        QCOMPARE(r.files.first().systemIds, QStringList{QStringLiteral("xbox360")});
+        QCOMPARE(r.files.first().emulatorIds, QStringList({QStringLiteral("xenia"), QStringLiteral("generic")}));
+    }
+
+    void otherIsoLosesXbox()
+    {
+        QTemporaryDir dir;
+        touch(dir.filePath(QStringLiteral("gt4.iso")), QByteArray(0x9000, '\0'));
+        const auto r = LibraryScanner::scan(isoOptions(dir.path()));
+        QCOMPARE(r.files.size(), 1);
+        QCOMPARE(r.files.first().systemIds, QStringList{QStringLiteral("ps2")});
+        QCOMPARE(r.files.first().emulatorIds, QStringList({QStringLiteral("pcsx2"), QStringLiteral("generic")}));
+    }
+
+    void xexIsNotProbed()
+    {
+        QTemporaryDir dir;
+        touch(dir.filePath(QStringLiteral("default.xex")));
+        const auto r = LibraryScanner::scan(isoOptions(dir.path()));
+        QCOMPARE(r.files.size(), 1);
+        QCOMPARE(r.files.first().systemIds, QStringList{QStringLiteral("xbox360")});
+        QCOMPARE(r.files.first().emulatorIds, QStringList{QStringLiteral("xenia")});
+    }
+
+    void isoWithoutXboxCandidateIsUntouched()
+    {
+        QTemporaryDir dir;
+        xboxImage(dir.filePath(QStringLiteral("x.iso")));
+        ScanOptions o = isoOptions(dir.path());
+        o.extensionSystems[QStringLiteral(".iso")] = {QStringLiteral("ps2"), QStringLiteral("psp")};
+        const auto r = LibraryScanner::scan(o);
+        QCOMPARE(r.files.size(), 1);
+        QCOMPARE(r.files.first().systemIds, QStringList({QStringLiteral("ps2"), QStringLiteral("psp")}));
+        QCOMPARE(r.files.first().emulatorIds.size(), 3);
+    }
+
     void findsConfiguredExtensionsOnly()
     {
         QTemporaryDir dir;

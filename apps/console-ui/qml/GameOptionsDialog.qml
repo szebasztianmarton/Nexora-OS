@@ -40,6 +40,15 @@ FocusScope {
         if (item && item.visible)
             item.forceActiveFocus()
     }
+    // The session Play would resume: the game's on the emulator it launches with. One game can
+    // have one per emulator; |suspended| is newest first.
+    function quickResumeSession(suspended, id, emulatorId) {
+        for (const s of suspended) {
+            if (s.gameId === id && s.emulatorId === emulatorId)
+                return s
+        }
+        return null
+    }
     function reload() {
         details = library.gameDetails(gameId)
         const r = []
@@ -54,11 +63,7 @@ FocusScope {
                 if (profiles[i].isDefault)
                     defaultName = profiles[i].name
             }
-            let saved = null
-            for (const s of (sessions ? sessions.suspended : [])) {
-                if (s.gameId === gameId)
-                    saved = s
-            }
+            const saved = quickResumeSession(sessions ? sessions.suspended : [], gameId, details.emulatorId)
             r.push({ kind: "play", id: "", label: saved ? "Resume" : "Play",
                      detail: saved ? "From the Quick Resume state saved " + saved.savedAt
                            : defaultName.length > 0 ? "Default profile “" + defaultName + "”" : "Emulator defaults" })
@@ -135,9 +140,12 @@ FocusScope {
 
     Rectangle {
         id: panel
+        objectName: "gameOptionsPanel"
+        // Tallest the panel may get; the option list takes what the header leaves of it.
+        readonly property real maxHeight: parent.height - Math.round(48 * Theme.scale)
         anchors.centerIn: parent
-        width: Math.min(parent.width - 64, 620)
-        height: Math.min(parent.height - 48, column.implicitHeight + Theme.spacing * 3)
+        width: Math.min(parent.width - Math.round(64 * Theme.scale), Math.round(620 * Theme.scale))
+        height: Math.min(maxHeight, column.implicitHeight + Theme.spacing * 3)
         radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
         GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true; backdrop: dialog.glassBackdrop }
@@ -190,8 +198,10 @@ FocusScope {
                 id: optionList
                 objectName: "gameOptionsList"
                 width: parent.width
-                height: Math.min(contentHeight, 420)
-                spacing: 6
+                // Never past the bottom of the panel: the rest scrolls inside the (clipped) list.
+                height: Math.max(0, Math.min(contentHeight, Math.round(420 * Theme.scale),
+                                             panel.maxHeight - Theme.spacing * 3 - y))
+                spacing: Math.round(6 * Theme.scale)
                 clip: true
                 keyNavigationEnabled: true
                 model: dialog.rows
@@ -200,12 +210,13 @@ FocusScope {
                     required property var modelData
                     required property int index
                     width: optionList.width
-                    height: modelData.detail.length > 0 ? 56 : 44
-                    radius: 10
+                    // The 1.0-scale heights, or taller when the scaled text needs it.
+                    height: Math.max(modelData.detail.length > 0 ? 56 : 44, optionContent.implicitHeight + Theme.space4)
+                    radius: Theme.radiusSmall
                     readonly property bool current: ListView.isCurrentItem && optionList.activeFocus
                     color: current ? Theme.surfaceHover : Theme.surfaceRaised
                     border.width: current ? Theme.focusWidth : 1
-                    border.color: current ? Theme.accent : Theme.border
+                    border.color: current ? Theme.focusRing : Theme.border
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.label
                     Accessible.description: modelData.detail
@@ -216,17 +227,19 @@ FocusScope {
                         anchors.left: parent.left
                         anchors.leftMargin: Theme.spacing * 0.75
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 22
+                        width: Math.round(22 * Theme.scale)
                         text: option.modelData.kind === "emulator" ? (option.modelData.checked ? "●" : "○") : ""
                         color: Theme.accent
                         font.pixelSize: Theme.fontBody
                     }
                     Column {
+                        id: optionContent
+                        objectName: "gameOptionContent"
                         anchors.left: mark.right
                         anchors.right: parent.right
                         anchors.rightMargin: Theme.spacing
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
+                        spacing: Math.round(2 * Theme.scale)
                         Text {
                             textFormat: Text.PlainText
                             width: parent.width

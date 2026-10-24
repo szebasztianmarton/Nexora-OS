@@ -52,13 +52,14 @@ Rectangle {
     implicitWidth: Math.max((compact ? 96 : 140) * Theme.scale, content.implicitWidth + (compact ? Theme.space5 + Theme.space1 : Theme.space6 + Theme.space2))
     radius: glassy ? height / 2 : Theme.radiusSmall
     opacity: enabled ? 1.0 : 0.45
-    color: armed ? Qt.darker(Theme.danger, 2.4)
+    color: armed ? Theme.overlayArmed
          : glassy ? "transparent"
          : kind === "primary" ? (activeFocus ? Theme.accent : Theme.accentSoft)
          : mouse.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
     border.width: activeFocus ? Theme.focusWidth : (glassy ? 0 : 1)
-    border.color: activeFocus ? (armed || kind === "danger" ? Theme.danger
-                                 : Theme.highContrast ? Theme.focusRing
+    // High contrast: always the yellow focus ring, also on danger buttons.
+    border.color: activeFocus ? (Theme.highContrast ? Theme.focusRing
+                                 : armed || kind === "danger" ? Theme.danger
                                  : (kind === "primary" ? Theme.text : Theme.accent))
                               : (armed ? Theme.danger : Theme.border)
     Behavior on color { ColorAnimation { duration: Theme.animFast } }

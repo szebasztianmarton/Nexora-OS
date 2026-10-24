@@ -43,7 +43,14 @@ stop() {
 		echo "FAIL"
 		return "$status"
 	fi
+	# Bounded wait (about 10 s), then KILL so that a hung daemon cannot block shutdown.
+	tries=0
 	while running; do
+		if [ "$tries" -ge 100 ]; then
+			start-stop-daemon --stop --quiet --signal KILL --pidfile "$PIDFILE"
+			break
+		fi
+		tries=$((tries + 1))
 		sleep 0.1
 	done
 	rm -f "$PIDFILE" /run/nexora/power-request

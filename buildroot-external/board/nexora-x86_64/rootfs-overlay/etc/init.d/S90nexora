@@ -19,9 +19,14 @@ LOG_DIR="/var/log/nexora"
 DRM_WAIT_SECONDS=10
 RECOVERY_EXEC="/usr/libexec/nexora/nexora-recovery"
 RECOVERY_PIDFILE="/var/run/nexora-recovery.pid"
+APP="/usr/bin/nexora-console-ui"
 
 NEXORA_AUTOSTART=yes
 NEXORA_TTY=/dev/tty1
+# Seconds "stop" waits for the session before KILLing the UI and the
+# supervisor. Longer than the UI's exit budget with the default Quick Resume
+# timeoutMs of 10 s: 2 x 10 s + 5 s for the save, 3 s for the emulator.
+NEXORA_STOP_TIMEOUT=35
 
 # shellcheck source=/dev/null
 [ -r "/etc/default/$DAEMON" ] && . "/etc/default/$DAEMON"
@@ -81,11 +86,11 @@ start_recovery() {
 
 start() {
 	printf 'Starting %s: ' "$DAEMON"
-	if grep -qw "nexora.recovery" /proc/cmdline; then
+	if grep -qwF "nexora.recovery" /proc/cmdline; then
 		start_recovery
 		return
 	fi
-	if grep -qw "nexora.noui" /proc/cmdline; then
+	if grep -qwF "nexora.noui" /proc/cmdline; then
 		echo "skipped (nexora.noui on kernel command line)"
 		return 0
 	fi
@@ -130,7 +135,17 @@ stop() {
 		echo "FAIL"
 		return "$status"
 	fi
+	# Bounded wait (NEXORA_STOP_TIMEOUT), so that a hung session cannot block
+	# shutdown; then KILL the UI as well, so that "stop" never leaves it running
+	# without its supervisor.
+	tries=0
 	while running; do
+		if [ "$tries" -ge $((NEXORA_STOP_TIMEOUT * 10)) ]; then
+			start-stop-daemon --stop --quiet --signal KILL --exec "$APP"
+			start-stop-daemon --stop --quiet --signal KILL --pidfile "$PIDFILE"
+			break
+		fi
+		tries=$((tries + 1))
 		sleep 0.1
 	done
 	rm -f "$PIDFILE"

@@ -3,6 +3,7 @@
 #include "nexora/library/GameEntry.h"
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QtQml/qqmlregistration.h>
 
 #include <functional>
@@ -50,6 +51,10 @@ public:
 
     void setEmulatorInfo(EmulatorInfo info) { m_info = std::move(info); }
     void setSystemInfo(SystemInfo info) { m_systemInfo = std::move(info); }
+    // system id -> default emulator id (Settings › Emulators). The emulator roles resolve the
+    // same emulator as the launch path (LibraryQuery::effectiveEmulatorId) and refresh when
+    // the defaults change.
+    void setSystemDefaultEmulators(const QHash<QString, QString> &defaults);
     // Replaces the content; keeps rows whose ids did not change in place (no full reset
     // when only flags changed) so QML views keep their current item and focus.
     void setEntries(const QList<library::GameEntry> &entries);
@@ -65,6 +70,7 @@ private:
     QList<library::GameEntry> m_entries;
     EmulatorInfo m_info;
     SystemInfo m_systemInfo;
+    QHash<QString, QString> m_systemDefaultEmulators;
 };
 
 } // namespace nexora::ui

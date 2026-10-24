@@ -216,6 +216,64 @@ private slots:
         QCOMPARE(again.intValue(Settings::AudioVolume), 80);
     }
 
+    // A failed rename must leave the store as it was: no cleared overrides, no signals,
+    // and the user file still in place. A directory at <file>.bak cannot be removed or
+    // renamed over, which makes the rename fail deterministically.
+    void resetKeepsValuesWhenRenameFails()
+    {
+        QTemporaryDir dir;
+        const QString user = dir.filePath(QStringLiteral("settings.json"));
+        Settings s({{}, user});
+        s.load();
+        QVERIFY(s.setValue(Settings::AudioVolume, 5));
+        QVERIFY(s.save());
+        const QString backup = user + QStringLiteral(".bak");
+        write(backup + QStringLiteral("/blocker"), "x");
+        QVERIFY(QFileInfo(backup).isDir());
+        QSignalSpy changed(&s, &Settings::valueChanged);
+        QVERIFY(!s.resetToDefaults());
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(s.intValue(Settings::AudioVolume), 5);
+        QVERIFY(s.isOverridden(Settings::AudioVolume));
+        QVERIFY(QFile::exists(user));
+        QVERIFY(QFileInfo(backup).isDir());
+    }
+
+    // Re-reading the file (e.g. after a backup restore) has to tell listeners which keys
+    // actually changed, exactly like setValue() does, or they keep stale copies.
+    void reloadEmitsValueChangedForChangedKeysOnly()
+    {
+        QTemporaryDir dir;
+        const QString user = dir.filePath(QStringLiteral("settings.json"));
+        write(user, wrap(R"({"audio.volume": 30, "ui.showHints": false, "library.directories": ["/games/a"]})").toUtf8());
+        Settings s({{}, user});
+        QVERIFY(s.load());
+        QCOMPARE(s.intValue(Settings::AudioVolume), 30);
+
+        // Changed: volume (30 -> 55), directories (override removed -> default), sort order
+        // (default -> "recent"). Unchanged: showHints stays false.
+        write(user, wrap(R"({"audio.volume": 55, "ui.showHints": false, "library.sortOrder": "recent"})").toUtf8());
+        QSignalSpy changed(&s, &Settings::valueChanged);
+        QSignalSpy reloaded(&s, &Settings::reloaded);
+        QVERIFY(s.load());
+        QCOMPARE(reloaded.size(), 1);
+
+        QVariantMap emitted;
+        for (const QList<QVariant> &args : changed)
+            emitted.insert(args.at(0).toString(), args.at(1));
+        QCOMPARE(changed.size(), 3); // one signal per changed key, none for unchanged ones
+        QCOMPARE(emitted.value(Settings::AudioVolume).toInt(), 55);
+        QCOMPARE(emitted.value(Settings::LibrarySortOrder).toString(), QStringLiteral("recent"));
+        QVERIFY(emitted.contains(Settings::LibraryDirectories));
+        QVERIFY(emitted.value(Settings::LibraryDirectories).toStringList().isEmpty());
+        QVERIFY(!emitted.contains(Settings::UiShowHints));
+
+        // Loading the same content again is silent.
+        changed.clear();
+        QVERIFY(s.load());
+        QCOMPARE(changed.size(), 0);
+    }
+
     void savedFileIsVersionedJson()
     {
         QTemporaryDir dir;

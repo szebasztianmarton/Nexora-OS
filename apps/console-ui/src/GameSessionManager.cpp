@@ -230,10 +230,10 @@ GameSessionManager::Record *GameSessionManager::findRecord(const QString &sessio
     return nullptr;
 }
 
-GameSessionManager::Record *GameSessionManager::findRecordForGame(qint64 gameId)
+GameSessionManager::Record *GameSessionManager::findRecordForGame(qint64 gameId, const QString &emulatorId)
 {
     for (Record &r : m_records) {
-        if (r.gameId == gameId)
+        if (r.gameId == gameId && r.emulatorId == emulatorId)
             return &r;
     }
     return nullptr;
@@ -324,6 +324,7 @@ QVariantList GameSessionManager::suspended() const
             {QStringLiteral("id"), r.id},
             {QStringLiteral("gameId"), double(r.gameId)},
             {QStringLiteral("title"), r.gameTitle},
+            {QStringLiteral("emulatorId"), r.emulatorId},
             {QStringLiteral("emulatorName"), config ? config->name : r.emulatorId},
             {QStringLiteral("savedAt"), QLocale().toString(latest.savedAt.toLocalTime(), QLocale::ShortFormat)},
             {QStringLiteral("bytes"),
@@ -457,12 +458,13 @@ bool GameSessionManager::startGame(const library::GameEntry &entry, const QStrin
         notify(Category::Game, Severity::Warning, tr("Another game is still running"));
         return false;
     }
-    if (preferResume) {
-        if (Record *existing = findRecordForGame(entry.id); existing && existing->emulatorId == emulatorId)
-            return resume(existing->id);
-    }
+    // A state belongs to the emulator that wrote it: the same game on another emulator gets
+    // its own session, and the existing one is left untouched.
+    const Record *existing = findRecordForGame(entry.id, emulatorId);
+    if (preferResume && existing)
+        return resume(existing->id);
     Record record;
-    if (const Record *existing = findRecordForGame(entry.id))
+    if (existing)
         record = *existing; // same session directory; its states are kept until a new one is saved
     else
         record.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -609,6 +611,12 @@ void GameSessionManager::onSaveFinished(bool ok, const QString &file, const QStr
     QString hashError;
     SavedState state;
     state.file = QFileInfo(file).fileName();
+    // A verified state is never re-recorded: the emulator must have written a new file.
+    if (std::any_of(m_active->record.states.cbegin(), m_active->record.states.cend(),
+                    [&](const SavedState &s) { return s.file == state.file; })) {
+        failed(tr("the emulator reported an already recorded state file (%1)").arg(state.file));
+        return;
+    }
     state.bytes = QFileInfo(file).size();
     state.sha256 = sha256Of(file, &hashError);
     state.savedAt = QDateTime::currentDateTimeUtc();
@@ -664,8 +672,12 @@ void GameSessionManager::onCloseTimeout()
 
 void GameSessionManager::onProcessFinished(const emulator::ProcessOutcome &outcome)
 {
-    if (!m_active)
+    if (!m_active) {
+        // An emulator started without a session (Emulators screen) ended; a pending power
+        // request waits for exactly that.
+        finishPower(true);
         return;
+    }
     m_closeTimer.stop();
     Active finished = std::move(*m_active);
     m_active.reset();

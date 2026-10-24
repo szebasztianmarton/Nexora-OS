@@ -117,6 +117,9 @@ QtObject {
     readonly property color overlayArtEmpty: highContrast ? "#000000" : glass ? Qt.rgba(0, 0, 0, 0.35) : "#0d0f14"
     // Translucent tints for warning panels and badges over artwork.
     readonly property color dangerTint: highContrast ? "#000000" : Qt.rgba(1, 0.39, 0.45, 0.10)
+    // Scrim behind glass modals (dialogs, keyboard, pickers, window-level overlays); docked
+    // themes dim with the background instead.
+    readonly property color modalScrim: highContrast ? background : Qt.rgba(0, 0, 0, 0.40)
     readonly property color badgeScrim: highContrast ? "#000000" : Qt.rgba(0, 0, 0, 0.6)
     readonly property color artInk: highContrast ? "#ffffff" : Qt.rgba(1, 1, 1, 0.85)
 
@@ -137,8 +140,9 @@ QtObject {
     readonly property real radiusXL: Math.round(24 * scale)
 
     // --- Typography (base px × scale) -----------------------------------------------------------
-    readonly property real fontTiny: Math.round(12 * scale)
-    readonly property real fontSmall: Math.round(14 * scale)
+    // Never below the 12 px minimum, also at the 75 % interface scale.
+    readonly property real fontTiny: Math.max(12, Math.round(12 * scale))
+    readonly property real fontSmall: Math.max(12, Math.round(14 * scale))
     readonly property real fontBody: Math.round(17 * scale)
     readonly property real fontLarge: Math.round(20 * scale)
     readonly property real fontTitle: Math.round(24 * scale)

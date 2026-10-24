@@ -131,6 +131,7 @@ private slots:
         const QString file = dir.filePath(QStringLiteral("notifications.json"));
         {
             NotificationService service(file);
+            service.loadHistory();
             service.post(Category::Library, Severity::Info, QStringLiteral("not kept"));
             service.post(Category::SaveState, Severity::Warning, QStringLiteral("Save failed"));
             service.post(Category::Recovery, Severity::Critical, QStringLiteral("Recovery needed"));
@@ -145,6 +146,66 @@ private slots:
         // An event of this run is not merged into the previous run's entry.
         again.post(Category::SaveState, Severity::Warning, QStringLiteral("Save failed"));
         QCOMPARE(again.history().size(), 3);
+    }
+
+    // main.cpp posts "Controller connected" before the history is loaded: this run's entries
+    // stay in front of the previous run's, and trimming drops the oldest previous-run ones.
+    void loadedHistoryGoesBehindThisRunsEntries()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath(QStringLiteral("notifications.json"));
+        {
+            NotificationService previous(file);
+            previous.loadHistory();
+            for (int i = 0; i < NotificationService::MaxPersisted; ++i)
+                previous.post(Category::SaveState, Severity::Warning, QStringLiteral("old %1").arg(i));
+        }
+        NotificationService service(file);
+        service.setQuiet(true);
+        const int thisRun = NotificationService::MaxHistory - NotificationService::MaxPersisted + 10;
+        for (int i = 0; i < thisRun; ++i)
+            service.post(Category::Library, Severity::Info, QStringLiteral("new %1").arg(i));
+        service.loadHistory();
+        const QVariantList history = service.history();
+        QCOMPARE(history.size(), NotificationService::MaxHistory);
+        QCOMPARE(history.first().toMap().value(QStringLiteral("text")).toString(),
+                 QStringLiteral("new %1").arg(thisRun - 1));
+        QVERIFY(!history.first().toMap().value(QStringLiteral("fromPreviousRun")).toBool());
+        QCOMPARE(history.at(thisRun - 1).toMap().value(QStringLiteral("text")).toString(), QStringLiteral("new 0"));
+        QCOMPARE(history.at(thisRun).toMap().value(QStringLiteral("text")).toString(),
+                 QStringLiteral("old %1").arg(NotificationService::MaxPersisted - 1));
+        QVERIFY(history.last().toMap().value(QStringLiteral("fromPreviousRun")).toBool());
+    }
+
+    // A warning posted before the history is loaded neither overwrites the previous run's file
+    // nor comes back from it as a second, previous-run copy.
+    void warningBeforeLoadKeepsThePreviousRun()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath(QStringLiteral("notifications.json"));
+        {
+            NotificationService previous(file);
+            previous.loadHistory();
+            previous.post(Category::SaveState, Severity::Warning, QStringLiteral("old warning"));
+        }
+        {
+            NotificationService service(file);
+            service.post(Category::Controller, Severity::Warning, QStringLiteral("new warning"));
+            service.loadHistory();
+            const QVariantList history = service.history();
+            QCOMPARE(history.size(), 2);
+            QCOMPARE(history.at(0).toMap().value(QStringLiteral("text")).toString(), QStringLiteral("new warning"));
+            QVERIFY(!history.at(0).toMap().value(QStringLiteral("fromPreviousRun")).toBool());
+            QCOMPARE(history.at(1).toMap().value(QStringLiteral("text")).toString(), QStringLiteral("old warning"));
+            QVERIFY(history.at(1).toMap().value(QStringLiteral("fromPreviousRun")).toBool());
+        }
+        // The file holds the merged list: both survive the next restart.
+        NotificationService next(file);
+        next.loadHistory();
+        const QVariantList history = next.history();
+        QCOMPARE(history.size(), 2);
+        QCOMPARE(history.at(0).toMap().value(QStringLiteral("text")).toString(), QStringLiteral("new warning"));
+        QCOMPARE(history.at(1).toMap().value(QStringLiteral("text")).toString(), QStringLiteral("old warning"));
     }
 
     void corruptHistoryFileIsMovedAside()

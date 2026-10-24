@@ -22,7 +22,7 @@ Code: `apps/game-library/` (`LibraryScanner`, `GameDatabase`, `LibraryQuery`, `G
 
 ## Configuring directories and file types
 
-**Directories** come from the `library.directories` setting ([settings.md](settings.md#keys)): absolute paths, at most 64, `/` refused. They can be added and removed on the Settings tab under "Library folders" (typing the path requires a keyboard; `LibraryController.addDirectory()` additionally requires the directory to exist) or written to the settings file (existence is then only checked by the scan).
+**Directories** come from the `library.directories` setting ([settings.md](settings.md#keys)): absolute paths, at most 64, `/` refused. They can be added and removed on the Settings tab under "Library folders" (typing the path requires a keyboard; `LibraryController.addDirectory()` additionally requires the directory to exist) or written to the settings file (existence is then only checked by the scan). An added or removed folder that cannot be saved to the settings file is reverted and reported as an error notice.
 
 **File types** come from two places:
 
@@ -41,13 +41,15 @@ Extension matching is case-insensitive and uses the text after the **last** dot 
 
 ## Gaming systems
 
-The built-in system catalog (`config/systems/systems.json`, compiled into the application; 19 systems from `nes` to `dos`, see [emulator-integration.md](emulator-integration.md#gaming-systems)) maps extensions to systems. During a scan every file gets its **system candidates** (all systems its extension maps to). If exactly one system matches, it becomes the game's system; extensions such as `.iso`, `.chd` or `.zip` map to several systems, so those games keep an empty system until you choose one in the [game details](#game-details) (stored as `system_override`, kept across rescans). A system is a grouping and filter, not a compatibility claim: launching still requires an emulator that declares the extension.
+The built-in system catalog (`config/systems/systems.json`, compiled into the application; 20 systems from `nes` to `dos`, see [emulator-integration.md](emulator-integration.md#gaming-systems)) maps extensions to systems. During a scan every file gets its **system candidates** (all systems its extension maps to). If exactly one system matches, it becomes the game's system; extensions such as `.iso`, `.chd` or `.zip` map to several systems, so those games keep an empty system until you choose one in the [game details](#game-details) (stored as `system_override`, kept across rescans). A system is a grouping and filter, not a compatibility claim: launching still requires an emulator that declares the extension.
+
+**Xbox 360 discs.** `.iso` is declared by several systems, so the scanner checks each `.iso` whose candidates include `xbox360`. It reads 20 bytes at `0x10000` past each of three partition bases (`0x0`, `0x2080000`, `0xFD90000`) and looks for the XDVDFS signature `MICROSOFT*XBOX*MEDIA`. A match makes the system `xbox360`; a miss removes `xbox360` from the candidates and the other candidates are kept as before; if exactly one of them remains, it becomes the game's system under the general rule above. No read goes past the end of the file, at most three reads are made per file, and read errors count as a miss. Rebuilt (xiso) original Xbox images also carry the signature and are reported as Xbox 360; full original Xbox disc dumps are not probed at their partition offset. Xenia does not run original Xbox games. GOD/STFS containers are not detected yet. A `.xex` file maps to `xbox360` without a probe.
 
 The **Systems** tab shows one card per system that has games or an emulator (`SystemListModel`: `systemId`, `name`, `shortName`, `gameCount`, `emulatorCount`); games without a system are counted in an "Other" bucket only when there are any. Accept on a card opens the Games tab filtered to that system; the "Other" card filters to the games without a recognised system (`LibraryController.otherSystemFilter`, value `@other`). When only counts change, the model updates its rows in place instead of resetting, so focus is not lost.
 
 ## Scanning
 
-`LibraryScanner::scan()` walks the configured directories. It only lists directories and `stat()`s files; it never opens, reads or executes a game file.
+`LibraryScanner::scan()` walks the configured directories. It lists directories and `stat()`s files. The one exception is an `.iso` file whose candidates include `xbox360`: it is opened read-only for the [Xbox 360 disc probe](#gaming-systems), with at most three 20-byte reads and never past the end of the file. No game file is ever executed, and no file contents are logged.
 
 | Rule | Behaviour |
 | --- | --- |
@@ -172,8 +174,8 @@ The order comes from `library.sortOrder`. Choosing a sort order on the Games tab
 
 ## Emulator assignment
 
-- **Candidates:** every enabled emulator that declares the file's extension, in the order the definitions were loaded (sorted by definition file name). Stored per game and refreshed on every scan.
-- **Effective emulator:** the per-game override if it is still a candidate; otherwise the default emulator for the game's system (`emulators.defaultForSystem`, Settings › Emulators; rows only for catalog systems with games or a compatible emulator, and only enabled emulators that declare the system can be chosen — `LibraryController.setDefaultEmulator()` validates this again) if it is a candidate; otherwise the first candidate. With no candidate the game is shown as "No emulator handles this file type".
+- **Candidates:** every enabled emulator that declares the file's extension, in the order the definitions were loaded (sorted by definition file name). Stored per game and refreshed on every scan. For an `.iso` that was probed, candidates are narrowed to emulators that declare one of the file's remaining systems or declare no systems: Xenia is not offered for a PS2 disc, and a PS2 emulator is not offered for an Xbox 360 disc.
+- **Effective emulator:** the per-game override if it is still a candidate; otherwise the default emulator for the game's system (`emulators.defaultForSystem`, Settings › Emulators; rows only for catalog systems with games or a compatible emulator, and only enabled emulators that declare the system can be chosen — `LibraryController.setDefaultEmulator()` validates this again) if it is a candidate; otherwise the first candidate. The game tiles, the "emulator" sort order, the game details and the launch all use this same emulator (`LibraryQuery::effectiveEmulatorId()`), so a tile names and greys out the emulator that would actually start. With no candidate the game is shown as "No emulator handles this file type".
 - **Availability:** a candidate whose executable is missing or not executable is still assigned, but the game is shown as unavailable with the reason.
 - **Override:** chosen in the [game details](#game-details) or the [launch options](#launch-options), stored in `emulator_override` and kept across rescans. Only candidates are accepted (`LibraryController.setGameEmulator()` refuses other emulators: a file is never assumed to work with an emulator that does not declare its extension); an empty choice returns to automatic. An override whose emulator stops declaring the extension is ignored until it does again.
 
@@ -225,7 +227,7 @@ The Options button (default Select; keyboard `O`; remappable as `options`) on a 
    - The game path is only ever passed as an argument. The emulator executable is started directly with an argument list; no shell is involved, so spaces and quotes in file names need no escaping.
    - Working directory: profile `workingDirectory`, else emulator `workingDirectory`, else the executable's directory.
    - Stop timeout before SIGKILL: the emulator's `stopTimeoutMs` (500–60000) or 5000 ms.
-4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does.
+4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does. If the write fails (logged as a warning) while a scan is running, it is retried once when the scan finishes.
 5. When the process ends, a launch-history record is written and the lists are refreshed ([emulator-integration.md](emulator-integration.md#launch-lifecycle)).
 
 Starting an emulator **without** a game (from the emulator list) drops every argument that contains `{file}`.

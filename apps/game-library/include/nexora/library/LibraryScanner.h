@@ -16,6 +16,7 @@ struct ScanOptions
     QStringList roots; // absolute directories; never "/" by default
     QHash<QString, QStringList> extensionMap; // ".ext" -> emulator ids handling it
     QHash<QString, QStringList> extensionSystems; // ".ext" -> system ids (filled by GameLibrary)
+    QHash<QString, QStringList> emulatorSystems; // emulator id -> system ids it declares (empty = any)
     // Symbolic links are skipped unless this is set; even then a link is only followed when
     // its target stays inside the same library root (checked on canonical paths).
     bool followSymlinks = false;
@@ -69,6 +70,11 @@ public:
 
     // "Super_Mario  World (USA).sfc" -> "Super Mario World (USA)"
     static QString titleFromFileName(const QString &fileName);
+
+    // Narrows an .iso that could be an Xbox 360 disc: the disc header decides whether the
+    // system is xbox360 alone or not xbox360 at all, and emulator candidates are reduced to
+    // those that declare one of the remaining systems (or no systems). Other files are untouched.
+    static void classifyXboxDisc(ScannedFile &file, const ScanOptions &options);
 };
 
 } // namespace nexora::library

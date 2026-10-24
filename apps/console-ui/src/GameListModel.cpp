@@ -1,5 +1,7 @@
 #include "GameListModel.h"
 
+#include "nexora/library/LibraryQuery.h"
+
 #include <QLocale>
 
 namespace nexora::ui {
@@ -18,26 +20,27 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     if (!checkIndex(index, CheckIndexOption::IndexIsValid | CheckIndexOption::ParentIsInvalid))
         return {};
     const library::GameEntry &e = m_entries.at(index.row());
-    const auto info = [&] { return m_info ? m_info(e.emulatorId()) : std::pair<QString, QString>{}; };
+    // The emulator that launch() would use, not merely the entry's own override/first candidate.
+    const QString emulatorId = library::LibraryQuery::effectiveEmulatorId(e, m_systemDefaultEmulators);
+    const auto info = [&] { return m_info ? m_info(emulatorId) : std::pair<QString, QString>{}; };
     switch (role) {
     case Qt::DisplayRole:
     case TitleRole: return e.displayTitle();
     case GameIdRole: return e.id;
     case PathRole: return e.path;
-    case EmulatorIdRole: return e.emulatorId();
+    case EmulatorIdRole: return emulatorId;
     case EmulatorNameRole: {
         const QString name = info().first;
-        return name.isEmpty() ? e.emulatorId() : name;
+        return name.isEmpty() ? emulatorId : name;
     }
     case FavoriteRole: return e.favorite;
     case PlayCountRole: return e.playCount;
     case LastPlayedRole:
         return e.lastPlayed.isValid() ? QLocale().toString(e.lastPlayed.toLocalTime(), QLocale::ShortFormat)
                                       : QString();
-    case AvailableRole: return !e.emulatorId().isEmpty() && info().second.isEmpty();
+    case AvailableRole: return !emulatorId.isEmpty() && info().second.isEmpty();
     case UnavailableReasonRole:
-        return e.emulatorId().isEmpty() ? QStringLiteral("No emulator handles %1 files").arg(e.extension)
-                                        : info().second;
+        return emulatorId.isEmpty() ? QStringLiteral("No emulator handles %1 files").arg(e.extension) : info().second;
     case SystemIdRole: return e.systemId;
     case SystemShortNameRole: return m_systemInfo ? m_systemInfo(e.systemId) : QString();
     case DisplayTitleRole: return e.displayTitle();
@@ -62,6 +65,16 @@ QHash<int, QByteArray> GameListModel::roleNames() const
             {SystemShortNameRole, "systemShortName"},
             {DisplayTitleRole, "displayTitle"},
             {PresentRole, "present"}};
+}
+
+void GameListModel::setSystemDefaultEmulators(const QHash<QString, QString> &defaults)
+{
+    if (defaults == m_systemDefaultEmulators)
+        return;
+    m_systemDefaultEmulators = defaults;
+    if (!m_entries.isEmpty())
+        emit dataChanged(index(0), index(rowCount() - 1),
+                         {EmulatorIdRole, EmulatorNameRole, AvailableRole, UnavailableReasonRole});
 }
 
 void GameListModel::setEntries(const QList<library::GameEntry> &entries)

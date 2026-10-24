@@ -72,7 +72,8 @@ enum class UpdateError {
     InstallFailed,
     InstallTimedOut,
     Cancelled,
-    Busy
+    Busy,
+    UnsafeBundlePath
 };
 Q_ENUM_NS(UpdateError)
 
@@ -85,6 +86,11 @@ QString nameOf(UpdateError error);
 // User-facing message for |error|; |detail| (a version, a path, a byte count, …) is
 // appended when relevant.
 QString describe(UpdateError error, const QString &detail = {});
+
+// Why the root helper (nexora-updated) would refuse |bundleDir| in its request line, or an
+// empty string if it accepts it: the same rule (absolute, 2-256 bytes, only
+// [A-Za-z0-9._/ -], no "..") plus an explicit check for control characters.
+QString bundlePathProblem(const QString &bundleDir);
 
 // Result of verifyBundle(): a parsed and signature-verified manifest, the absolute bundle
 // directory it came from, and the image file's absolute path.
@@ -172,6 +178,8 @@ public:
 
     // ReadyToInstall -> Installing: writes one line "install <absolute bundle dir>\n" to
     // installRequestFifo (a non-blocking open; no reader => Failed/InstallRequestFailed).
+    // A bundle path the helper would refuse (see bundlePathProblem()) fails first with
+    // Failed/UnsafeBundlePath, and nothing is written.
     // The privileged helper re-verifies everything as root and is polled for the outcome
     // via installStatusFile every 500 ms. The status file is root-owned and outlives a
     // request (nexora-bootok writes "ok <version>" into it after a confirmed boot), so the

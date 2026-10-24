@@ -15,6 +15,7 @@ Rectangle {
     property bool requireConfirm: false
     property string confirmText: "Press A / Enter again to confirm"
     property string actionText        // shown instead of a value for action rows
+    property bool activatable: false  // Accept acts on it although it shows a value (e.g. edit rows)
     property color labelColor: Theme.text
     property real meter: -1           // 0..1 draws a level bar under the value
     property bool armed: false
@@ -35,7 +36,8 @@ Rectangle {
         accepted()
     }
 
-    Accessible.role: adjustable ? Accessible.SpinBox : (actionText.length > 0 ? Accessible.Button : Accessible.StaticText)
+    Accessible.role: adjustable ? Accessible.SpinBox
+                                : (actionText.length > 0 || activatable ? Accessible.Button : Accessible.StaticText)
     Accessible.name: label + (value.length > 0 ? ": " + value : "")
     Accessible.description: description
     Accessible.onPressAction: if (actionText.length > 0 || !adjustable) activate()
@@ -74,7 +76,7 @@ Rectangle {
         anchors.right: valueArea.left
         anchors.rightMargin: Theme.spacing
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 3
+        spacing: Math.round(3 * Theme.scale)
         Text {
             objectName: "label"
             width: parent.width
@@ -101,13 +103,13 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: Theme.spacing
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(valueRow.implicitWidth, row.meter >= 0 ? 220 : 0)
-        height: valueRow.implicitHeight + (row.meter >= 0 ? 12 : 0)
+        width: Math.max(valueRow.implicitWidth, row.meter >= 0 ? Math.round(220 * Theme.scale) : 0)
+        height: valueRow.implicitHeight + (row.meter >= 0 ? Theme.space3 : 0)
 
         Row {
             id: valueRow
             anchors.right: parent.right
-            spacing: 10
+            spacing: Math.round(10 * Theme.scale)
             Text {
                 textFormat: Text.PlainText
                 id: leftArrow
@@ -116,7 +118,7 @@ Rectangle {
                 color: row.activeFocus ? Theme.accent : Theme.textFaint
                 font.pixelSize: Theme.fontLarge
                 anchors.verticalCenter: parent.verticalCenter
-                MouseArea { anchors.fill: parent; anchors.margins: -8; onClicked: { row.forceActiveFocus(); row.decrement() } }
+                MouseArea { anchors.fill: parent; anchors.margins: -Theme.space2; onClicked: { row.forceActiveFocus(); row.decrement() } }
             }
             Text {
                 objectName: "value"
@@ -128,7 +130,8 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
-                width: Math.min(row.adjustable ? Math.max(implicitWidth, 150) : implicitWidth, row.maxValueWidth)
+                width: Math.min(row.adjustable ? Math.max(implicitWidth, Math.round(150 * Theme.scale)) : implicitWidth,
+                                row.maxValueWidth)
             }
             Text {
                 textFormat: Text.PlainText
@@ -138,7 +141,7 @@ Rectangle {
                 color: row.activeFocus ? Theme.accent : Theme.textFaint
                 font.pixelSize: Theme.fontLarge
                 anchors.verticalCenter: parent.verticalCenter
-                MouseArea { anchors.fill: parent; anchors.margins: -8; onClicked: { row.forceActiveFocus(); row.increment() } }
+                MouseArea { anchors.fill: parent; anchors.margins: -Theme.space2; onClicked: { row.forceActiveFocus(); row.increment() } }
             }
         }
         Rectangle {
@@ -146,13 +149,13 @@ Rectangle {
             anchors.bottom: parent.bottom
             anchors.right: parent.right
             width: parent.width
-            height: 6
-            radius: 3
+            height: Math.round(6 * Theme.scale)
+            radius: height / 2
             color: Theme.border
             Rectangle {
                 width: parent.width * Math.max(0, Math.min(1, row.meter))
                 height: parent.height
-                radius: 3
+                radius: height / 2
                 color: Theme.accent
                 Behavior on width { NumberAnimation { duration: Theme.animFast } }
             }

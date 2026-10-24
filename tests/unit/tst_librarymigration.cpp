@@ -227,6 +227,54 @@ private slots:
             == 0);
     }
 
+    void failedOpenDoesNotReportAStaleError()
+    {
+        createV1({QStringLiteral("PRAGMA user_version = 99")});
+        GameDatabase database;
+        QVERIFY(!database.open(db()));
+        QVERIFY(database.lastError().contains(QStringLiteral("newer")));
+        // A directory cannot be opened as a database: that is the error to report now.
+        const QString directory = m_dir.filePath(QStringLiteral("not-a-file"));
+        QVERIFY(QDir().mkpath(directory));
+        QVERIFY(!database.open(directory, false));
+        QVERIFY(!database.lastError().isEmpty());
+        QVERIFY2(!database.lastError().contains(QStringLiteral("newer")), qPrintable(database.lastError()));
+    }
+
+    void failedCommitLeavesTheConnectionUsable()
+    {
+        {
+            GameDatabase database;
+            QVERIFY(database.open(db()));
+        }
+        // A deferred foreign key is only checked at COMMIT: inserting "Bravo" makes the
+        // commit itself fail.
+        sql(db(),
+            {QStringLiteral("CREATE TABLE trap (ref INTEGER REFERENCES games(id) DEFERRABLE INITIALLY DEFERRED)"),
+             QStringLiteral("CREATE TRIGGER trap_bravo AFTER INSERT ON games WHEN NEW.title = 'Bravo' "
+                            "BEGIN INSERT INTO trap (ref) VALUES (-1); END")});
+        GameDatabase database;
+        QVERIFY(database.open(db()));
+        const auto file = [](const QString &title) {
+            ScannedFile f;
+            f.path = QStringLiteral("/g/%1.sfc").arg(title);
+            f.title = title;
+            f.extension = QStringLiteral(".sfc");
+            f.root = QStringLiteral("/g");
+            return f;
+        };
+        ScanResult failing;
+        failing.files = {file(QStringLiteral("Alpha")), file(QStringLiteral("Bravo"))};
+        QVERIFY(!database.applyScan(failing, {QStringLiteral("/g")}));
+        QVERIFY(database.entries().isEmpty()); // nothing of the failed merge was kept
+
+        ScanResult ok;
+        ok.files = {file(QStringLiteral("Alpha"))};
+        QVERIFY2(database.applyScan(ok, {QStringLiteral("/g")}), qPrintable(database.lastError()));
+        QCOMPARE(database.entries().size(), 1);
+        QVERIFY2(database.setFavorite(database.entries().first().id, true), qPrintable(database.lastError()));
+    }
+
     void metadataValidation()
     {
         GameDatabase database;

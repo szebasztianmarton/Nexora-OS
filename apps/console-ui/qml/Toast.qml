@@ -26,9 +26,10 @@ Rectangle {
     Accessible.role: Accessible.AlertMessage
     Accessible.name: message
 
-    width: Math.min(label.implicitWidth + 56, parent ? parent.width - 64 : 800)
-    height: Math.max(48, label.implicitHeight + 24)
-    radius: Theme.glassActive ? Math.min(Theme.radiusXL, height / 2) : 12
+    width: Math.min(label.implicitWidth + Math.round(56 * Theme.scale),
+                    parent ? parent.width - Theme.space6 * 2 : Math.round(800 * Theme.scale))
+    height: Math.max(Theme.controlHeight, label.implicitHeight + Theme.space5)
+    radius: Theme.glassActive ? Math.min(Theme.radiusXL, height / 2) : Theme.radius
     color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
     GlassSurface { anchors.fill: parent; z: -1; radius: toast.radius; dense: true; backdrop: toast.glassBackdrop }
     border.color: severity === "critical" ? Theme.danger : isError ? Theme.warning : Theme.accent
@@ -41,16 +42,17 @@ Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.margins: 10
-        width: 4
-        radius: 2
+        anchors.margins: Math.round(10 * Theme.scale)
+        width: Theme.space1
+        radius: width / 2
         color: toast.severity === "critical" ? Theme.danger : toast.isError ? Theme.warning : Theme.accent
     }
     Text {
         textFormat: Text.PlainText
         id: label
         anchors.centerIn: parent
-        width: Math.min(implicitWidth, toast.parent ? toast.parent.width - 120 : 740)
+        width: Math.min(implicitWidth, toast.parent ? toast.parent.width - Math.round(120 * Theme.scale)
+                                                    : Math.round(740 * Theme.scale))
         text: toast.displayedMessage
         color: Theme.text
         font.pixelSize: Theme.fontBody

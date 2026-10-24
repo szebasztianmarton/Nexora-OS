@@ -146,12 +146,20 @@ private:
     void rebuildEmulatorInfo();
     bool launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile);
     void rebuildSystems();
+    // Sets and saves |dirs|; on failure restores |previous| and tells the user. Listeners hear
+    // about the change only once it is on disk.
+    bool saveDirectories(const QStringList &previous, const QStringList &dirs);
     // Why an edit of game |id| failed, for the notice shown to the user.
     QString failureReason(qint64 id) const;
     // The emulator the entry would actually launch with: its override if still a
     // candidate; otherwise the settings default for its system if that is a candidate;
     // otherwise the first candidate.
     QString effectiveEmulatorId(const library::GameEntry &entry) const;
+    // Settings::EmulatorDefaultForSystem as system id -> emulator id.
+    QHash<QString, QString> systemDefaultEmulators() const;
+    // Hands the current per-system defaults to the list models and the query so tiles and
+    // the emulator sort resolve the same emulator as launch().
+    void applySystemDefaultEmulators();
 
     library::GameLibrary *m_library;
     shared::Settings *m_settings;

@@ -144,7 +144,7 @@ Synthesized keys are fixed; the button for each remappable action comes from `in
 | `options` | `select` | View / Share (Create) / − | `Context1` | Open the launch options of the focused game (Home rows, Games grid); closes them again. Accept on a game opens its [details](game-library.md#game-details). |
 | Up/Down/Left/Right | D-pad, hat, left stick | (fixed) | arrow keys | Move focus; Up at the top of a page moves to the tab bar; Left/Right change values on Settings rows |
 
-The dashboard behaviour is defined in `apps/console-ui/qml/` and covered by `tst_qmlsmoke` with key events. The hint bar at the bottom shows the keys that apply to the focused element.
+The dashboard behaviour is defined in `apps/console-ui/qml/` and covered by `tst_qmlsmoke` with key events. The hint bar at the bottom shows the keys that apply to the focused element; when they do not all fit (large interface scale), the last ones are left out.
 
 ## Configurable mapping
 

@@ -10,8 +10,10 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
+#include <QSignalBlocker>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace nexora::ui {
@@ -44,6 +46,7 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
         model->setEmulatorInfo(info);
         model->setSystemInfo(systemInfo);
     }
+    applySystemDefaultEmulators();
 
     m_searchDebounce.setSingleShot(true);
     m_searchDebounce.setInterval(150);
@@ -79,9 +82,25 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
     connect(m_app->manager(), &emulator::EmulatorManager::stateChanged, this, [this](emulator::ProcessState state) {
         if (m_pendingLaunch == 0)
             return;
-        if (state == emulator::ProcessState::Running)
-            m_library->recordLaunch(std::exchange(m_pendingLaunch, 0));
-        else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
+        if (state == emulator::ProcessState::Running) {
+            const qint64 id = std::exchange(m_pendingLaunch, 0);
+            if (m_library->recordLaunch(id))
+                return;
+            qCWarning(lcUi).noquote() << "Could not record the play count of game" << id << "-"
+                                      << m_library->lastError();
+            if (!m_library->isScanning())
+                return;
+            // The scan merge may have held the write lock: try once more when it is done.
+            auto retry = std::make_shared<QMetaObject::Connection>();
+            *retry = connect(m_library, &library::GameLibrary::scanningChanged, this, [this, id, retry](bool scanning) {
+                if (scanning)
+                    return;
+                disconnect(*retry);
+                if (!m_library->recordLaunch(id))
+                    qCWarning(lcUi).noquote() << "Could not record the play count of game" << id << "-"
+                                              << m_library->lastError();
+            });
+        } else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
             m_pendingLaunch = 0;
     });
     connect(m_app, &AppController::configChanged, this, [this] {
@@ -98,6 +117,7 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
         } else if (key == Settings::LibrarySortOrder) {
             setSortOrder(m_settings->stringValue(Settings::LibrarySortOrder));
         } else if (key == Settings::EmulatorDefaultForSystem) {
+            applySystemDefaultEmulators();
             rebuildViews();
         }
     });
@@ -189,6 +209,7 @@ void LibraryController::updateScanOptions(bool force, bool autoScan)
     options.roots = directories();
     options.followSymlinks = m_settings->boolValue(Settings::LibraryFollowSymlinks);
     for (const auto &config : m_app->enabledEmulators()) {
+        options.emulatorSystems.insert(config.id, config.systems);
         for (const QString &ext : config.extensions) {
             QStringList &ids = options.extensionMap[ext];
             if (!ids.contains(config.id))
@@ -228,15 +249,24 @@ bool LibraryController::cancelScan()
 
 QString LibraryController::effectiveEmulatorId(const library::GameEntry &entry) const
 {
-    if (!entry.emulatorOverride.isEmpty() && entry.emulatorCandidates.contains(entry.emulatorOverride))
-        return entry.emulatorOverride;
-    if (!entry.systemId.isEmpty()) {
-        const QString systemDefault
-            = m_settings->mapValue(Settings::EmulatorDefaultForSystem).value(entry.systemId).toString();
-        if (!systemDefault.isEmpty() && entry.emulatorCandidates.contains(systemDefault))
-            return systemDefault;
-    }
-    return entry.emulatorCandidates.value(0);
+    return library::LibraryQuery::effectiveEmulatorId(entry, systemDefaultEmulators());
+}
+
+QHash<QString, QString> LibraryController::systemDefaultEmulators() const
+{
+    QHash<QString, QString> defaults;
+    const QVariantMap stored = m_settings->mapValue(Settings::EmulatorDefaultForSystem);
+    for (auto it = stored.cbegin(); it != stored.cend(); ++it)
+        defaults.insert(it.key(), it.value().toString());
+    return defaults;
+}
+
+void LibraryController::applySystemDefaultEmulators()
+{
+    const QHash<QString, QString> defaults = systemDefaultEmulators();
+    m_query.systemDefaultEmulators = defaults;
+    for (GameListModel *model : {&m_games, &m_recent, &m_favorites, &m_recentlyAdded})
+        model->setSystemDefaultEmulators(defaults);
 }
 
 QString LibraryController::systemName(const QString &systemId) const
@@ -302,30 +332,52 @@ bool LibraryController::addDirectory(const QString &path)
         emit notice(QStringLiteral("\"%1\" is not an existing absolute directory").arg(path), true);
         return false;
     }
-    QStringList dirs = directories();
+    const QStringList previous = directories();
+    QStringList dirs = previous;
     if (dirs.contains(clean)) {
         emit notice(QStringLiteral("%1 is already in the library").arg(clean), false);
         return false;
     }
     dirs.append(clean);
-    QString error;
-    if (!m_settings->setValue(Settings::LibraryDirectories, dirs, &error)) {
-        emit notice(error, true);
+    if (!saveDirectories(previous, dirs))
         return false;
-    }
-    m_settings->save();
     emit notice(QStringLiteral("Added %1").arg(clean), false);
     return true;
 }
 
 bool LibraryController::removeDirectory(const QString &path)
 {
-    QStringList dirs = directories();
+    const QStringList previous = directories();
+    QStringList dirs = previous;
     if (!dirs.removeOne(path))
         return false;
-    m_settings->setValue(Settings::LibraryDirectories, dirs);
-    m_settings->save();
+    if (!saveDirectories(previous, dirs))
+        return false;
     emit notice(QStringLiteral("Removed %1").arg(path), false);
+    return true;
+}
+
+bool LibraryController::saveDirectories(const QStringList &previous, const QStringList &dirs)
+{
+    // Not on disk means not kept: the running library must not scan what a restart forgets,
+    // so nothing hears about the change (no scan starts) until it is saved.
+    bool saved = false;
+    {
+        const QSignalBlocker blocker(m_settings);
+        QString error;
+        if (!m_settings->setValue(Settings::LibraryDirectories, dirs, &error)) {
+            emit notice(error, true);
+            return false;
+        }
+        saved = m_settings->save();
+        if (!saved)
+            m_settings->setValue(Settings::LibraryDirectories, previous);
+    }
+    if (!saved) {
+        emit notice(QStringLiteral("Could not save %1").arg(m_settings->paths().userFile), true);
+        return false;
+    }
+    emit m_settings->valueChanged(Settings::LibraryDirectories, m_settings->value(Settings::LibraryDirectories));
     return true;
 }
 

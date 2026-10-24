@@ -42,6 +42,13 @@ Item {
         library: testLibrary
     }
     SignalSpy { id: closedSpy; target: details; signalName: "closed" }
+    // A keyboard on its own, for the layout budget (glass bars, large scale, little height).
+    Item {
+        id: oskHost
+        width: 1280
+        height: 720
+        OnScreenKeyboard { id: soloKeyboard }
+    }
 
     TestCase {
         name: "GameDetails"
@@ -56,6 +63,14 @@ Item {
             grid.currentIndex = 0
             grid.forceActiveFocus()
             tryVerify(function() { return grid.activeFocus })
+        }
+        function cleanup() {
+            if (soloKeyboard.visible)
+                soloKeyboard.cancel()
+            soloKeyboard.chromeTop = 0
+            soloKeyboard.chromeBottom = 0
+            oskHost.height = 720
+            Theme.userScale = 1.0
         }
         function focusRow(name) {
             const row = root.findByName(details, name)
@@ -210,8 +225,122 @@ Item {
             verify(editor.visible)
             compare(editor.notes, "Unsaved notes")
             tryVerify(function() { return save.activeFocus })
+            keyClick(Qt.Key_Escape) // the notes are still unsaved: Back asks first
+            const dialog = root.findByName(editor, "confirmDiscardEdits")
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Right)
+            keyClick(Qt.Key_Return)
+            verify(!editor.visible)
+        }
+
+        function openEditor() {
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return details.visible })
+            focusRow("detailsEdit")
+            keyClick(Qt.Key_Return)
+            const editor = root.findByName(details, "metadataEditor")
+            tryVerify(function() { return editor.visible })
+            tryVerify(function() { return root.findByName(editor, "metadataTitle").activeFocus })
+            return editor
+        }
+
+        // Title and Notes show no action text, but Accept edits them: screen readers hear a button.
+        function test_editRowsAreButtonsForAccessibility() {
+            const editor = openEditor()
+            compare(root.findByName(editor, "metadataTitle").Accessible.role, Accessible.Button)
+            compare(root.findByName(editor, "metadataNotes").Accessible.role, Accessible.Button)
             keyClick(Qt.Key_Escape)
             verify(!editor.visible)
+        }
+
+        // Backspace is Back here too; with nothing changed the editor closes at once.
+        function test_backspaceClosesAnUnchangedEditor() {
+            const editor = openEditor()
+            keyClick(Qt.Key_Backspace)
+            verify(!editor.visible)
+            verify(details.visible)
+            tryVerify(function() { return root.findByName(details, "detailsEdit").activeFocus })
+        }
+
+        // Back with unsaved edits asks first: Cancel keeps the edits, Discard closes unsaved.
+        function test_backWithChangesAsksBeforeDiscarding() {
+            const editor = openEditor()
+            const id = editor.gameId
+            const original = testLibrary.gameDetails(id).title
+            editor.title = "Changed title"
+            keyClick(Qt.Key_Escape)
+            const dialog = root.findByName(editor, "confirmDiscardEdits")
+            verify(dialog !== null)
+            tryVerify(function() { return dialog.visible })
+            verify(editor.visible)
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+
+            keyClick(Qt.Key_Escape) // Cancel: the editor stays open with the edit
+            verify(!dialog.visible)
+            verify(editor.visible)
+            compare(editor.title, "Changed title")
+            tryVerify(function() { return root.findByName(editor, "metadataTitle").activeFocus })
+
+            keyClick(Qt.Key_Backspace) // Backspace asks the same way
+            tryVerify(function() { return dialog.visible })
+            tryVerify(function() { return dialog.cancelButton.activeFocus })
+            keyClick(Qt.Key_Right)
+            keyClick(Qt.Key_Return) // Discard
+            verify(!dialog.visible)
+            verify(!editor.visible)
+            verify(details.visible)
+            compare(testLibrary.gameDetails(id).title, original)
+        }
+
+        // Clicking the dimmed area outside the panel is Back too: with unsaved edits it asks first.
+        function test_clickOutsideWithChangesAsksBeforeDiscarding() {
+            const editor = openEditor()
+            editor.title = "Changed title"
+            const panel = root.findByName(editor, "metadataPanel")
+            verify(panel.mapToItem(editor, 0, 0).x > 10)
+            mouseClick(editor, 5, 5)
+            const dialog = root.findByName(editor, "confirmDiscardEdits")
+            tryVerify(function() { return dialog.visible })
+            verify(editor.visible)
+            compare(editor.title, "Changed title")
+            keyClick(Qt.Key_Escape) // Cancel keeps the edit
+            verify(!dialog.visible)
+            verify(editor.visible)
+            editor.title = editor.loadedTitle
+            mouseClick(editor, 5, 5) // nothing changed: closes at once
+            verify(!editor.visible)
+        }
+
+        // Glass at 150 % on 720p: the panel stays between the floating bars.
+        function test_keyboardStaysBetweenTheGlassBars() {
+            Theme.userScale = 1.5
+            soloKeyboard.chromeTop = 140
+            soloKeyboard.chromeBottom = 80
+            soloKeyboard.open("Title", "abc")
+            const panel = root.findByName(soloKeyboard, "oskPanel")
+            waitForRendering(soloKeyboard)
+            verify(panel.y >= 140, "panel top " + panel.y)
+            verify(panel.y + panel.height <= oskHost.height - 80, "panel bottom " + (panel.y + panel.height))
+        }
+
+        // With very little height the keys get shorter, but their labels never drop below fontTiny.
+        function test_keyLabelsStayReadableWithLittleHeight() {
+            oskHost.height = 150
+            soloKeyboard.open("Title", "abc")
+            const label = root.findByName(soloKeyboard, "oskKeyLabel")
+            verify(label !== null)
+            verify(label.font.pixelSize >= Theme.fontTiny, "key label " + label.font.pixelSize + " px")
+        }
+
+        // One emulator handles *.rom: "Automatic" and that emulator start the same thing, so the
+        // row neither adjusts nor promises "← →".
+        function test_singleEmulatorRowDoesNotOfferChoice() {
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return details.visible })
+            const row = root.findByName(details, "detailsEmulator")
+            compare(row.choices.length, 2)
+            verify(!row.adjustable)
+            compare(row.description.indexOf("←"), -1, row.description)
         }
 
         function test_unknownGameShowsErrorState() {

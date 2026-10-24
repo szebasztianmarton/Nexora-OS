@@ -32,6 +32,8 @@ NEXORA_TTY=/dev/tty1
 NEXORA_CONSOLE_UI_ARGS=""
 NEXORA_MAX_RAPID_FAILURES=5
 NEXORA_RAPID_SECONDS=15
+# Same bound as "S90nexora stop": a UI left over may still be saving a game.
+NEXORA_STOP_TIMEOUT=35
 
 # shellcheck source=/dev/null
 [ -r /etc/default/nexora ] && . /etc/default/nexora
@@ -106,6 +108,23 @@ while [ "${stopping}" -eq 0 ]; do
 	starts=$((starts + 1))
 	printf '%s\n' "${starts}" > "${SESSION_DIR}/ui-starts.tmp" &&
 		mv -f "${SESSION_DIR}/ui-starts.tmp" "${SESSION_DIR}/ui-starts"
+	# A UI left over from an earlier supervisor (one stopped with KILL)
+	# would make the start below refuse to run, which counts as a rapid
+	# failure: stop it first (TERM, then KILL after NEXORA_STOP_TIMEOUT, so
+	# that a Quick Resume save it may still be writing can finish).
+	if start-stop-daemon --stop --test --quiet --exec "${APP}"; then
+		log "stopping a stale ${APP}"
+		start-stop-daemon --stop --quiet --exec "${APP}"
+		tries=0
+		while start-stop-daemon --stop --test --quiet --exec "${APP}"; do
+			if [ "${tries}" -ge $((NEXORA_STOP_TIMEOUT * 10)) ]; then
+				start-stop-daemon --stop --quiet --signal KILL --exec "${APP}"
+				break
+			fi
+			tries=$((tries + 1))
+			sleep 0.1
+		done
+	fi
 	start=$(uptime_seconds)
 	log "starting ${APP} as ${APP_USER} on ${NEXORA_TTY}"
 	# setsid + opening the VT as stdin makes it the controlling terminal

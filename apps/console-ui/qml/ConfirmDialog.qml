@@ -27,6 +27,10 @@ FocusScope {
     property real chromeBottom: 0
 
     readonly property alias confirmButton: confirmButton
+    // Hint bar entries while open; every owner lists these so the wording cannot drift. Focus
+    // starts on Cancel, so Accept selects the focused button rather than confirming.
+    readonly property var hints: [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Select" },
+                                  { button: "B / Esc", action: "Cancel" }]
     readonly property alias cancelButton: cancelButton
 
     signal confirmed()
@@ -59,7 +63,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        color: Theme.glassActive ? Theme.modalScrim : Theme.background
         opacity: Theme.glassActive ? 1.0 : 0.75
     }
     // Clicking outside the panel is the same as Cancel.
@@ -70,13 +74,14 @@ FocusScope {
         objectName: "confirmDialogPanel"
         x: (parent.width - width) / 2
         y: dialog.chromeTop + (parent.height - dialog.chromeTop - dialog.chromeBottom - height) / 2
-        width: Math.min(parent.width - Theme.spacing * 4, 460)
+        width: Math.min(parent.width - Theme.spacing * 4, 460 * Theme.scale)
         height: content.implicitHeight + Theme.spacing * 3
         radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
         GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true }
-        border.width: Theme.focusWidth
-        border.color: Theme.focusRing
+        // A plain outline (glass: the rim replaces it): the focused button carries the only focus ring.
+        border.width: Theme.glassActive ? 0 : 1
+        border.color: Theme.border
         // Absorb clicks inside the panel so they never fall through to the Cancel-on-outside-click area.
         MouseArea { anchors.fill: parent }
 
@@ -106,23 +111,30 @@ FocusScope {
                 font.pixelSize: Theme.fontBody
                 wrapMode: Text.Wrap
             }
-            Row {
+            // Right-aligned (Confirm rightmost, Cancel to its left); when both do not fit on
+            // one line, Cancel wraps below instead of overflowing the panel (a fallback; only then
+            // do Up/Down move between them).
+            Flow {
+                width: parent.width
                 spacing: Theme.spacing
-                NxButton {
-                    id: cancelButton
-                    objectName: "confirmDialogCancel"
-                    text: dialog.cancelText
-                    focus: true
-                    KeyNavigation.right: confirmButton
-                    onClicked: dialog.cancel()
-                }
+                layoutDirection: Qt.RightToLeft
                 NxButton {
                     id: confirmButton
                     objectName: "confirmDialogConfirm"
                     text: dialog.confirmText
                     kind: dialog.dangerous ? "danger" : "primary"
                     KeyNavigation.left: cancelButton
+                    KeyNavigation.down: cancelButton.y > y ? cancelButton : null
                     onClicked: dialog.accept()
+                }
+                NxButton {
+                    id: cancelButton
+                    objectName: "confirmDialogCancel"
+                    text: dialog.cancelText
+                    focus: true
+                    KeyNavigation.right: confirmButton
+                    KeyNavigation.up: y > confirmButton.y ? confirmButton : null
+                    onClicked: dialog.cancel()
                 }
             }
         }

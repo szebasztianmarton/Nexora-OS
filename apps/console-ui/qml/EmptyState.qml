@@ -5,19 +5,21 @@ import Nexora.Console
 Column {
     id: empty
     required property AppController app
+    readonly property string title: app.configDirectoryFound ? "No emulators configured"
+                                                             : "Configuration directory not found"
 
     Accessible.role: Accessible.StaticText
-    Accessible.name: "Empty state"
+    Accessible.name: title
 
     spacing: Theme.spacing
-    width: Math.min(parent ? parent.width - 64 : 800, 900)
+    width: Math.min(parent ? parent.width - Theme.space6 * 2 : Math.round(800 * Theme.scale),
+                    Math.round(900 * Theme.scale))
 
     Text {
         textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
-        text: empty.app.configDirectoryFound ? "No emulators configured"
-                                             : "Configuration directory not found"
+        text: empty.title
         color: Theme.text
         font.pixelSize: Theme.fontHero
         font.bold: true

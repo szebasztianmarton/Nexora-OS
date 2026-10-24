@@ -22,7 +22,7 @@ Ez a leírás lépésről lépésre bemutatja, hogyan lehet a Nexora OS-t egy Wi
 
 | Rész | Hely | Leírás |
 | --- | --- | --- |
-| **Fő alkalmazás (MVP 1 + MVP 2)** | gyökérkönyvtár (`apps/`, `shared/`, `tests/`, `CMakePresets.json`) | Kontrollerrel vezérelhető dashboard (Home, Games, Emulators, Settings, Diagnostics), Emulator Manager, játékkönyvtár (SQLite), beállítások, evdev/SDL3 bemenet. 19 automatizált teszt. |
+| **Fő alkalmazás (MVP 1–4)** | gyökérkönyvtár (`apps/`, `shared/`, `tests/`, `CMakePresets.json`) | Kontrollerrel vezérelhető dashboard (Home, Games, Emulators, Settings, Diagnostics), Emulator Manager, játékkönyvtár (SQLite), beállítások, evdev/SDL3 bemenet. 50 automatizált CTest-teszt. |
 | **Buildroot image** | `buildroot-external/` | Bootolható x86-64 UEFI disk image, amely közvetlenül a fő alkalmazásba indul. |
 | **Console UI prototípus** | `prototypes/console-ui/` | A `claude/nexora-console-ui` ágon készült, külön fejlesztett konzolfelület (Kezdőlap, Könyvtár, Kedvencek, Emulátorok, 8 beállítási kategória, első indítási varázsló, SDL2). Önálló CMake-projekt. |
 
@@ -79,6 +79,8 @@ cd Nexora-OS
 git checkout main
 ```
 
+**Sorvégek:** ebben a repóban kapcsold ki a sorvég-konverziót: `git config core.autocrlf false` (a fenti `git checkout` előtt, vagy utána a fájlok újra-kicsekkolásával). Ha a rendszer- vagy globális gitconfig `core.autocrlf=true`-t állít (Git for Windows alapértelmezése, ha a repót Windowsból is használod), a munkafa CRLF sorvégű fájlokat kaphat; a `.gitattributes` életbe lépése előtt kicsekkolt fájlok így CRLF-esek maradtak, és ez eltörte a Buildroot-buildet. Ellenőrzés: `scripts/check-line-endings.sh` (CTest-ként: `check_line_endings`), amely hibát jelez, ha a `git ls-files --eol` bármely fájlra `i/crlf`-et, `w/crlf`-et, `i/mixed`-et vagy `w/mixed`-et (vegyes sorvégeket) mutat.
+
 A fájlok Windowsból is elérhetők a Fájlkezelőben: `\\wsl$\Ubuntu-24.04\home\<felhasználó>\Nexora-OS`. VS Code-dal: a repó mappájában `code .` (a *WSL* bővítménnyel).
 
 ## 5. Fő alkalmazás (MVP 2): fordítás és automatizált tesztek
@@ -107,8 +109,10 @@ scripts/build.sh ci --test
 Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `ctest`-et. **Elvárt eredmény:**
 
 ```
-100% tests passed, 0 tests failed out of 19
+100% tests passed, 0 tests failed out of 50
 ```
+
+Az 5 `system` tesztből 4 (image-segédszkriptek, `S90nexora stop`, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. Az ötödik, a `check_line_endings`, mindig regisztrálódik.
 
 ### 5.3 Tesztek külön-külön
 
@@ -116,8 +120,8 @@ Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `
 cmake --preset debug
 cmake --build --preset debug
 
-ctest --preset debug -L unit            # 14 unit teszt
-ctest --preset debug -L integration     # 5 integrációs teszt
+ctest --preset debug -L unit            # 31 unit teszt
+ctest --preset debug -L integration     # 14 integrációs teszt
 ctest --preset debug -R tst_qmlsmoke --output-on-failure -V   # egy teszt részletes kimenettel
 ```
 
@@ -165,7 +169,9 @@ scripts/run.sh debug -- --input-backend none --log-file /tmp/nexora.log
 QT_LOGGING_RULES="nexora.*.debug=true" scripts/run.sh          # részletes napló
 ```
 
-A build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) a `build/debug/share/nexora/emulators/` mappába generálja, így valódi emulátor nélkül is kipróbálható az indítás és visszatérés.
+**Játékkönyvtár:** a repó gyökerében lévő `.games/` mappa (git-ignorált, sosem kerül commitba) a fejlesztői játékkönyvtár: ha a konfiguráláskor létezik, a build a `build/<preset>/share/nexora/settings-defaults.json` fájlba írja `library.directories`-ként, így a Games fül beállítás nélkül is ezt a mappát olvassa. Másik mappa: `-DNEXORA_DEV_LIBRARY_DIR=<mappa>`. Ez csak alapértelmezés: ha a felhasználói fájl (`~/.config/nexora/settings.json`) már tartalmaz `library.directories` kulcsot, akár üres listával is, az felülírja, és a `.games/` nem kerül beolvasásra; töröld a kulcsot, vagy futtass `--settings-file`-lal vagy ideiglenes `XDG_CONFIG_HOME`-mal. Ha a Settingsben mappát adsz hozzá, a teljes lista, a `.games/` útvonalával együtt, a felhasználói fájlba íródik, így ezután a `.games/` törlése és az újrakonfigurálás már nem veszi ki a könyvtárból. A mappa létrehozása vagy törlése után futtasd újra a konfigurálást.
+
+**Fake emulátorok:** alapból nem jelennek meg. A `-DNEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` kapcsolóval a build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) a `build/debug/share/nexora/emulators/` mappába generálja, így valódi emulátor nélkül is kipróbálható az indítás és visszatérés; kikapcsolt opcióval újrakonfigurálva a fájlok eltűnnek.
 
 ### Vezérlés billentyűzettel
 
@@ -182,7 +188,7 @@ A build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake
 
 ### Mit érdemes kipróbálni
 
-1. **Emulators** fül → `fake-ok` indítása: megjelenik a futás-overlay, a folyamat kilép, a fókusz visszatér ugyanarra az elemre.
+1. **Emulators** fül (a `NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` kapcsolóval konfigurált buildben) → `fake-ok` indítása: megjelenik a futás-overlay, a folyamat kilép, a fókusz visszatér ugyanarra az elemre.
 2. `fake-fail` és `fake-crash`: a felület hibaüzenetet mutat, nem fagy le, utána újra lehet indítani.
 3. `fake-long` indítása, majd Enter az overlayen: a folyamat leáll, a UI visszajön.
 4. **Settings** → könyvtármappa hozzáadása (pl. egy `~/nexora-test-games` mappa néhány fájllal a konfigurációban megadott kiterjesztéssel) → **Games** fülön megjelennek, keresés, kedvenc jelölés.
@@ -356,10 +362,10 @@ qemu-system-x86_64 \
 Másold ki és pipáld ki az eredményeket (dátum, Windows-build, GPU):
 
 - [ ] WSL 2 + Ubuntu 24.04 telepítve, nem root felhasználó
-- [ ] `scripts/build.sh ci --test` → 19/19 teszt sikeres
+- [ ] `scripts/build.sh ci --test` → 50/50 teszt sikeres
 - [ ] `--check-config` mindkét példakonfigurációra 0-s kóddal tér vissza
 - [ ] Fő alkalmazás elindul ablakban (WSLg), billentyűzettel navigálható
-- [ ] `fake-ok` / `fake-fail` / `fake-crash` / `fake-long` indítása és visszatérés rendben
+- [ ] `fake-ok` / `fake-fail` / `fake-crash` / `fake-long` indítása és visszatérés rendben (`NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` build)
 - [ ] Játékkönyvtár: mappa hozzáadása, keresés, kedvenc, indítás
 - [ ] Console UI prototípus: fordítás, minden teszt sikeres
 - [ ] Console UI prototípus: `run-dev.sh` sandbox, első indítási varázsló, 1080p és 720p elrendezés

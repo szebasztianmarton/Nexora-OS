@@ -86,6 +86,7 @@ QString nameOf(UpdateError error)
     case UpdateError::InstallTimedOut: return QStringLiteral("InstallTimedOut");
     case UpdateError::Cancelled: return QStringLiteral("Cancelled");
     case UpdateError::Busy: return QStringLiteral("Busy");
+    case UpdateError::UnsafeBundlePath: return QStringLiteral("UnsafeBundlePath");
     }
     return QStringLiteral("Unknown");
 }
@@ -116,8 +117,37 @@ QString describe(UpdateError error, const QString &detail)
         return withDetail(QStringLiteral("The install helper did not finish in time; the update was not confirmed"));
     case UpdateError::Cancelled: return withDetail(QStringLiteral("Cancelled"));
     case UpdateError::Busy: return withDetail(QStringLiteral("Another update operation is already in progress"));
+    case UpdateError::UnsafeBundlePath:
+        return withDetail(QStringLiteral("The install helper does not accept the bundle directory path"));
     }
     return withDetail(QStringLiteral("Unknown error"));
+}
+
+QString bundlePathProblem(const QString &bundleDir)
+{
+    // Mirrors handle_request() in nexora-updated, which answers all of these with a bare
+    // "error invalid request". Checked on the bytes the request line carries.
+    const QByteArray path = QFile::encodeName(bundleDir);
+    for (const char c : path) {
+        if (uchar(c) < 0x20 || uchar(c) == 0x7f)
+            return QStringLiteral("it contains a control character (such as a line break)");
+    }
+    if (!path.startsWith('/'))
+        return QStringLiteral("it is not an absolute path");
+    if (path.size() < 2)
+        return QStringLiteral("it is the root directory");
+    if (path.size() > 256)
+        return QStringLiteral("it is longer than 256 bytes (%1)").arg(path.size());
+    if (path.contains(".."))
+        return QStringLiteral("it contains \"..\"");
+    for (const char c : path) {
+        const bool allowed = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.'
+            || c == '_' || c == '/' || c == ' ' || c == '-';
+        if (!allowed)
+            return QStringLiteral("it may contain only letters, digits, spaces and . _ / - (rename or move the "
+                                  "bundle directory)");
+    }
+    return {};
 }
 
 std::optional<VerifiedBundle> verifyBundle(const QString &bundleDir, const QString &keyDir,
@@ -334,6 +364,14 @@ bool UpdateService::install()
     if (!isValidTransition(m_state, UpdateState::Installing) || m_bundleDir.isEmpty())
         return false;
 
+    // The helper would refuse it without saying why; refuse it here, with the reason.
+    const QString pathProblem = bundlePathProblem(m_bundleDir);
+    if (!pathProblem.isEmpty()) {
+        setState(UpdateState::Failed, UpdateError::UnsafeBundlePath,
+                 describe(UpdateError::UnsafeBundlePath, pathProblem));
+        return true;
+    }
+
     // Before the request: whatever is in the status file now is an earlier answer.
     m_statusBefore = statusSnapshot();
     const int fd = ::open(m_env.installRequestFifo.toLocal8Bit().constData(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
@@ -342,7 +380,7 @@ bool UpdateService::install()
                  describe(UpdateError::InstallRequestFailed, QString::fromLocal8Bit(std::strerror(errno))));
         return true;
     }
-    const QByteArray line = (QStringLiteral("install %1\n").arg(m_bundleDir)).toUtf8();
+    const QByteArray line = "install " + QFile::encodeName(m_bundleDir) + '\n';
     const qint64 written = ::write(fd, line.constData(), size_t(line.size()));
     ::close(fd);
     if (written != line.size()) {

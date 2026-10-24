@@ -37,13 +37,14 @@ FocusScope {
         ["SHIFT", "DEL", "SPACE", "CLEAR", "DONE"]
     ]
 
-    // Layout budget: the panel may use the whole height minus a small margin.
+    // Layout budget: the panel may use the height between the bars minus a small margin.
     readonly property real fullKeyHeight: Math.round(58 * Theme.scale)
-    readonly property real maxPanelHeight: height - Theme.space2 * 2
+    readonly property real minKeyHeight: Math.round(Theme.controlHeightCompact * 0.6)
+    readonly property real maxPanelHeight: height - chromeTop - chromeBottom - Theme.space2 * 2
     readonly property real chromeHeight: Theme.space4 * 2 + Theme.controlHeight + Theme.space2
     readonly property bool showHelp: chromeHeight + 5 * fullKeyHeight + helpText.implicitHeight + Theme.space2
                                      <= maxPanelHeight
-    readonly property real keyHeight: Math.max(24, Math.min(fullKeyHeight,
+    readonly property real keyHeight: Math.max(minKeyHeight, Math.min(fullKeyHeight,
                  Math.floor((maxPanelHeight - chromeHeight - (showHelp ? helpText.implicitHeight + Theme.space2 : 0)) / 5)))
     readonly property var hints: [{ button: "← → ↑ ↓", action: "Choose key" }, { button: "A / Enter", action: "Type" },
                                   { button: "Y", action: "Delete" }, { button: "Start", action: "Done" },
@@ -117,7 +118,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+        color: Theme.glassActive ? Theme.modalScrim : Theme.background
         opacity: Theme.glassActive ? 1.0 : 0.85
     }
     MouseArea { anchors.fill: parent; onClicked: osk.cancel() }
@@ -217,10 +218,12 @@ FocusScope {
                                     border.color: keyItem.current ? Theme.focusRing : Theme.border
                                     Text {
                                         textFormat: Text.PlainText
+                                        objectName: "oskKeyLabel"
                                         anchors.centerIn: parent
                                         text: osk.label(keyItem.modelData)
                                         color: keyItem.current && Theme.highContrast ? Theme.background : Theme.text
-                                        font.pixelSize: Math.min(Theme.fontBody, Math.round(osk.keyHeight * 0.45))
+                                        font.pixelSize: Math.max(Theme.fontTiny,
+                                                                 Math.min(Theme.fontBody, Math.round(osk.keyHeight * 0.45)))
                                         font.bold: keyItem.current
                                     }
                                     MouseArea {

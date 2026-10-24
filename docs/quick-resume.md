@@ -27,12 +27,12 @@ Suspend a game and continue it later, also after a restart. Nexora asks the emul
 | Game options › **Quick Resume: on/off** | per game; when off, the game always starts fresh and cannot be suspended (`sessions.excludedGames`). |
 | "Can't resume" dialog | appears when a state cannot be resumed or did not load; **Start fresh** starts the game without it, **Not now** does nothing. The state is kept either way. |
 
-There is one session per game. Only one game runs at a time; suspending is how you switch.
+There is one session per game and emulator (the same game on another emulator gets its own session). Only one game runs at a time; suspending is how you switch.
 
 ## How it works
 
 1. **Launch.** For an emulator with a save-state capability (and the game not excluded), the session directory `<data>/states/<session id>/` is created and the adapter adds its arguments (control-socket: `launchArguments` with the socket path; when resuming also `resumeArguments` with the state file).
-2. **Suspend.** If the emulator is paused (SIGSTOP from the Quick Menu) it is resumed first, because it has to answer. The adapter asks for a state (`SAVE <dir>`); the answer must arrive within `timeoutMs` and name a new, non-empty regular file inside the session directory. Nexora computes its SHA-256 and writes `meta.json` atomically. Only then is the oldest state of the session (beyond the newest two) deleted.
+2. **Suspend.** If the emulator is paused (SIGSTOP from the Quick Menu) it is resumed first, because it has to answer. The adapter asks for a state (`SAVE <dir>`); the answer must arrive within `timeoutMs` and name a new, non-empty regular file directly inside the session directory (not in a subdirectory, not `meta.json`, not a file the session already recorded). Nexora computes its SHA-256 and writes `meta.json` atomically. Only then is the oldest state of the session (beyond the newest two) deleted.
 3. **Close.** The adapter asks the emulator to quit (`QUIT`); if it is still running after `timeoutMs`, Nexora stops it (SIGTERM, then SIGKILL after the emulator's `stopTimeoutMs`).
 4. **Resume.** The [checks](#resume-checks) run, then the game starts with the resume arguments. If the emulator fails within its startup grace period, the "Can't resume" dialog explains it.
 
@@ -100,7 +100,7 @@ States are deleted only (a) by **Remove** on Home after a confirmation, and (b) 
 
 | Situation | Result |
 | --- | --- |
-| emulator answers `ERR`, writes an empty file, a file outside the session directory, or does not answer in time | save failed, game keeps running, notification |
+| emulator answers `ERR`, writes an empty file, a file outside the session directory (or in a subdirectory of it, or `meta.json`, or one already recorded), or does not answer in time | save failed, game keeps running, notification |
 | emulator exits while a save is pending | notification "stopped while it was being saved"; no new state; earlier state kept |
 | `meta.json` cannot be written | save failed; the new file stays unreferenced; the previous state stays valid |
 | resume refused or the emulator fails to start from the state | "Can't resume" dialog; the state is kept |
@@ -116,4 +116,4 @@ States are deleted only (a) by **Remove** on Home after a confirmation, and (b) 
 
 ## Tests
 
-`tst_gamesessionmanager` (fake emulator: suspend writes a verified state and `meta.json`, restart and resume load it, newest two states kept, save failure keeps the game running, limits refuse without deleting, excluded game and emulator without support, resume refused for a changed emulator version / changed game file / bad checksum with the state kept, start fresh, damaged `meta.json` moved aside, removal of one session only, save at shutdown, power request after a save or dropped on failure, power request closes a game without Quick Resume), `tst_savestateadapter`, `tst_emulatormanager::shutdownTerminatesBeforeKilling`, and `tst_qmlsmoke::quickResumeFromQuickMenuAndHome` (Quick Menu › Suspend, Home row, resume, "Can't resume" dialog, remove with confirmation; both resolutions).
+`tst_gamesessionmanager` (fake emulator: suspend writes a verified state and `meta.json`, restart and resume load it, newest two states kept, save failure keeps the game running, limits refuse without deleting, excluded game and emulator without support, resume refused for a changed emulator version / changed game file / bad checksum with the state kept, start fresh, damaged `meta.json` moved aside, removal of one session only, save at shutdown, power request after a save or dropped on failure, power request closes a game without Quick Resume, power request closes an emulator started without a session, the same game on another emulator gets its own session, a save naming an already recorded file is rejected), `tst_savestateadapter`, `tst_emulatormanager::shutdownTerminatesBeforeKilling`, and `tst_qmlsmoke::quickResumeFromQuickMenuAndHome` (Quick Menu › Suspend, Home row, resume, "Can't resume" dialog, remove with confirmation; both resolutions).

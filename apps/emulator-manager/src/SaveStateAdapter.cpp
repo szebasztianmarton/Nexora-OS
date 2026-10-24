@@ -95,6 +95,16 @@ bool SaveStateAdapter::checkStateFile(const QString &file, const QString &direct
         *error = QStringLiteral("The emulator reported a state file outside the session directory");
         return false;
     }
+    // Only the session directory itself: a name from a subdirectory would be recorded (and
+    // later resolved) as if it were directly inside it.
+    if (QFileInfo(canonical).path() != dir) {
+        *error = QStringLiteral("The emulator reported a state file that is not directly in the session directory");
+        return false;
+    }
+    if (info.fileName() == QLatin1String("meta.json")) {
+        *error = QStringLiteral("The emulator reported the session's meta.json as its state file");
+        return false;
+    }
     if (info.isSymLink() || !info.isFile()) {
         *error = QStringLiteral("The emulator's state file is not a regular file");
         return false;

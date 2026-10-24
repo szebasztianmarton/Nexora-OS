@@ -2,7 +2,7 @@
 
 How to build, test and run Nexora OS from source on a development host, how the development build differs from the release image, and the conventions for working on the code. The bootable image is built with Buildroot; see [buildroot.md](buildroot.md).
 
-**Verified build environment (2026-10-16):** Ubuntu 24.04 container, Qt 6.4.2 (distribution packages), CMake 3.28.3, Ninja, GCC 13.3 and Clang 18.1.3, OpenSSL 3. With `-DNEXORA_WARNINGS_AS_ERRORS=ON` both compilers build cleanly and **41/41** CTest tests pass ([testing.md](testing.md)). The same steps are what CI runs on `ubuntu-24.04`. Building on Windows 11 through WSL 2 is described (in Hungarian) in [testing-windows11.md](testing-windows11.md).
+**Verified build environment (2026-10-16):** Ubuntu 24.04 container, Qt 6.4.2 (distribution packages), CMake 3.28.3, Ninja, GCC 13.3 and Clang 18.1.3, OpenSSL 3. With `-DNEXORA_WARNINGS_AS_ERRORS=ON` both compilers built cleanly and **41/41** CTest tests passed on that date; the suite has 50 tests now ([testing.md](testing.md)). The same steps are what CI runs on `ubuntu-24.04`. Building on Windows 11 through WSL 2 is described (in Hungarian) in [testing-windows11.md](testing-windows11.md).
 
 ## Contents
 
@@ -99,7 +99,9 @@ scripts/run.sh -- --windowed --settings-file /tmp/nx-settings.json --library-db 
 QT_QPA_PLATFORM=offscreen scripts/run.sh          # no display
 ```
 
-A development build generates emulator configurations for the fake emulator (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) next to `example.json` in `build/<preset>/share/nexora/emulators/`, so the Emulators tab is populated without setup. These are build artefacts; do not commit them.
+**Game folder for development:** put game files (or folders) into `.games/` at the repository root; it is git-ignored and never committed. When that folder exists at configure time, the build writes `build/<preset>/share/nexora/settings-defaults.json` with `library.directories` set to it (the system-defaults layer of [settings.md](settings.md#file-locations)), so a dev run scans it without any Settings work. Another folder: `-DNEXORA_DEV_LIBRARY_DIR=<dir>`. This is only a default: when your user file (`~/.config/nexora/settings.json`) already sets `library.directories`, even to an empty list, that value replaces it and `.games/` is not scanned; remove the key, or run with `--settings-file` or a scratch `XDG_CONFIG_HOME`. Adding a folder in Settings writes the whole list, the `.games/` path included, to the user file, so from then on removing `.games/` and re-running the configure step no longer takes it out of the library. Re-run the configure step after creating or removing `.games/`; nothing of this is installed into the image.
+
+**Fake emulators for development:** `-DNEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` generates emulator configurations for the fake emulator (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) next to `example.json` in `build/<preset>/share/nexora/emulators/`, so launching, failure handling and the running overlay can be tried without a real emulator. Off by default (the Emulators tab shows only real definitions); configuring with it off removes the generated files again. These are build artefacts; do not commit them.
 
 By default the application uses your real XDG directories (`~/.config/nexora`, `~/.local/share/nexora`, `~/.local/state/nexora`, `~/.cache/nexora`; [user-data.md](user-data.md)). Use `--settings-file`/`--library-db` or point `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` and `XDG_CACHE_HOME` at a scratch directory to keep experiments separate.
 
@@ -137,7 +139,7 @@ Exit codes: 0 normal, 1 QML load failure / failed check or headless action, 2 re
 | Built by | CMake on the host (`debug`/`ci` presets) | Buildroot `nexora-os` package (`BUILD_TESTING=OFF`, `NEXORA_BUILD_FAKE_EMULATOR=OFF`, SDL3 off, no `-Werror`) |
 | Qt | host Qt (6.4.2 on Ubuntu 24.04) | Qt 6.9.1 cross-compiled, EGLFS/KMS |
 | Platform | desktop (`NEXORA_PLATFORM` unset) | embedded (`/etc/nexora-release`) |
-| Emulators | example + fake emulator configs | `example.json` only (`/bin/true`) |
+| Emulators | `example.json`, `xenia.json` (+ fake emulator configs with `NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON`) | `example.json`, `xenia.json` |
 | Power, volume, updates | power refused, volume stored only, updates not supported | power and update FIFOs to root helpers, `amixer` volume |
 | User data | your XDG directories | `/home/nexora` on the data partition |
 | Update keys | `<build>/share/nexora/update-keys` (empty) | `/usr/share/nexora/update-keys` (from `buildroot-external/board/nexora-x86_64/update-keys/`) |
@@ -172,7 +174,7 @@ apps/update/            nexora_update: Version, UpdateManifest, SignatureVerifie
                         tools/nexora-update-tool
 apps/console-ui/        nexora_ui + QML module Nexora.Console (qml/), controllers (src/),
                         src/input/ = nexora_input; nexora-console-ui
-config/                 emulators/example.json, examples/, systems/systems.json
+config/                 emulators/example.json and xenia.json, examples/, systems/systems.json
 tests/                  unit/, integration/, qml/, system/, support/, fixtures/
 buildroot-external/     the Buildroot BR2_EXTERNAL tree (image)
 scripts/                build/run, image/, release/, qmllint.sh, shellcheck.sh

@@ -27,18 +27,20 @@ FocusScope {
 
     readonly property bool noDirectories: library.directories.length === 0
     readonly property bool noGames: library.totalCount === 0
-    readonly property var hints: quickResumeRow.activeFocus
+    readonly property var hints: confirmRemoveState.visible ? confirmRemoveState.hints
+        : quickResumeRow.activeFocus
         ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Resume" },
            { button: "Select / O", action: "Remove" }, { button: "↑ ↓", action: "Sections" },
-           { button: "L1 / R1", action: "Switch tab" }]
+           { button: "L1 / R1", action: "Switch tab" }, { button: "B / Esc", action: "Tabs" }]
         : actions.activeFocus || statusCards.activeFocus || systemsRow.activeFocus
         ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Open" },
            { button: "↑ ↓", action: "Sections" },
-           { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "System" }]
+           { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "System" },
+           { button: "B / Esc", action: "Tabs" }]
         : [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Details" },
            { button: "Y / F", action: "Favorite" }, { button: "Select / O", action: "Options" },
            { button: "↑ ↓", action: "Sections" },
-           { button: "L1 / R1", action: "Switch tab" }]
+           { button: "L1 / R1", action: "Switch tab" }, { button: "B / Esc", action: "Tabs" }]
 
     // --- Status card data ----------------------------------------------------------------------
     readonly property int controllerCount: app.input ? app.input.devices.length : app.inputDevices.length
@@ -323,7 +325,7 @@ FocusScope {
                                 anchors.top: parent.top
                                 anchors.margins: Theme.space4
                                 anchors.leftMargin: Theme.space5 + Theme.space1
-                                spacing: 2
+                                spacing: Theme.space1
                                 Text {
                                     textFormat: Text.PlainText
                                     text: card.modelData.title
@@ -525,7 +527,7 @@ FocusScope {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.margins: Theme.space4
-                            spacing: 2
+                            spacing: Theme.space1
                             Text {
                                 textFormat: Text.PlainText
                                 width: parent.width
@@ -556,6 +558,8 @@ FocusScope {
 
     ConfirmDialog {
         id: confirmRemoveState
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         objectName: "confirmRemoveQuickResume"
         property string sessionId
         title: "Remove Quick Resume state?"

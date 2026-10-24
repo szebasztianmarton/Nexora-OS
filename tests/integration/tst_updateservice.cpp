@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -12,6 +13,7 @@
 
 #include <thread>
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -335,6 +337,58 @@ private slots:
         QCOMPARE(service.state(), UpdateState::RestartRequired);
         reader.join();
         QCOMPARE(receivedLine, QStringLiteral("install %1\n").arg(bundleRoot.path()));
+    }
+
+    // nexora-updated refuses these with a bare "error invalid request"; the service refuses
+    // them itself, with a reason, before anything reaches the FIFO.
+    void installRefusesABundlePathTheHelperWouldReject_data()
+    {
+        QTest::addColumn<QString>("dirName");
+        QTest::addColumn<QString>("reason");
+        QTest::newRow("newline") << QStringLiteral("nexora-update\nx") << QStringLiteral("control character");
+        QTest::newRow("dot dot") << QStringLiteral("nexora..update") << QStringLiteral("\"..\"");
+        QTest::newRow("outside the set") << QStringLiteral("nexora$update") << QStringLiteral("only letters, digits");
+        QTest::newRow("longer than 256 bytes")
+            << QString(130, QLatin1Char('a')) + QLatin1Char('/') + QString(130, QLatin1Char('b'))
+            << QStringLiteral("longer than 256 bytes");
+    }
+
+    void installRefusesABundlePathTheHelperWouldReject()
+    {
+        QFETCH(QString, dirName);
+        QFETCH(QString, reason);
+        InstallRig rig;
+        UpdateService service(rig.env());
+        const QString bundleDir = rig.bundleRoot.filePath(dirName);
+        QVERIFY(QDir().mkpath(bundleDir));
+        makeReady(service, bundleDir, rig.key);
+        QCOMPARE(service.state(), UpdateState::ReadyToInstall);
+
+        // A reader is waiting, so a request would get through.
+        QCOMPARE(::mkfifo(QFile::encodeName(rig.fifoPath).constData(), 0600), 0);
+        const int reader = ::open(QFile::encodeName(rig.fifoPath).constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        QVERIFY(reader >= 0);
+        auto closeReader = qScopeGuard([reader] { ::close(reader); });
+
+        QVERIFY(service.install());
+        QCOMPARE(service.state(), UpdateState::Failed);
+        QCOMPARE(service.error(), UpdateError::UnsafeBundlePath);
+        QVERIFY2(service.message().contains(reason), qPrintable(service.message()));
+        char byte = 0;
+        QVERIFY(::read(reader, &byte, 1) <= 0); // nothing was written
+    }
+
+    void bundlePathRuleMatchesTheHelper()
+    {
+        QVERIFY(bundlePathProblem(QStringLiteral("/media/usb 1/nexora-update-0.4.1_rc.2")).isEmpty());
+        QVERIFY(bundlePathProblem(QLatin1Char('/') + QString(255, QLatin1Char('a'))).isEmpty()); // 256 bytes
+        QVERIFY(!bundlePathProblem(QLatin1Char('/') + QString(256, QLatin1Char('a'))).isEmpty());
+        QVERIFY(!bundlePathProblem(QStringLiteral("/")).isEmpty());
+        QVERIFY(!bundlePathProblem(QStringLiteral("relative/bundle")).isEmpty());
+        QVERIFY(!bundlePathProblem(QStringLiteral("/media/usb/nexora\tupdate")).isEmpty());
+        QVERIFY(!bundlePathProblem(QStringLiteral("/media/usb/nexora\rupdate")).isEmpty());
+        QVERIFY(!bundlePathProblem(QStringLiteral("/media/usb/../update")).isEmpty());
+        QVERIFY(!bundlePathProblem(QStringLiteral("/media/usb/frissítés")).isEmpty());
     }
 
     void verifyCreatesAMissingStateDirectory()
