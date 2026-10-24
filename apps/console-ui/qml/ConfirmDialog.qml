@@ -26,6 +26,10 @@ FocusScope {
     property real chromeTop: 0
     property real chromeBottom: 0
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: title
+    Accessible.description: message
+
     readonly property alias confirmButton: confirmButton
     // Hint bar entries while open; every owner lists these so the wording cannot drift. Focus
     // starts on Cancel, so Accept selects the focused button rather than confirming.

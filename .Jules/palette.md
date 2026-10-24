@@ -4,3 +4,6 @@
 ## 2024-10-23 - QML Component Accessibility for Tabs and Radio Buttons
 **Learning:** In QML Accessibility, tabs (`Accessible.PageTab`) should use `Accessible.selected` to map to the correct state (e.g. `QAccessible::State::Selected`). Conversely, elements with the role `Accessible.RadioButton` must use `Accessible.checkable` and `Accessible.checked` to correctly represent their state.
 **Action:** Ensure proper state properties are applied based on the accessibility role in custom interactive QML components (`Accessible.selected` for tabs, `Accessible.checkable` and `Accessible.checked` for radio buttons and checkboxes).
+## 2024-10-18 - QML Dialog Accessibility
+**Learning:** QML dialog panels should define `Accessible.role: Accessible.Dialog`, as well as `Accessible.name` and `Accessible.description` properties. This provides necessary context to screen readers when the dialog is opened and receives focus, replacing standard web ARIA roles.
+**Action:** Always verify that components used as floating dialogs (e.g., generic panels, confirmation boxes) declare `Accessible.Dialog` properties.
