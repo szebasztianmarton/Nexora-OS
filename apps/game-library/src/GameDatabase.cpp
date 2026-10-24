@@ -99,6 +99,7 @@ bool GameDatabase::open(const QString &path, bool allowRecovery)
 {
     close();
     m_issues.clear();
+    m_lastError.clear();
     m_recoverable = true;
     m_backupPath.clear();
     m_path = path;
@@ -422,6 +423,7 @@ std::optional<ApplyStats> GameDatabase::applyScan(const ScanResult &result, cons
 
     if (!db.commit()) {
         m_lastError = db.lastError().text();
+        db.rollback(); // a failed COMMIT leaves the transaction open on this connection
         return std::nullopt;
     }
     qCInfo(lcLibrary) << "Library update:" << stats.added << "added," << stats.updated << "updated," << stats.missing
@@ -510,7 +512,15 @@ bool GameDatabase::recordLaunch(qint64 id, const QDateTime &when)
     q.prepare(QStringLiteral("UPDATE games SET play_count = play_count + 1, last_played = ? WHERE id = ?"));
     q.addBindValue(when.toSecsSinceEpoch());
     q.addBindValue(id);
-    return q.exec() && q.numRowsAffected() == 1;
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() != 1) {
+        m_lastError = QStringLiteral("no game with id %1").arg(id);
+        return false;
+    }
+    return true;
 }
 
 bool GameDatabase::setEmulatorOverride(qint64 id, const QString &emulatorId)

@@ -22,7 +22,7 @@ Code: `apps/game-library/` (`LibraryScanner`, `GameDatabase`, `LibraryQuery`, `G
 
 ## Configuring directories and file types
 
-**Directories** come from the `library.directories` setting ([settings.md](settings.md#keys)): absolute paths, at most 64, `/` refused. They can be added and removed on the Settings tab under "Library folders" (typing the path requires a keyboard; `LibraryController.addDirectory()` additionally requires the directory to exist) or written to the settings file (existence is then only checked by the scan).
+**Directories** come from the `library.directories` setting ([settings.md](settings.md#keys)): absolute paths, at most 64, `/` refused. They can be added and removed on the Settings tab under "Library folders" (typing the path requires a keyboard; `LibraryController.addDirectory()` additionally requires the directory to exist) or written to the settings file (existence is then only checked by the scan). An added or removed folder that cannot be saved to the settings file is reverted and reported as an error notice.
 
 **File types** come from two places:
 
@@ -227,7 +227,7 @@ The Options button (default Select; keyboard `O`; remappable as `options`) on a 
    - The game path is only ever passed as an argument. The emulator executable is started directly with an argument list; no shell is involved, so spaces and quotes in file names need no escaping.
    - Working directory: profile `workingDirectory`, else emulator `workingDirectory`, else the executable's directory.
    - Stop timeout before SIGKILL: the emulator's `stopTimeoutMs` (500–60000) or 5000 ms.
-4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does.
+4. Once the emulator process is actually **running**, the play count is incremented and `last_played` set. A launch that fails to start (validation error or `FailedToStart`) does not count; one that starts and later crashes does. If the write fails (logged as a warning) while a scan is running, it is retried once when the scan finishes.
 5. When the process ends, a launch-history record is written and the lists are refreshed ([emulator-integration.md](emulator-integration.md#launch-lifecycle)).
 
 Starting an emulator **without** a game (from the emulator list) drops every argument that contains `{file}`.

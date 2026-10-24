@@ -10,7 +10,10 @@
 
 #include <QDir>
 #include <QFile>
+#include <QRegularExpression>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -27,6 +30,20 @@ void write(const QString &path, const QByteArray &content)
     QFile f(path);
     QVERIFY(f.open(QIODevice::WriteOnly));
     f.write(content);
+}
+
+// Runs |statement| on its own connection to the SQLite file at |path|.
+bool sqlite(const QString &path, const QString &statement)
+{
+    bool ok = false;
+    {
+        QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("raw"));
+        raw.setDatabaseName(path);
+        ok = raw.open() && QSqlQuery(raw).exec(statement);
+        raw.close();
+    }
+    QSqlDatabase::removeDatabase(QStringLiteral("raw"));
+    return ok;
 }
 
 } // namespace
@@ -882,6 +899,61 @@ private slots:
             QVERIFY(args.at(1).toBool()); // isError
             QVERIFY(!args.at(0).toString().isEmpty());
         }
+    }
+
+    void directoryChangesThatCannotBeSavedAreNotKept()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        const QString extra = m_dir.filePath(QStringLiteral("more-games"));
+        QVERIFY(QDir().mkpath(extra));
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        // A directory where the settings file belongs: every save now fails.
+        QFile::remove(settingsFile());
+        QVERIFY(QDir().mkpath(settingsFile()));
+        QSignalSpy notices(ctx.library(), &ui::LibraryController::notice);
+
+        QVERIFY(!ctx.library()->addDirectory(extra));
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(notices.at(0).at(1).toBool()); // isError
+        QVERIFY(!notices.at(0).at(0).toString().startsWith(QStringLiteral("Added")));
+        QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+
+        QVERIFY(!ctx.library()->removeDirectory(gamesDir()));
+        QCOMPARE(notices.size(), 2);
+        QVERIFY(notices.at(1).at(1).toBool());
+        QVERIFY(!notices.at(1).at(0).toString().startsWith(QStringLiteral("Removed")));
+        QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+        waitForScan(ctx);
+    }
+
+    void playCountWrittenDuringAScanIsRetried()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        const qint64 id = ctx.library()->games()->gameIdAt(0);
+        const QString database = options().databasePath;
+        QVERIFY(sqlite(database,
+                       QStringLiteral("CREATE TRIGGER block_launch BEFORE UPDATE OF play_count ON games "
+                                      "BEGIN SELECT RAISE(ABORT, 'blocked by test'); END")));
+        // Connected before the controller's retry, so it runs first: the write works again.
+        connect(&ctx.gameLibrary(), &library::GameLibrary::scanningChanged, this, [database](bool scanning) {
+            if (!scanning)
+                QVERIFY(sqlite(database, QStringLiteral("DROP TRIGGER IF EXISTS block_launch")));
+        });
+        QVERIFY(ctx.gameLibrary().refresh());
+        QVERIFY(ctx.gameLibrary().isScanning());
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("play count.*blocked by test")));
+        emit ctx.sessions()->launchAccepted(id);
+        emit ctx.app()->manager()->stateChanged(emulator::ProcessState::Running, QStringLiteral("fake"));
+        QCOMPARE(ctx.gameLibrary().entry(id)->playCount, 0);
+
+        waitForScan(ctx);
+        QTRY_COMPARE_WITH_TIMEOUT(ctx.gameLibrary().entry(id)->playCount, 1, Timeout);
     }
 };
 
