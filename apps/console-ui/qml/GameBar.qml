@@ -173,8 +173,7 @@ FocusScope {
 
                     Accessible.role: Accessible.PageTab
                     Accessible.name: modelData.title
-                    Accessible.checkable: true
-                    Accessible.checked: selected
+                    Accessible.selected: selected
 
                     onActiveFocusChanged: if (activeFocus) bar.currentTab = index
 
