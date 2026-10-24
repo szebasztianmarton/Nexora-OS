@@ -12,5 +12,11 @@
 #NEXORA_MAX_RAPID_FAILURES=5
 #NEXORA_RAPID_SECONDS=15
 
+# Seconds "S90nexora stop" waits for the UI to exit (it saves a running
+# game for Quick Resume first) before KILLing it and its supervisor. Raise it
+# when an emulator's save-state timeoutMs is above 10 s: the UI needs up to
+# 2 x timeoutMs + 8 s.
+#NEXORA_STOP_TIMEOUT=35
+
 # Set to "no" to disable the console UI autostart.
 #NEXORA_AUTOSTART=yes

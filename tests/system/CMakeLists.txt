@@ -1,6 +1,6 @@
 # Host-side checks of the Buildroot image tree (buildroot-external/), label "system".
 # They run against scratch files only (never real disks, no root, no VM) and are registered
-# only when the host tools they need exist.
+# only when the host tools they need exist; check_line_endings is always registered.
 set(NEXORA_BR_EXTERNAL ${PROJECT_SOURCE_DIR}/buildroot-external)
 set(NEXORA_BR_BOARD ${NEXORA_BR_EXTERNAL}/board/nexora-x86_64)
 set(NEXORA_BR_OVERLAY ${NEXORA_BR_BOARD}/rootfs-overlay)
@@ -22,6 +22,18 @@ if(NEXORA_BASH AND NEXORA_GRUB_EDITENV)
         ENVIRONMENT "NEXORA_UPDATED=${NEXORA_BR_OVERLAY}/usr/libexec/nexora/nexora-updated;NEXORA_UPDATE_TOOL=$<TARGET_FILE:nexora-update-tool>;NEXORA_TEST_BUNDLE_DIR=${NEXORA_UPDATE_TOOL_FIXTURE_DIR}/good-bundle;NEXORA_TEST_BAD_BUNDLE_DIR=${NEXORA_UPDATE_TOOL_FIXTURE_DIR}/bad-bundle;NEXORA_TEST_KEYS_DIR=${NEXORA_UPDATE_TOOL_FIXTURE_DIR}/keys")
 else()
     message(STATUS "test_update_helper not registered (needs bash and grub-editenv)")
+endif()
+
+# "S90nexora stop" against a simulated supervisor and UI (stand-ins for start-stop-daemon
+# and sleep): the wait outlasts the UI's Quick Resume exit budget, then the UI is KILLed too.
+if(NEXORA_BASH)
+    add_test(NAME test_s90nexora_stop COMMAND ${NEXORA_BASH} ${NEXORA_BR_EXTERNAL}/tests/test-s90nexora-stop.sh)
+    set_tests_properties(test_s90nexora_stop PROPERTIES
+        LABELS system
+        TIMEOUT 60
+        ENVIRONMENT "NEXORA_S90NEXORA=${NEXORA_BR_OVERLAY}/etc/init.d/S90nexora")
+else()
+    message(STATUS "test_s90nexora_stop not registered (needs bash)")
 endif()
 
 # GRUB script syntax of the A/B boot-counting grub.cfg.

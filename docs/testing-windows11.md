@@ -79,7 +79,7 @@ cd Nexora-OS
 git checkout main
 ```
 
-**Sorvégek:** ebben a repóban kapcsold ki a sorvég-konverziót: `git config core.autocrlf false` (a fenti `git checkout` előtt, vagy utána a fájlok újra-kicsekkolásával). Ha a rendszer- vagy globális gitconfig `core.autocrlf=true`-t állít (Git for Windows alapértelmezése, ha a repót Windowsból is használod), a munkafa CRLF sorvégű fájlokat kaphat; a `.gitattributes` életbe lépése előtt kicsekkolt fájlok így CRLF-esek maradtak, és ez eltörte a Buildroot-buildet. Ellenőrzés: `scripts/check-line-endings.sh` (CTest-ként: `check_line_endings`), amely hibát jelez, ha a `git ls-files --eol` bármely fájlra `i/crlf`-et vagy `w/crlf`-et mutat.
+**Sorvégek:** ebben a repóban kapcsold ki a sorvég-konverziót: `git config core.autocrlf false` (a fenti `git checkout` előtt, vagy utána a fájlok újra-kicsekkolásával). Ha a rendszer- vagy globális gitconfig `core.autocrlf=true`-t állít (Git for Windows alapértelmezése, ha a repót Windowsból is használod), a munkafa CRLF sorvégű fájlokat kaphat; a `.gitattributes` életbe lépése előtt kicsekkolt fájlok így CRLF-esek maradtak, és ez eltörte a Buildroot-buildet. Ellenőrzés: `scripts/check-line-endings.sh` (CTest-ként: `check_line_endings`), amely hibát jelez, ha a `git ls-files --eol` bármely fájlra `i/crlf`-et, `w/crlf`-et, `i/mixed`-et vagy `w/mixed`-et (vegyes sorvégeket) mutat.
 
 A fájlok Windowsból is elérhetők a Fájlkezelőben: `\\wsl$\Ubuntu-24.04\home\<felhasználó>\Nexora-OS`. VS Code-dal: a repó mappájában `code .` (a *WSL* bővítménnyel).
 
@@ -112,7 +112,7 @@ Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `
 100% tests passed, 0 tests failed out of 49
 ```
 
-A 4 `system` tesztből 3 (image-segédszkriptek, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. A negyedik, a `check_line_endings`, mindig regisztrálódik.
+Az 5 `system` tesztből 4 (image-segédszkriptek, `S90nexora stop`, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. Az ötödik, a `check_line_endings`, mindig regisztrálódik.
 
 ### 5.3 Tesztek külön-külön
 
@@ -169,7 +169,7 @@ scripts/run.sh debug -- --input-backend none --log-file /tmp/nexora.log
 QT_LOGGING_RULES="nexora.*.debug=true" scripts/run.sh          # részletes napló
 ```
 
-**Játékkönyvtár:** a repó gyökerében lévő `.games/` mappa (git-ignorált, sosem kerül commitba) a fejlesztői játékkönyvtár: ha a konfiguráláskor létezik, a build a `build/<preset>/share/nexora/settings-defaults.json` fájlba írja `library.directories`-ként, így a Games fül beállítás nélkül is ezt a mappát olvassa. Másik mappa: `-DNEXORA_DEV_LIBRARY_DIR=<mappa>`. A mappa létrehozása vagy törlése után futtasd újra a konfigurálást.
+**Játékkönyvtár:** a repó gyökerében lévő `.games/` mappa (git-ignorált, sosem kerül commitba) a fejlesztői játékkönyvtár: ha a konfiguráláskor létezik, a build a `build/<preset>/share/nexora/settings-defaults.json` fájlba írja `library.directories`-ként, így a Games fül beállítás nélkül is ezt a mappát olvassa. Másik mappa: `-DNEXORA_DEV_LIBRARY_DIR=<mappa>`. Ez csak alapértelmezés: ha a felhasználói fájl (`~/.config/nexora/settings.json`) már tartalmaz `library.directories` kulcsot, akár üres listával is, az felülírja, és a `.games/` nem kerül beolvasásra; töröld a kulcsot, vagy futtass `--settings-file`-lal vagy ideiglenes `XDG_CONFIG_HOME`-mal. Ha a Settingsben mappát adsz hozzá, a teljes lista, a `.games/` útvonalával együtt, a felhasználói fájlba íródik, így ezután a `.games/` törlése és az újrakonfigurálás már nem veszi ki a könyvtárból. A mappa létrehozása vagy törlése után futtasd újra a konfigurálást.
 
 **Fake emulátorok:** alapból nem jelennek meg. A `-DNEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` kapcsolóval a build a fejlesztői emulátor-konfigurációkat (`fake-ok`, `fake-fail`, `fake-crash`, `fake-long`) a `build/debug/share/nexora/emulators/` mappába generálja, így valódi emulátor nélkül is kipróbálható az indítás és visszatérés; kikapcsolt opcióval újrakonfigurálva a fájlok eltűnnek.
 
