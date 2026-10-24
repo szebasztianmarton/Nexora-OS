@@ -140,8 +140,9 @@ jobs:
         run: ctest --preset ${{ matrix.preset }} -L security
 
       # Image helper tests (buildroot-external): registered only when their host tools
-      # (bash, grub-editenv, grub-script-check from grub-common) exist, so an empty
-      # selection is not an error here.
+      # (bash, grub-editenv, grub-script-check from grub-common, shellcheck) exist, so an
+      # empty selection is not an error here. check_line_endings is always registered and
+      # skipped outside a git checkout.
       - name: System tests
         run: ctest --preset ${{ matrix.preset }} -L system --no-tests=ignore
 

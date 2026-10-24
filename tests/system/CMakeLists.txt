@@ -1,6 +1,6 @@
 # Host-side checks of the Buildroot image tree (buildroot-external/), label "system".
 # They run against scratch files only (never real disks, no root, no VM) and are registered
-# only when the host tools they need exist.
+# only when the host tools they need exist; check_line_endings is always registered.
 set(NEXORA_BR_EXTERNAL ${PROJECT_SOURCE_DIR}/buildroot-external)
 set(NEXORA_BR_BOARD ${NEXORA_BR_EXTERNAL}/board/nexora-x86_64)
 set(NEXORA_BR_OVERLAY ${NEXORA_BR_BOARD}/rootfs-overlay)

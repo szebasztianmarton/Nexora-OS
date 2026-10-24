@@ -40,7 +40,7 @@ tests/
   unit/                  fast, isolated tests                               (label unit)
   integration/           real processes, SQLite, QML, shell tests            (label integration)
   qml/                   Qt Quick Test runner (tst_console_qml) + tst_*.qml  (labels integration;GUI)
-  system/                image helper checks, registered only when host tools exist (label system)
+  system/                image helper checks (registered only when their host tools exist) and the line-ending check (always registered, skipped outside a git checkout) (label system)
   support/               UpdateBundleFixture: signed test bundles and keys
   fixtures/              fake-emulator/, virtual-pad/ (nexora-virtual-pad, uinput profiles), sysroot/ (fake /proc and /sys for hardware info)
 buildroot-external/tests/test-update-helper.sh   run by the system test test_update_helper
