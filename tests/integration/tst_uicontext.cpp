@@ -907,6 +907,7 @@ private slots:
         ctx.start();
         const QString extra = m_dir.filePath(QStringLiteral("more-games"));
         QVERIFY(QDir().mkpath(extra));
+        write(extra + QStringLiteral("/Unsaved.rom"), "rom");
         QVERIFY(ctx.library()->addDirectory(gamesDir()));
         waitForScan(ctx);
         // A directory where the settings file belongs: every save now fails.
@@ -919,13 +920,22 @@ private slots:
         QVERIFY(notices.at(0).at(1).toBool()); // isError
         QVERIFY(!notices.at(0).at(0).toString().startsWith(QStringLiteral("Added")));
         QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+        QVERIFY(!ctx.library()->isScanning());
+        // Nothing scanned the unsaved folder: its game never reaches the library.
+        waitForScan(ctx);
+        for (const auto &e : ctx.gameLibrary().entries())
+            QVERIFY2(e.title != QStringLiteral("Unsaved"), qPrintable(e.path));
+        QCOMPARE(ctx.gameLibrary().entries().size(), 2);
 
         QVERIFY(!ctx.library()->removeDirectory(gamesDir()));
         QCOMPARE(notices.size(), 2);
         QVERIFY(notices.at(1).at(1).toBool());
         QVERIFY(!notices.at(1).at(0).toString().startsWith(QStringLiteral("Removed")));
         QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+        // The still-configured folder's games stay present.
         waitForScan(ctx);
+        QCOMPARE(ctx.gameLibrary().entries().size(), 2);
+        QCOMPARE(ctx.gameLibrary().missingCount(), 0);
     }
 
     void playCountWrittenDuringAScanIsRetried()
