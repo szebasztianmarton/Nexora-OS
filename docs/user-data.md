@@ -22,7 +22,7 @@ Code: `shared/include/nexora/shared/DataLayout.h` (all directories in one place)
 | Purpose | Directory | Contents | Safe to delete? |
 | --- | --- | --- | --- |
 | User configuration | `$XDG_CONFIG_HOME/nexora` (`~/.config/nexora`) | `settings.json` ([settings.md](settings.md)) | Only to reset preferences |
-| Game-library metadata | `$XDG_DATA_HOME/nexora` (`~/.local/share/nexora`) | `library.sqlite` (+ `-wal`, `-shm`), migration backups `library.sqlite.v1-backup-*` | No: favorites, play history, edited titles and notes live here |
+| Game-library metadata | `$XDG_DATA_HOME/nexora` (`~/.local/share/nexora`) | `library.sqlite` (+ `-wal`, `-shm`), migration backups `library.sqlite.v1-backup-*` / `.v2-backup-*` | No: favorites, play history, edited titles and notes live here |
 | Save files | `<data>/saves` | reserved for emulator saves (see [limitations](#limitations)); included in a backup only on request | No |
 | Quick Resume states | `<data>/states` | one directory per saved session: state files + `meta.json` ([quick-resume.md](quick-resume.md#files)); not included in backups | Only through Home › Quick Resume › Remove (deleting by hand loses the saved game state) |
 | Emulator configuration | `<data>/emulators` | reserved for per-emulator configuration; not read by the UI yet | — |
@@ -99,7 +99,7 @@ None of this has run on a booted image yet <!-- TASK12-RESULT: replace with the 
 | File | Version field | Unknown/newer version |
 | --- | --- | --- |
 | `settings.json` | `"version": 1` | treated as unusable and moved aside ([settings.md](settings.md#validation-and-recovery)) |
-| `library.sqlite` | `PRAGMA user_version` = 2 | a newer schema is refused and left byte-identical; the library is disabled for that run |
+| `library.sqlite` | `PRAGMA user_version` = 3 | a newer schema is refused and left byte-identical; the library is disabled for that run |
 | `launch-history.json` | `"version": 1` | moved aside, history starts empty |
 | `notifications.json` | `"version": 1` | moved aside, history starts empty ([notifications.md](notifications.md#history)) |
 | Quick Resume `meta.json` | `"version": 1` | moved aside (`meta.json.corrupt-*`); the session's state files are kept ([quick-resume.md](quick-resume.md#files)) |
@@ -109,6 +109,8 @@ None of this has run on a booted image yet <!-- TASK12-RESULT: replace with the 
 | `systems.json` (built in) | `"version": 1` | catalog load fails |
 
 **Library migration v1 → v2** (`GameDatabase::open()`): before changing anything, the database file is copied (after a WAL checkpoint) to `library.sqlite.v1-backup-<yyyyMMdd-hhmmss>`; then the new columns (`system_id`, `system_override`, `system_candidates`, `title_override`, `notes`, `hidden`) and the version bump are applied in one transaction. If the copy or the transaction fails, `open()` fails, the original database stays usable by the old version and the backup exists. Migrating an already migrated database is a no-op (no second backup). Tested: `tst_librarymigration` (real v1 DDL, favorites and play counts preserved, backup opens as v1, version 99 refused untouched, second open makes no new backup).
+
+**Library migration v2 → v3** (and v1 → v3 in one step): the same backup (`library.sqlite.v2-backup-<yyyyMMdd-hhmmss>`), then `play_seconds`, `pinned`, `collections` and `collection_games` in one transaction ([game-library.md](game-library.md#database)). Tested: `tst_librarymigration::migratesV2KeepingUserData`, `migratesV1KeepingUserData`.
 
 ## Backup and restore
 
