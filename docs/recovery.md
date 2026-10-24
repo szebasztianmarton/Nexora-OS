@@ -145,7 +145,7 @@ Current files are moved aside as `*.pre-restore-<timestamp>` before anything is 
 
 ### Get a root shell
 
-The serial console (ttyS0, 115200 baud) and tty2 always offer a login; on the development image root has no password. Or boot "maintenance shell: no console UI". From a shell: `/etc/init.d/S90nexora stop|start|restart`, and `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to keep the UI off.
+The serial console (ttyS0, 115200 baud) and tty2 always offer a login; on the development image root has no password. Or boot "maintenance shell: no console UI". From a shell: `/etc/init.d/S90nexora stop|start|restart`, and `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to keep the UI off. `stop` waits up to 35 s (`NEXORA_STOP_TIMEOUT`) for the UI to exit, which covers saving a running game for Quick Resume with the default 10 s `timeoutMs` (the UI needs up to 2 × `timeoutMs` + 8 s), then KILLs the UI and its supervisor.
 
 ### Repair the data partition
 

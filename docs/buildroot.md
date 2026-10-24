@@ -61,7 +61,8 @@ buildroot-external/
 ├── scripts/
 │   ├── check-defconfig.sh        defconfig symbol-survival check
 │   └── check-kernel-fragment.sh  kernel fragment survival check
-└── tests/test-update-helper.sh   host test of nexora-updated / nexora-bootok (CTest test_update_helper)
+├── tests/test-update-helper.sh   host test of nexora-updated / nexora-bootok (CTest test_update_helper)
+└── tests/test-s90nexora-stop.sh  host test of "S90nexora stop" (CTest test_s90nexora_stop)
 ```
 
 ### The `nexora-os` package
@@ -234,7 +235,7 @@ Login prompts are never disabled:
 - **GRUB entry "Nexora OS (maintenance shell: no console UI)"** — boots with `nexora.noui`, so tty1 shows the normal console and the logins above are available. Press any arrow key during the 3 s GRUB timeout to select it.
 - **GRUB entry "Nexora OS (recovery menu)"** — boots with `nexora.recovery`: a keyboard-driven text menu (slots and versions, boot the previous slot, reset preferences, export diagnostics, restore the latest backup, repair the boot environment, reboot, shell). See [recovery.md](recovery.md).
 - **GRUB entry "Nexora OS (previous slot)"** — boots the other root slot once.
-- From a root shell: `/etc/init.d/S90nexora stop|start|restart`; set `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to disable autostart persistently.
+- From a root shell: `/etc/init.d/S90nexora stop|start|restart`; set `NEXORA_AUTOSTART=no` in `/etc/default/nexora` to disable autostart persistently. `stop` waits up to 35 s (`NEXORA_STOP_TIMEOUT`) for the UI to exit, which covers saving a running game for Quick Resume with the default 10 s `timeoutMs` (the UI needs up to 2 × `timeoutMs` + 8 s), then KILLs the UI and its supervisor.
 
 **Root password:** this is a development image — `BR2_TARGET_GENERIC_ROOT_PASSWD` is empty, so **root logs in without a password** on ttyS0/tty2. There are no network services (no SSH, no telnet), so access requires physical/serial access. Before distributing an image, set a password with `make menuconfig` → *System configuration* → *Root password* (or add `BR2_TARGET_GENERIC_ROOT_PASSWD="..."` to a local copy of the defconfig), or run `passwd` on the device (the root filesystem is writable ext4). The `nexora` user cannot log in (password field `*`).
 

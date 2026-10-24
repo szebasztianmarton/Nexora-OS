@@ -24,6 +24,18 @@ else()
     message(STATUS "test_update_helper not registered (needs bash and grub-editenv)")
 endif()
 
+# "S90nexora stop" against a simulated supervisor and UI (stand-ins for start-stop-daemon
+# and sleep): the wait outlasts the UI's Quick Resume exit budget, then the UI is KILLed too.
+if(NEXORA_BASH)
+    add_test(NAME test_s90nexora_stop COMMAND ${NEXORA_BASH} ${NEXORA_BR_EXTERNAL}/tests/test-s90nexora-stop.sh)
+    set_tests_properties(test_s90nexora_stop PROPERTIES
+        LABELS system
+        TIMEOUT 60
+        ENVIRONMENT "NEXORA_S90NEXORA=${NEXORA_BR_OVERLAY}/etc/init.d/S90nexora")
+else()
+    message(STATUS "test_s90nexora_stop not registered (needs bash)")
+endif()
+
 # GRUB script syntax of the A/B boot-counting grub.cfg.
 if(NEXORA_GRUB_SCRIPT_CHECK)
     add_test(NAME grub_cfg_syntax COMMAND ${NEXORA_GRUB_SCRIPT_CHECK} ${NEXORA_BR_BOARD}/grub.cfg)

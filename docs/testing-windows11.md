@@ -112,7 +112,7 @@ Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `
 100% tests passed, 0 tests failed out of 49
 ```
 
-A 4 `system` tesztből 3 (image-segédszkriptek, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. A negyedik, a `check_line_endings`, mindig regisztrálódik.
+Az 5 `system` tesztből 4 (image-segédszkriptek, `S90nexora stop`, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. Az ötödik, a `check_line_endings`, mindig regisztrálódik.
 
 ### 5.3 Tesztek külön-külön
 
