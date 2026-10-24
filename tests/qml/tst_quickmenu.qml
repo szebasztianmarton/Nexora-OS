@@ -282,6 +282,19 @@ Item {
             compare(stop.border.width, Theme.focusWidth)
         }
 
+        // While a game runs the recent-game tiles are disabled; a visible line says why.
+        function test_gameBarRecentGamesExplainedWhileBusy() {
+            startGame()
+            testGameBar.toggle()
+            tryVerify(function() { return gameBarLayer.visible })
+            const hint = root.findByName(gameBarLayer, "homeBusyHint")
+            verify(hint !== null)
+            tryVerify(function() { return testLibrary.recentGames.count > 0 })
+            verify(hint.visible)
+            compare(hint.textFormat, Text.PlainText)
+            verify(hint.text.indexOf("stopped") >= 0, hint.text)
+        }
+
         // Header chips grow with the scale (32 px at 100 %) so their text never overflows; the
         // state reads "Running", not "running".
         function test_headerChipsScale() {

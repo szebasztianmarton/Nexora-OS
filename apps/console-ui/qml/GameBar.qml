@@ -462,6 +462,16 @@ FocusScope {
                             }
                         }
                     }
+                    Text {
+                        objectName: "homeBusyHint"
+                        textFormat: Text.PlainText
+                        visible: bar.app.busy && bar.library.recentGames.count > 0
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: "Recent games can be started once the running game is stopped."
+                        color: Theme.overlayTextFaint
+                        font.pixelSize: Theme.fontSmall
+                    }
                 }
 
                 // Quick settings ------------------------------------------------------------
