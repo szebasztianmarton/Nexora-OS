@@ -349,7 +349,6 @@ FocusScope {
                 border.color: current ? Theme.focusRing : (selected ? Theme.accent : Theme.border)
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: modelData.shortName
-                Accessible.checkable: true
                 Accessible.checked: selected
                 Text {
                     textFormat: Text.PlainText
