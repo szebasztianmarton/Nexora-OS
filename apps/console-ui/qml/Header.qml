@@ -165,11 +165,12 @@ Rectangle {
                 font.pixelSize: Theme.fontTiny
                 text: Qt.formatDate(new Date(), "ddd d MMM")
             }
-            // Only while the clock can be seen: not under a running game (Theme.sessionActive).
+            // Whenever the header can be seen, during a session too: it stays on screen above the
+            // running overlay.
             Timer {
                 objectName: "headerClockTimer"
                 interval: 10000
-                running: header.visible && !Theme.sessionActive
+                running: header.visible
                 triggeredOnStart: true
                 repeat: true
                 onTriggered: {

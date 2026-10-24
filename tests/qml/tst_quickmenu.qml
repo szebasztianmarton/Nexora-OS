@@ -331,13 +331,14 @@ Item {
             verify(label.text.indexOf("Running") >= 0, label.text)
         }
 
-        // The header clock only ticks while the header can be seen and no game owns the screen.
-        function test_headerClockSleepsDuringASession() {
+        // The header clock ticks whenever the header can be seen, also during a session (the
+        // header stays on screen above the running overlay); it sleeps only while hidden.
+        function test_headerClockTicksWhileVisible() {
             const timer = root.findObject(header, "headerClockTimer")
             verify(timer !== null)
             verify(timer.running)
             Theme.sessionActive = true
-            verify(!timer.running)
+            verify(timer.running)
             Theme.sessionActive = false
             verify(timer.running)
             header.visible = false
