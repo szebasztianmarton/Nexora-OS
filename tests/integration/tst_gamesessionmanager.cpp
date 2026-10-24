@@ -455,6 +455,11 @@ private slots:
         QCOMPARE(kept.states.size(), 1);
         QCOMPARE(kept.states.first().sha256, first.states.first().sha256);
         QCOMPARE(read(firstState), QByteArray("fake-state 1\n"));
+        // The resume list tells the two apart, newest first.
+        const QVariantList suspended = c.sessions->suspended();
+        QCOMPARE(suspended.size(), 2);
+        QCOMPARE(suspended.first().toMap().value(QStringLiteral("emulatorId")).toString(), QStringLiteral("other"));
+        QCOMPARE(suspended.last().toMap().value(QStringLiteral("emulatorId")).toString(), QStringLiteral("fake"));
 
         // Playing with the first emulator again resumes its own session, not the newest one.
         QVERIFY(c.startReady(game));

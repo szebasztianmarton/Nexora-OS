@@ -40,6 +40,15 @@ FocusScope {
         if (item && item.visible)
             item.forceActiveFocus()
     }
+    // The session Play would resume: the game's on the emulator it launches with. One game can
+    // have one per emulator; |suspended| is newest first.
+    function quickResumeSession(suspended, id, emulatorId) {
+        for (const s of suspended) {
+            if (s.gameId === id && s.emulatorId === emulatorId)
+                return s
+        }
+        return null
+    }
     function reload() {
         details = library.gameDetails(gameId)
         const r = []
@@ -54,11 +63,7 @@ FocusScope {
                 if (profiles[i].isDefault)
                     defaultName = profiles[i].name
             }
-            let saved = null
-            for (const s of (sessions ? sessions.suspended : [])) {
-                if (s.gameId === gameId)
-                    saved = s
-            }
+            const saved = quickResumeSession(sessions ? sessions.suspended : [], gameId, details.emulatorId)
             r.push({ kind: "play", id: "", label: saved ? "Resume" : "Play",
                      detail: saved ? "From the Quick Resume state saved " + saved.savedAt
                            : defaultName.length > 0 ? "Default profile “" + defaultName + "”" : "Emulator defaults" })

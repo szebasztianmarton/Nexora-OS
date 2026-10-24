@@ -46,7 +46,7 @@ class GameSessionManager : public QObject
     QML_ELEMENT
     QML_UNCREATABLE("Created by the application")
 
-    // Saved sessions, newest first: {id, gameId, title, emulatorName, savedAt (local time
+    // Saved sessions, newest first: {id, gameId, title, emulatorId, emulatorName, savedAt (local time
     // text), bytes, note, problem ("" = resumable), old (older than sessions.maxAgeDays)}.
     Q_PROPERTY(QVariantList suspended READ suspended NOTIFY sessionsChanged)
     // The running session: {} or {id, gameId, title, state, canSuspend, reason}.
