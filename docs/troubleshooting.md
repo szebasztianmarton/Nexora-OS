@@ -127,6 +127,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | `NotNewer`, `TooOld` | same/older version, or the running version is below the bundle's `minimumVersion` |
 | `ImageMissing`, `SizeMismatch`, `HashMismatch` | incomplete or damaged copy of `rootfs.ext4`; copy the bundle again |
 | `InsufficientStorage` | the update state directory `~/.local/state/nexora/update` cannot be created, or the data partition has less than 1 MiB free (the image itself needs no space there); free some space or check that the data partition is mounted read-write |
+| `UnsafeBundlePath` + reason | the bundle directory's path would be refused by the install helper; rename it or copy the bundle to a path with only letters, digits, spaces and `. _ / -` (for example `/home/nexora/nexora-update-0.4.1`) |
 | `InstallRequestFailed` | the root helper `nexora-updated` is not running (`/etc/init.d/S85nexora-updated start` from a root shell) |
 | `InstallFailed` + reason | the helper's own verification or the write failed; see `/var/log/messages` (`nexora-updated`) |
 | `InstallFailed: trial boot pending; restart to confirm or roll back first` | the running slot is still on trial after an earlier update; restart so that `nexora-bootok` can confirm it (or GRUB rolls back), then try again |

@@ -303,8 +303,8 @@ private slots:
     {
         QTest::addColumn<bool>("ignoreSigterm");
         QTest::addColumn<QString>("footer");
-        QTest::newRow("exits on SIGTERM") << false << QStringLiteral("process stopped");
-        QTest::newRow("ignores SIGTERM") << true << QStringLiteral("killed after SIGTERM timed out");
+        QTest::newRow("exits on SIGTERM") << false << QStringLiteral("was stopped");
+        QTest::newRow("ignores SIGTERM") << true << QStringLiteral("did not stop in time and was terminated forcefully");
     }
 
     void shutdownTerminatesBeforeKilling()
@@ -329,6 +329,37 @@ private slots:
         QFile log(manager.outputLogPath());
         QVERIFY(log.open(QIODevice::ReadOnly));
         QVERIFY2(QString::fromUtf8(log.readAll()).contains(footer), qPrintable(footer));
+    }
+
+    // shutdown() ends the run like stop() does, so the final run reaches launch history.
+    void shutdownEndsTheRunLikeStop_data()
+    {
+        QTest::addColumn<bool>("ignoreSigterm");
+        QTest::newRow("exits on SIGTERM") << false;
+        QTest::newRow("ignores SIGTERM") << true;
+    }
+
+    void shutdownEndsTheRunLikeStop()
+    {
+        QFETCH(bool, ignoreSigterm);
+        EmulatorManager manager;
+        manager.setStopTimeout(300ms);
+        QStringList args{QStringLiteral("--sleep-ms"), QStringLiteral("30000")};
+        if (ignoreSigterm)
+            args.prepend(QStringLiteral("--ignore-sigterm"));
+        QVERIFY(manager.launch(fake(args)).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager.capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        QSignalSpy finished(&manager, &EmulatorManager::processFinished);
+        QSignalSpy states(&manager, &EmulatorManager::stateChanged);
+        manager.shutdown();
+        QCOMPARE(manager.state(), ProcessState::Exited);
+        QVERIFY(!manager.isActive());
+        QCOMPARE(finished.count(), 1);
+        const auto outcome = finished.first().at(1).value<ProcessOutcome>();
+        QCOMPARE(outcome.finalState, ProcessState::Exited);
+        QVERIFY(outcome.stoppedByRequest);
+        QCOMPARE(outcome.killed, ignoreSigterm);
+        QCOMPARE(states.last().at(0).value<ProcessState>(), ProcessState::Exited);
     }
 
     void rejectsSecondLaunchWhileActive()
@@ -704,6 +735,22 @@ private slots:
                     .accepted);
         QTRY_VERIFY_WITH_TIMEOUT(manager->capturedStdout().contains(QStringLiteral("ready")), Timeout);
         manager.reset(); // must kill the child without hanging or crashing
+    }
+
+    // Destruction ends the run silently: an owner's slots may touch members that are already
+    // destroyed (members declared after the manager), so no signal may reach them.
+    void destroyWhileRunningNotifiesNothing()
+    {
+        auto manager = std::make_unique<EmulatorManager>();
+        manager->setStopTimeout(300ms);
+        QVERIFY(manager->launch(fake({QStringLiteral("--sleep-ms"), QStringLiteral("30000")})).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(manager->capturedStdout().contains(QStringLiteral("ready")), Timeout);
+        int notifications = 0;
+        connect(manager.get(), &EmulatorManager::stateChanged, [&notifications] { ++notifications; });
+        connect(manager.get(), &EmulatorManager::pausedChanged, [&notifications] { ++notifications; });
+        connect(manager.get(), &EmulatorManager::processFinished, [&notifications] { ++notifications; });
+        manager.reset();
+        QCOMPARE(notifications, 0);
     }
 };
 

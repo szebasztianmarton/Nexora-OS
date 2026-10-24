@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QSignalBlocker>
 
 #include <cerrno>
 #include <csignal>
@@ -25,6 +26,9 @@ EmulatorManager::EmulatorManager(QObject *parent)
 
 EmulatorManager::~EmulatorManager()
 {
+    // The owner may be half destroyed already (members declared after the manager are
+    // gone), so the run ends without notifying anyone. Call shutdown() first to be notified.
+    const QSignalBlocker blocker(this);
     shutdown();
 }
 
@@ -271,32 +275,34 @@ void EmulatorManager::shutdown()
     m_killTimer.stop();
     if (!m_process)
         return;
-    QProcess *process = m_process;
-    process->disconnect(this);
-    QString footer = QStringLiteral("launcher shut down");
-    if (process->state() != QProcess::NotRunning) {
-        // SIGTERM first so the emulator can write its own save data; SIGKILL only if it is
-        // still running after its stop timeout (capped: the system may be powering off).
-        const auto grace = std::min(m_activeStopTimeout, ShutdownGraceLimit);
-        qCInfo(lcProcess) << "Shutdown: stopping" << m_activeId << "(SIGTERM, up to" << grace.count() << "ms)";
-        if (m_paused)
-            signalGroup(SIGCONT);
-        signalGroup(SIGTERM);
-        if (process->waitForFinished(int(grace.count()))) {
-            footer += QStringLiteral("; process stopped");
-        } else {
-            qCWarning(lcProcess) << "Shutdown:" << m_activeId << "ignored SIGTERM; killing it";
-            signalGroup(SIGKILL);
-            process->kill();
-            process->waitForFinished(2000);
-            footer += QStringLiteral("; process killed after SIGTERM timed out");
-        }
-        if (m_pid > 0)
-            ::kill(-static_cast<pid_t>(m_pid), SIGKILL); // helpers left in the group; no pid fallback
+    // The same path as stop(), with the waiting done here (no event loop runs at exit):
+    // SIGTERM first so the emulator can write its own save data; SIGKILL only if it is
+    // still running after its stop timeout (capped: the system may be powering off).
+    // onFinished() then ends the run (Exited, processFinished) and kills what is left in
+    // the group, so launch history records the final run as well.
+    const QProcess *process = m_process;
+    const auto grace = std::min(m_activeStopTimeout, ShutdownGraceLimit);
+    qCInfo(lcProcess) << "Shutdown: stopping" << m_activeId << "(SIGTERM, up to" << grace.count() << "ms)";
+    stop();
+    m_killTimer.stop(); // escalation is timed here, not by the event loop
+    if (!m_process->waitForFinished(int(grace.count())) && m_process == process) {
+        qCWarning(lcProcess) << "Shutdown:" << m_activeId << "ignored SIGTERM; killing it";
+        onStopTimeout();
+        m_process->waitForFinished(2000);
     }
-    m_process = nullptr;
-    delete process;
-    closeOutputLog(footer);
+    if (m_process != process)
+        return;
+    // It never reported its exit (stuck in the kernel, or it never started): end the run anyway.
+    qCWarning(lcProcess) << "Shutdown:" << m_activeId << "did not report its exit";
+    if (m_pid > 0)
+        ::kill(-static_cast<pid_t>(m_pid), SIGKILL); // helpers left in the group; no pid fallback
+    ProcessOutcome outcome;
+    outcome.finalState = ProcessState::Exited;
+    outcome.stoppedByRequest = true;
+    outcome.killed = m_killed;
+    outcome.message = QStringLiteral("%1 did not report its exit when the launcher shut down").arg(m_activeName);
+    releaseProcess();
+    finish(outcome);
 }
 
 void EmulatorManager::setState(ProcessState state)
