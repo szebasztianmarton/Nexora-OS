@@ -92,6 +92,12 @@ add_subdirectory(apps/console-ui)
 
 if(NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING)
     add_subdirectory(tests/fixtures/fake-emulator)
+else()
+    # The fake emulator is not built: remove the development definitions an earlier configure
+    # with NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON wrote, which would point at a missing binary.
+    foreach(id fake-ok fake-fail fake-crash fake-long)
+        file(REMOVE ${NEXORA_BUILD_CONFIG_DIR}/${id}.json)
+    endforeach()
 endif()
 
 if((NEXORA_BUILD_FAKE_EMULATOR OR BUILD_TESTING) AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
