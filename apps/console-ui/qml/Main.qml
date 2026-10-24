@@ -124,6 +124,7 @@ ApplicationWindow {
     function showSystem(systemId) {
         window.library.searchText = ""
         window.library.filter = "all"
+        window.library.collectionFilter = 0 // a system view shows every game of that system
         window.library.systemFilter = systemId.length > 0 ? systemId : window.library.otherSystemFilter
         openTab("games")
     }

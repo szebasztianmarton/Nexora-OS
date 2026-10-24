@@ -246,7 +246,12 @@ bool GameDatabase::createSchema()
             return false;
         }
     }
-    return db.commit();
+    if (!db.commit()) {
+        m_lastError = db.lastError().text();
+        db.rollback();
+        return false;
+    }
+    return true;
 }
 
 bool GameDatabase::backupBeforeMigration(int fromVersion)
@@ -528,6 +533,22 @@ std::optional<GameEntry> GameDatabase::entry(qint64 id) const
     return entryFromQuery(q);
 }
 
+namespace {
+// Runs a prepared statement that must change exactly one row; on failure |error| says why.
+bool execOneRow(QSqlQuery &q, QString &error, const QString &missing)
+{
+    if (!q.exec()) {
+        error = q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() != 1) {
+        error = missing;
+        return false;
+    }
+    return true;
+}
+} // namespace
+
 bool GameDatabase::setFavorite(qint64 id, bool favorite)
 {
     QSqlQuery q(QSqlDatabase::database(m_connection, false));
@@ -616,17 +637,25 @@ int GameDatabase::restoreHidden()
 int GameDatabase::purgeMissing()
 {
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
-    if (!db.transaction())
+    if (!db.transaction()) {
+        m_lastError = db.lastError().text();
         return 0;
+    }
     QSqlQuery q(db);
     if (!q.exec(QStringLiteral("DELETE FROM collection_games WHERE game_id IN "
                                "(SELECT id FROM games WHERE present = 0 AND hidden = 0)"))
         || !q.exec(QStringLiteral("DELETE FROM games WHERE present = 0 AND hidden = 0"))) {
+        m_lastError = q.lastError().text();
         db.rollback();
         return 0;
     }
     const int removed = q.numRowsAffected();
-    return db.commit() ? removed : 0;
+    if (!db.commit()) {
+        m_lastError = db.lastError().text();
+        db.rollback(); // a failed COMMIT leaves the transaction open on this connection
+        return 0;
+    }
+    return removed;
 }
 
 bool GameDatabase::addPlayTime(qint64 id, qint64 seconds)
@@ -637,7 +666,7 @@ bool GameDatabase::addPlayTime(qint64 id, qint64 seconds)
     q.prepare(QStringLiteral("UPDATE games SET play_seconds = play_seconds + ? WHERE id = ?"));
     q.addBindValue(seconds);
     q.addBindValue(id);
-    return q.exec() && q.numRowsAffected() == 1;
+    return execOneRow(q, m_lastError, QStringLiteral("no game with id %1").arg(id));
 }
 
 bool GameDatabase::setPinned(qint64 id, bool pinned)
@@ -646,7 +675,7 @@ bool GameDatabase::setPinned(qint64 id, bool pinned)
     if (!pinned) {
         q.prepare(QStringLiteral("UPDATE games SET pinned = 0 WHERE id = ?"));
         q.addBindValue(id);
-        return q.exec() && q.numRowsAffected() == 1;
+        return execOneRow(q, m_lastError, QStringLiteral("no such game"));
     }
     const auto current = entry(id);
     if (!current) {
@@ -655,8 +684,10 @@ bool GameDatabase::setPinned(qint64 id, bool pinned)
     }
     if (current->pinned > 0)
         return true;
-    if (!q.exec(QStringLiteral("SELECT count(*), coalesce(max(pinned), 0) FROM games WHERE pinned > 0")) || !q.next())
+    if (!q.exec(QStringLiteral("SELECT count(*), coalesce(max(pinned), 0) FROM games WHERE pinned > 0")) || !q.next()) {
+        m_lastError = q.lastError().text();
         return false;
+    }
     if (q.value(0).toInt() >= MaxPinned) {
         m_lastError = QStringLiteral("at most %1 games can be pinned").arg(MaxPinned);
         return false;
@@ -666,7 +697,7 @@ bool GameDatabase::setPinned(qint64 id, bool pinned)
     q.prepare(QStringLiteral("UPDATE games SET pinned = ? WHERE id = ?"));
     q.addBindValue(next);
     q.addBindValue(id);
-    return q.exec() && q.numRowsAffected() == 1;
+    return execOneRow(q, m_lastError, QStringLiteral("no such game"));
 }
 
 QList<GameDatabase::Collection> GameDatabase::collections() const
@@ -753,21 +784,30 @@ bool GameDatabase::renameCollection(qint64 id, const QString &rawName)
 bool GameDatabase::deleteCollection(qint64 id)
 {
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
-    if (!db.transaction())
+    if (!db.transaction()) {
+        m_lastError = db.lastError().text();
         return false;
+    }
     QSqlQuery q(db);
     q.prepare(QStringLiteral("DELETE FROM collection_games WHERE collection_id = ?"));
     q.addBindValue(id);
-    bool ok = q.exec();
-    q.prepare(QStringLiteral("DELETE FROM collections WHERE id = ?"));
-    q.addBindValue(id);
-    ok = ok && q.exec() && q.numRowsAffected() == 1;
-    if (!ok) {
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
         db.rollback();
-        m_lastError = QStringLiteral("no such collection");
         return false;
     }
-    return db.commit();
+    q.prepare(QStringLiteral("DELETE FROM collections WHERE id = ?"));
+    q.addBindValue(id);
+    if (!execOneRow(q, m_lastError, QStringLiteral("no such collection"))) {
+        db.rollback();
+        return false;
+    }
+    if (!db.commit()) {
+        m_lastError = db.lastError().text();
+        db.rollback(); // a failed COMMIT leaves the transaction open on this connection
+        return false;
+    }
+    return true;
 }
 
 bool GameDatabase::setInCollection(qint64 collectionId, qint64 gameId, bool member)
@@ -777,7 +817,11 @@ bool GameDatabase::setInCollection(qint64 collectionId, qint64 gameId, bool memb
         q.prepare(QStringLiteral("DELETE FROM collection_games WHERE collection_id = ? AND game_id = ?"));
         q.addBindValue(collectionId);
         q.addBindValue(gameId);
-        return q.exec();
+        if (!q.exec()) {
+            m_lastError = q.lastError().text();
+            return false;
+        }
+        return true;
     }
     q.prepare(QStringLiteral("SELECT (SELECT count(*) FROM collections WHERE id = ?), "
                              "(SELECT count(*) FROM games WHERE id = ?), "
@@ -803,7 +847,11 @@ bool GameDatabase::setInCollection(qint64 collectionId, qint64 gameId, bool memb
     q.addBindValue(gameId);
     q.addBindValue(position);
     q.addBindValue(QDateTime::currentSecsSinceEpoch());
-    return q.exec();
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    return true;
 }
 
 QList<qint64> GameDatabase::collectionGameIds(qint64 collectionId) const

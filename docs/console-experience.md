@@ -69,8 +69,8 @@ Each step is a separately reviewable PR with its own tests and docs; later steps
 | 1 ✅ | **Notification service** (C++ `NotificationService`, categories, dedup, queue, history, quiet mode; Toast becomes its view; controller connect/disconnect, launch, failure events) | — | M |
 | 2 ✅ | **Emulator capability model** (definition fields for capabilities, adapter interface, fake-emulator adapter with save/load state through a test protocol; RetroArch network-command adapter, marked unverified) | — | M |
 | 3 ✅ | **Game session manager**: session ids and the brief's state machine on top of `EmulatorManager`; graceful stop at shutdown (save state when supported, then SIGTERM, never silent SIGKILL); in-memory suspend of the current game; persistent state through adapters; limits, per-game Quick Resume policy; session metadata file (atomic, checksummed) | 1, 2 | L |
-| 4 ✅ | **Library schema v3**: collections (many-to-many, stable ids), pinned games, play time, game id in launch history; migration with backup | — | M |
-| 5 ✅ | **Dashboard layout service** + Home widgets (suspended sessions, collections, storage), add/remove/reorder, persisted layout with validation and reset | 3, 4 | M |
+| 4 ✅ | **Library schema v3**: collections (many-to-many, stable ids), pinned games, play time; migration with backup. Not done: game id in launch history (see gap 7) | — | M |
+| 5 ✅ | **Dashboard layout service** + Home widgets (suspended sessions, collections), add/remove/reorder, persisted layout with validation and reset. Not done: storage widget (see gap 3) | 3, 4 | M |
 | 6 | **Per-game profiles** with precedence (game → emulator → global → defaults), validated against capabilities, import/export | 2, 4 | M |
 | 7 | **Save data manager**: states directory, slots, metadata, preserve-before-overwrite, retention, backups page | 2, 3 | M |
 | 8 | **Quick Menu completion and customisation** (switch game, save/load state, game settings, accessibility, sleep where supported; reorder/hide with protected power/recovery entries) | 3, 6, 7 | M |

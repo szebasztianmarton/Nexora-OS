@@ -35,9 +35,31 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
     for (GameListModel *model : {&m_games, &m_recent, &m_favorites, &m_recentlyAdded, &m_pinned})
         setupModel(model);
     applySystemDefaultEmulators();
+    m_collectionsSignature = collectionsSignature();
     connect(m_library, &library::GameLibrary::collectionsChanged, this, [this] {
+        // Collections can disappear (deleted, or a restored backup without them): drop their
+        // models and a filter on them, so nothing keeps showing a collection that is gone.
+        QSet<qint64> existing;
+        for (const auto &c : m_library->collections())
+            existing.insert(c.id);
+        for (auto it = m_collectionModels.begin(); it != m_collectionModels.end();) {
+            if (existing.contains(it->first))
+                ++it;
+            else
+                it = m_collectionModels.erase(it);
+        }
+        if (m_collectionFilter > 0 && !existing.contains(m_collectionFilter)) {
+            m_collectionFilter = 0;
+            emit queryChanged();
+        }
         emit collectionsChanged();
-        emit homeLayoutChanged(); // collection names and existence
+        // Home rebuilds its collection rows from the layout: only when a name or the set of
+        // collections changed, not for a membership change (that would drop the focused row).
+        const QString signature = collectionsSignature();
+        if (signature != m_collectionsSignature) {
+            m_collectionsSignature = signature;
+            emit homeLayoutChanged();
+        }
         rebuildViews();
     });
 
@@ -78,22 +100,8 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
         if (state == emulator::ProcessState::Running) {
             const qint64 id = std::exchange(m_pendingLaunch, 0);
             m_runningGame = id; // play time is added when this run ends
-            if (m_library->recordLaunch(id))
-                return;
-            qCWarning(lcUi).noquote() << "Could not record the play count of game" << id << "-"
-                                      << m_library->lastError();
-            if (!m_library->isScanning())
-                return;
-            // The scan merge may have held the write lock: try once more when it is done.
-            auto retry = std::make_shared<QMetaObject::Connection>();
-            *retry = connect(m_library, &library::GameLibrary::scanningChanged, this, [this, id, retry](bool scanning) {
-                if (scanning)
-                    return;
-                disconnect(*retry);
-                if (!m_library->recordLaunch(id))
-                    qCWarning(lcUi).noquote() << "Could not record the play count of game" << id << "-"
-                                              << m_library->lastError();
-            });
+            writeRetryingAfterScan(QStringLiteral("the play count of game %1").arg(id),
+                                   [this, id] { return m_library->recordLaunch(id); });
         } else if (state == emulator::ProcessState::Failed || state == emulator::ProcessState::Exited)
             m_pendingLaunch = 0;
     });
@@ -102,8 +110,9 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
             [this](const QString &, const emulator::ProcessOutcome &outcome) {
                 const qint64 gameId = std::exchange(m_runningGame, 0);
                 const qint64 seconds = outcome.activeMs() / 1000;
-                if (gameId > 0 && seconds >= 1 && !m_library->addPlayTime(gameId, seconds))
-                    qCWarning(lcLibrary).noquote() << "Could not record play time:" << m_library->lastError();
+                if (gameId > 0 && seconds >= 1)
+                    writeRetryingAfterScan(QStringLiteral("the play time of game %1").arg(gameId),
+                                           [this, gameId, seconds] { return m_library->addPlayTime(gameId, seconds); });
             });
     connect(m_app, &AppController::configChanged, this, [this] {
         rebuildEmulatorInfo();
@@ -646,6 +655,26 @@ void LibraryController::rebuildViews()
     emit contentChanged();
 }
 
+// A play-count or play-time write can fail while the scan thread's merge holds the SQLite write
+// lock; it is then tried once more when that scan has finished.
+void LibraryController::writeRetryingAfterScan(const QString &what, std::function<bool()> write)
+{
+    if (write())
+        return;
+    qCWarning(lcUi).noquote() << "Could not record" << what << "-" << m_library->lastError();
+    if (!m_library->isScanning())
+        return;
+    auto retry = std::make_shared<QMetaObject::Connection>();
+    *retry = connect(m_library, &library::GameLibrary::scanningChanged, this,
+                     [this, what, write = std::move(write), retry](bool scanning) {
+                         if (scanning)
+                             return;
+                         disconnect(*retry);
+                         if (!write())
+                             qCWarning(lcUi).noquote() << "Could not record" << what << "-" << m_library->lastError();
+                     });
+}
+
 void LibraryController::setupModel(GameListModel *model)
 {
     model->setEmulatorInfo([this](const QString &emulatorId) -> std::pair<QString, QString> {
@@ -686,6 +715,14 @@ QVariantList LibraryController::collections() const
                                 {QStringLiteral("name"), c.name},
                                 {QStringLiteral("count"), c.count}});
     return list;
+}
+
+QString LibraryController::collectionsSignature() const
+{
+    QStringList parts;
+    for (const auto &c : m_library->collections())
+        parts.append(QString::number(c.id) + u':' + c.name);
+    return parts.join(u'\n');
 }
 
 QString LibraryController::collectionName(qint64 collectionId) const
@@ -866,7 +903,11 @@ bool LibraryController::writeHomeSections(const QStringList &sections)
         emit notice(QStringLiteral("Could not change the Home layout: %1").arg(error), true);
         return false;
     }
-    m_settings->save();
+    if (!m_settings->save()) {
+        // The layout applies now but is not kept over a restart.
+        emit notice(QStringLiteral("Could not save the Home layout to %1").arg(m_settings->paths().userFile), true);
+        return false;
+    }
     return true;
 }
 
@@ -896,7 +937,8 @@ bool LibraryController::moveHomeSection(const QString &id, int delta)
 void LibraryController::resetHomeLayout()
 {
     m_settings->setValue(Settings::HomeSections, Settings::spec(Settings::HomeSections)->defaultValue);
-    m_settings->save();
+    if (!m_settings->save())
+        emit notice(QStringLiteral("Could not save the Home layout to %1").arg(m_settings->paths().userFile), true);
 }
 
 QString LibraryController::formatPlayTime(qint64 seconds)

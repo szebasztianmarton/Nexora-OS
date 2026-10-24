@@ -12,6 +12,7 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 
@@ -189,6 +190,8 @@ private:
     void rebuildViews();
     void rebuildCollectionModel(qint64 id, GameListModel *model, const QList<library::GameEntry> &all);
     void setupModel(GameListModel *model);
+    void writeRetryingAfterScan(const QString &what, std::function<bool()> write);
+    QString collectionsSignature() const;
     bool writeHomeSections(const QStringList &sections);
     void rebuildEmulatorInfo();
     bool launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile);
@@ -220,6 +223,7 @@ private:
     GameListModel m_recentlyAdded;
     GameListModel m_pinned;
     std::map<qint64, std::unique_ptr<GameListModel>> m_collectionModels;
+    QString m_collectionsSignature; // ids and names, to tell renames/deletes from membership changes
     qint64 m_collectionFilter = 0;
     SystemListModel m_systems;
     QTimer m_searchDebounce;

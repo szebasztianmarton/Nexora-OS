@@ -54,6 +54,7 @@ bool GameLibrary::open(const QString &databasePath)
         return false;
     m_databasePath = databasePath;
     reloadEntries();
+    emit collectionsChanged(); // a reopened database (restored backup) can hold other collections
     return true;
 }
 

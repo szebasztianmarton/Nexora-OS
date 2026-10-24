@@ -1451,6 +1451,21 @@ private slots:
                           chip->mapToScene(QPointF(chip->width() / 2, chip->height() / 2)).toPoint());
         QTRY_COMPARE(grid->property("count").toInt(), 2);
 
+        // An empty collection says so and "Show all games" clears its filter too.
+        const qint64 empty = library->createCollection(QStringLiteral("Empty"), 0);
+        QVERIFY(empty > 0);
+        library->setCollectionFilter(empty);
+        QTRY_COMPARE(grid->property("count").toInt(), 0);
+        auto *emptyTitle = find(ui, "gamesEmptyTitle");
+        QTRY_VERIFY(emptyTitle->isVisible());
+        QCOMPARE(emptyTitle->property("text").toString(), QStringLiteral("No games in “Empty”"));
+        auto *emptyAction = find(ui, "gamesEmptyAction");
+        QTest::mouseClick(ui.window, Qt::LeftButton, {},
+                          emptyAction->mapToScene(QPointF(emptyAction->width() / 2, emptyAction->height() / 2)).toPoint());
+        QTRY_COMPARE(library->collectionFilter(), qint64(0));
+        QTRY_COMPARE(grid->property("count").toInt(), 2);
+        QVERIFY(library->deleteCollection(empty));
+
         // Home: Pinned comes before Continue playing by default.
         goTo(ui, Home);
         auto *pinned = find(ui, "pinnedRow");
@@ -1848,11 +1863,13 @@ private slots:
         auto *osk = find(ui, "onScreenKeyboard");
         QTRY_VERIFY(osk->isVisible());
         QTest::qWait(100);
-        auto *oskPanel = find(ui, "oskPanel");
+        // Look inside the editor's keyboard: other keyboards (collection names) share the item names.
+        auto *oskPanel = osk->findChild<QQuickItem *>(QStringLiteral("oskPanel"));
         QVERIFY(oskPanel);
         const QRectF oskArea = sceneRect(osk).intersected(QRectF(QPointF(0, 0), QSizeF(ui.window->size())));
         QVERIFY2(oskArea.contains(sceneRect(oskPanel)), "keyboard panel is cut off");
-        QVERIFY2(oskArea.contains(sceneRect(find(ui, "oskKeys"))), "keyboard keys are cut off");
+        QVERIFY2(oskArea.contains(sceneRect(osk->findChild<QQuickItem *>(QStringLiteral("oskKeys")))),
+                 "keyboard keys are cut off");
         shot(ui, qPrintable(QStringLiteral("large-scale-%1-osk").arg(windowSize.height())));
         // Glass at the same scale: the panel stays between the floating tab bar and hint bar.
         ui.context->settings()->setTheme(QStringLiteral("glass"));

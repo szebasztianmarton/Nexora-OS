@@ -80,7 +80,7 @@ Symptoms, likely causes and fixes, for the desktop build and for the image. For 
 | Game has no system / wrong system | extensions like `.iso`, `.chd`, `.zip` match several systems; choose one in the game details (Change system) |
 | "Library database unavailable" / "Qt SQLite driver (QSQLITE) is not available" | `sudo apt install libqt6sql6-sqlite` |
 | Library disabled, log says the schema is newer | the database was written by a newer Nexora; it is left untouched. Use that version, or restore a backup |
-| After upgrading from 0.2: `library.sqlite.v1-backup-*` appeared | expected: the backup taken before the v1 → v2 migration; keep it until you are satisfied, then delete it |
+| After upgrading: `library.sqlite.v1-backup-*` or `library.sqlite.v2-backup-*` appeared | expected: the backup taken before migrating the library to the current schema (v1 → v3 from 0.2, v2 → v3 from 0.3); keep it until you are satisfied, then delete it |
 
 ## Emulators
 

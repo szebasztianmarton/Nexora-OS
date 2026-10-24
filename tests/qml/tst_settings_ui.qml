@@ -69,10 +69,10 @@ Item {
             dialog.confirmText = "Confirm"
         }
 
-        // Settings screen reachable sections count 7 (spec §6.8): General, Controllers,
-        // Display, Audio, Library, Emulators, System.
-        function test_sevenSectionsPresent() {
-            const names = ["General", "Controllers", "Display", "Audio", "Library", "Emulators", "System"]
+        // The Settings sections: the seven of spec §6.8 (General, Controllers, Display, Audio,
+        // Library, Emulators, System) plus Home (the Home layout).
+        function test_sectionsPresent() {
+            const names = ["General", "Home", "Controllers", "Display", "Audio", "Library", "Emulators", "System"]
             for (const n of names)
                 verify(root.findByName(screen, "sectionTitle_" + n) !== null, "missing section: " + n)
         }

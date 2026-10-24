@@ -626,6 +626,7 @@ FocusScope {
             readonly property string mode: screen.library.totalCount === 0 && screen.library.filter !== "missing"
                 ? (screen.library.directories.length === 0 ? "noDirectories" : "noGames")
                 : (screen.library.searchText.length > 0 ? "noResults"
+                   : screen.library.collectionFilter > 0 ? "noCollection"
                    : screen.library.systemFilter.length > 0 ? "noSystem"
                    : screen.library.filter === "favorites" ? "noFavorites"
                    : screen.library.filter === "missing" ? "noMissing" : "noRecent")
@@ -639,6 +640,8 @@ FocusScope {
                 text: empty.mode === "noDirectories" ? "No library folders yet"
                     : empty.mode === "noGames" ? "No games found"
                     : empty.mode === "noResults" ? "No results for “" + screen.library.searchText + "”"
+                    : empty.mode === "noCollection"
+                      ? "No games in “" + screen.library.collectionName(screen.library.collectionFilter) + "”"
                     : empty.mode === "noSystem" ? "No games for this system with the current filter"
                     : empty.mode === "noFavorites" ? "No favorites yet"
                     : empty.mode === "noMissing" ? "No missing games"
@@ -660,6 +663,8 @@ FocusScope {
                       ? "None of the files in your library folders match an emulator's file extensions."
                     : empty.mode === "noResults"
                       ? "Try a shorter search or a different filter."
+                    : empty.mode === "noCollection"
+                      ? "Add games to this collection from a game's options, or choose another filter."
                     : empty.mode === "noSystem"
                       ? "Choose “All systems” or another filter."
                     : empty.mode === "noFavorites"
@@ -688,6 +693,7 @@ FocusScope {
                         if (empty.mode === "noResults")
                             screen.library.searchText = ""
                         screen.library.systemFilter = ""
+                        screen.library.collectionFilter = 0
                         screen.library.filter = "all"
                         Qt.callLater(screen.focusResults)
                     }

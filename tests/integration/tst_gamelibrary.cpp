@@ -452,6 +452,17 @@ private slots:
         scan(library);
         QCOMPARE(library.purgeMissing(), 1);
         QCOMPARE(library.collectionGameIds(*keep), QList<qint64>{alpha});
+
+        // A failed delete says why (it used to leave the error text empty).
+        QVERIFY(!library.deleteCollection(999999));
+        QCOMPARE(library.lastError(), QStringLiteral("no such collection"));
+
+        // Reopening the database (a restored backup) announces its collections, so views
+        // holding the old list refresh.
+        library.close();
+        changed.clear();
+        QVERIFY(library.open(db()));
+        QCOMPARE(changed.size(), 1);
     }
 
     void pinningAndPlayTime()

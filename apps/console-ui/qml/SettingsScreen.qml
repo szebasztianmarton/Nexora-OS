@@ -140,6 +140,29 @@ FocusScope {
         nameKeyboard.maxLength = 60
         nameKeyboard.open("Rename collection", name)
     }
+    // A rename or delete rebuilds the collection rows, which destroys the focused one: put the
+    // focus back on the same collection (rename), or on the row that took its place (delete).
+    function focusCollection(id) {
+        for (let i = 0; i < collectionRepeater.count; ++i) {
+            const item = collectionRepeater.itemAt(i)
+            if (item && item.collectionId === id) {
+                item.renameRow.forceActiveFocus()
+                return
+            }
+        }
+        newCollectionRow.forceActiveFocus()
+    }
+    function focusCollectionAt(index) {
+        const item = collectionRepeater.itemAt(Math.min(index, collectionRepeater.count - 1))
+        if (item)
+            item.renameRow.forceActiveFocus()
+        else
+            newCollectionRow.forceActiveFocus()
+    }
+    function deleteCollection(id, index) {
+        if (screen.library.deleteCollection(id))
+            Qt.callLater(focusCollectionAt, index)
+    }
     // Deep link from Home / the quick menu: focuses the first control of a section
     // ("General", "Controllers", "Display", "Audio", "Library", "Emulators", "System").
     function focusSection(name) {
@@ -468,6 +491,7 @@ FocusScope {
                     value: modelData.visible ? "Shown" : "Hidden"
                     valueColor: modelData.visible ? Theme.success : Theme.textMuted
                     adjustable: modelData.visible
+                    activatable: true // Accept shows or hides the section
                     onDecrement: screen.moveHomeSection(modelData.id, -1)
                     onIncrement: screen.moveHomeSection(modelData.id, 1)
                     onAccepted: screen.toggleHomeSection(modelData.id, !modelData.visible)
@@ -772,8 +796,11 @@ FocusScope {
                 delegate: Column {
                     required property var modelData
                     required property int index
+                    readonly property real collectionId: modelData.id
+                    readonly property alias renameRow: renameRow
                     width: parent ? parent.width : 0
                     SettingRow {
+                        id: renameRow
                         objectName: "collection_" + index
                         width: parent.width
                         label: modelData.name
@@ -790,11 +817,12 @@ FocusScope {
                         actionText: "Delete"
                         requireConfirm: true
                         confirmText: "Press A / Enter again to delete this collection"
-                        onAccepted: screen.library.deleteCollection(modelData.id)
+                        onAccepted: screen.deleteCollection(modelData.id, index)
                     }
                 }
             }
             SettingRow {
+                id: newCollectionRow
                 objectName: "newCollectionRow"
                 label: "New collection"
                 description: screen.library.collections.length === 0
@@ -1016,11 +1044,17 @@ FocusScope {
     OnScreenKeyboard {
         id: nameKeyboard
         objectName: "collectionNameKeyboard"
+        // Keeps the panel between the floating glass bars (0 when docked).
+        chromeTop: screen.chromeTop
+        chromeBottom: screen.chromeBottom
         onAccepted: (value) => {
-            if (screen.renamingCollection > 0)
-                screen.library.renameCollection(screen.renamingCollection, value)
-            else
+            if (screen.renamingCollection > 0) {
+                const id = screen.renamingCollection
+                if (screen.library.renameCollection(id, value))
+                    Qt.callLater(screen.focusCollection, id)
+            } else {
                 screen.library.createCollection(value)
+            }
         }
     }
 }
