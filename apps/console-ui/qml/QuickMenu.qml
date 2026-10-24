@@ -24,11 +24,15 @@ FocusScope {
 
     property string page: "main" // main, display, info
     readonly property bool confirmOpen: confirmExit.visible
-    readonly property var hints: confirmExit.visible
+    readonly property var menuHints: confirmExit.visible
         ? confirmExit.hints
         : [{ button: "↑ ↓", action: "Move" }, { button: "← →", action: "Adjust" },
            { button: "A / Enter", action: "Select" },
            { button: "B / Guide", action: page === "main" ? "Back to game" : "Back" }]
+    // The menu lies above the dashboard's hint bar (its scrim would dim it, its panel cover part
+    // of it), so it draws its own bar, like the game bar; the dashboard's bar then gets nothing,
+    // or every key would be listed twice.
+    readonly property var hints: hintBar.visible ? [] : menuHints
 
     visible: gameBar.quickMenuOpen
     z: 30
@@ -95,7 +99,7 @@ FocusScope {
         objectName: "quickMenuPanel"
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
+        anchors.bottom: hintBar.visible ? hintBar.top : parent.bottom
         width: Math.min(parent.width * 0.42, 560 * Theme.scale)
         color: Theme.overlaySurface
         border.color: Theme.overlayLine
@@ -105,12 +109,15 @@ FocusScope {
 
         Flickable {
             id: flick
+            objectName: "quickMenuFlick"
             anchors.fill: parent
             anchors.margins: Theme.space5
             contentWidth: width
             contentHeight: body.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            // The info rows grow once the hardware probe answers: keep its Back row in view.
+            onContentHeightChanged: if (infoBack.activeFocus) ensureVisible(infoBack)
 
             function ensureVisible(item) {
                 if (!item)
@@ -150,7 +157,10 @@ FocusScope {
                     objectName: "quickMenuTitle"
                     width: parent.width
                     elide: Text.ElideRight
-                    text: menu.app.activeEmulatorName.length > 0 ? menu.app.activeEmulatorName : "No game running"
+                    // The game's title while a session runs; the emulator's name for a plain
+                    // emulator launch.
+                    text: menu.sessionActive && menu.sessions.active.title ? menu.sessions.active.title
+                          : menu.app.activeEmulatorName.length > 0 ? menu.app.activeEmulatorName : "No game running"
                     color: Theme.overlayText
                     font.pixelSize: Theme.fontTitle
                     font.bold: true
@@ -362,10 +372,29 @@ FocusScope {
                         label: "Back"
                         actionText: "‹ Quick menu"
                         onAccepted: menu.back()
+                        // Not in a NavColumn: scrolled into view here (a page change resets
+                        // contentY to 0; at a large scale the row may lie below the panel).
+                        onActiveFocusChanged: {
+                            if (activeFocus) {
+                                body.forceLayout()
+                                flick.ensureVisible(infoBack)
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    HintBar {
+        id: hintBar
+        objectName: "quickMenuHints"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: menu.settings.showHints
+        color: Theme.overlayFooter // covers the dashboard's own hint bar underneath
+        hints: menu.menuHints
     }
 
     ConfirmDialog {

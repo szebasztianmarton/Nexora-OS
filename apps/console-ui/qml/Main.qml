@@ -380,6 +380,7 @@ ApplicationWindow {
                 width: chrome.width - 2 * chrome.inset
                 app: window.app
                 library: window.library
+                sessions: window.sessions
             }
             NavTabBar {
                 id: tabBar
@@ -552,6 +553,7 @@ ApplicationWindow {
         anchors.fill: parent
         z: 10
         app: window.app
+        sessions: window.sessions
         visible: window.app.busy
         onQuickMenuRequested: window.gameBar.openQuickMenu()
         onVisibleChanged: {
@@ -578,6 +580,7 @@ ApplicationWindow {
         library: window.library
         settings: window.settings
         system: window.system
+        sessions: window.sessions
         onNavigate: (tab) => window.navigate(tab)
     }
     Connections {

@@ -17,6 +17,10 @@ FocusScope {
     required property LibraryController library
     required property SettingsController settings
     required property SystemController system
+    property GameSessionManager sessions: null
+    // The game's title while a session runs; the emulator's name for a plain emulator launch.
+    readonly property string title: sessions !== null && sessions.active.title ? sessions.active.title
+                                                                            : app.activeEmulatorName
 
     // Dashboard navigation from the Home and Settings panels (home, games, settings).
     signal navigate(string tab)
@@ -133,7 +137,7 @@ FocusScope {
     Item {
         id: content
         anchors.fill: parent
-        anchors.margins: 24
+        anchors.margins: Theme.space5
         // Drops in from the top edge as it fades in.
         transform: Translate { y: (1 - bar.opacity) * -16 }
 
@@ -143,7 +147,7 @@ FocusScope {
             objectName: "gameBarTabs"
             anchors.left: parent.left
             anchors.top: parent.top
-            spacing: 14
+            spacing: Math.round(14 * Theme.scale)
 
             Repeater {
                 id: tabRepeater
@@ -156,14 +160,14 @@ FocusScope {
                     readonly property bool hovered: tabMouse.containsMouse
 
                     objectName: "barTab_" + modelData.key
-                    width: 84
-                    height: 84
-                    radius: 8
+                    width: Math.round(84 * Theme.scale)
+                    height: width
+                    radius: Math.round(8 * Theme.scale)
                     activeFocusOnTab: true
                     color: selected ? bar.barSelected : (hovered ? bar.barTileHover : bar.barTile)
-                    border.width: activeFocus ? 3 : 1
+                    border.width: activeFocus ? Theme.focusWidth : 1
                     border.color: activeFocus ? Theme.overlayFocus : (selected ? bar.barSelected : bar.barLine)
-                    scale: activeFocus ? 1.06 : 1.0
+                    scale: activeFocus && !Theme.reducedMotion ? 1.06 : 1.0
                     Behavior on scale { NumberAnimation { duration: Theme.animFast } }
                     Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
@@ -175,8 +179,8 @@ FocusScope {
 
                     BarIcon {
                         anchors.centerIn: parent
-                        width: 38
-                        height: 38
+                        width: Math.round(38 * Theme.scale)
+                        height: width
                         name: tabButton.modelData.icon
                         color: tabButton.selected ? bar.barInk : Theme.overlayTextSoft
                     }
@@ -210,14 +214,14 @@ FocusScope {
             objectName: "gameBarStatus"
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.topMargin: 4
-            spacing: 18
+            anchors.topMargin: Theme.space1
+            spacing: Math.round(18 * Theme.scale)
 
             BarIcon {
                 objectName: "controllerStatus"
                 anchors.verticalCenter: parent.verticalCenter
-                width: 34
-                height: 34
+                width: Math.round(34 * Theme.scale)
+                height: width
                 name: "gamepad"
                 color: bar.app.inputDevices.length > 0 ? Theme.overlayText : Theme.overlayDisabled
                 Accessible.role: Accessible.StaticText
@@ -227,8 +231,8 @@ FocusScope {
                 objectName: "networkStatus"
                 anchors.verticalCenter: parent.verticalCenter
                 visible: bar.gameBar.network !== "none"
-                width: 34
-                height: 34
+                width: Math.round(34 * Theme.scale)
+                height: width
                 name: bar.gameBar.network === "wifi" ? "wifi" : "ethernet"
                 color: Theme.overlayText
                 Accessible.role: Accessible.StaticText
@@ -238,11 +242,11 @@ FocusScope {
                 objectName: "batteryStatus"
                 anchors.verticalCenter: parent.verticalCenter
                 visible: bar.gameBar.batteryPercent >= 0
-                spacing: 6
+                spacing: Math.round(6 * Theme.scale)
                 BarIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 38
-                    height: 38
+                    width: Math.round(38 * Theme.scale)
+                    height: width
                     name: "battery"
                     level: bar.gameBar.batteryPercent
                     charging: bar.gameBar.batteryCharging
@@ -282,10 +286,10 @@ FocusScope {
             objectName: "gameBarPanel"
             anchors.left: tabRow.left
             anchors.top: tabRow.bottom
-            anchors.topMargin: 22
-            width: Math.min(640, content.width)
-            height: panelBody.implicitHeight + 64
-            radius: 12
+            anchors.topMargin: Math.round(22 * Theme.scale)
+            width: Math.min(Math.round(640 * Theme.scale), content.width)
+            height: panelBody.implicitHeight + 2 * panelBody.anchors.margins
+            radius: Theme.radius
             color: bar.barSurface
             border.color: bar.barLine
             border.width: 1
@@ -297,7 +301,7 @@ FocusScope {
             Item {
                 id: panelBody
                 anchors.fill: parent
-                anchors.margins: 32
+                anchors.margins: Theme.space6
                 implicitHeight: home.visible ? home.implicitHeight
                               : quick.visible ? quick.implicitHeight
                               : audio.visible ? audio.implicitHeight
@@ -309,23 +313,24 @@ FocusScope {
                     objectName: "homePanel"
                     visible: bar.currentKey === "home"
                     width: parent.width
-                    spacing: 28
+                    spacing: Math.round(28 * Theme.scale)
 
                     Row {
-                        spacing: 22
+                        id: gameRow
+                        spacing: Math.round(22 * Theme.scale)
                         Rectangle {
                             id: artwork
                             objectName: "gameBarArtwork"
-                            width: 100
-                            height: 100
-                            radius: 8
+                            width: Math.round(100 * Theme.scale)
+                            height: width
+                            radius: Math.round(8 * Theme.scale)
                             clip: true
-                            color: bar.app.busy ? Theme.artColor(bar.app.activeEmulatorName, 0.32) : Theme.overlayArtEmpty
+                            color: bar.app.busy ? Theme.artColor(bar.title, 0.32) : Theme.overlayArtEmpty
                             Text {
                                 textFormat: Text.PlainText
                                 visible: bar.app.busy
                                 anchors.centerIn: parent
-                                text: Theme.initials(bar.app.activeEmulatorName)
+                                text: Theme.initials(bar.title)
                                 color: Theme.overlayText
                                 font.pixelSize: Math.round(38 * Theme.scale)
                                 font.bold: true
@@ -335,38 +340,38 @@ FocusScope {
                             Rectangle {
                                 visible: !bar.app.busy
                                 anchors.centerIn: parent
-                                width: 40
-                                height: 40
-                                radius: 10
+                                width: Math.round(40 * Theme.scale)
+                                height: width
+                                radius: Math.round(10 * Theme.scale)
                                 rotation: 45
                                 color: "transparent"
                                 border.color: Theme.accent
-                                border.width: 5
+                                border.width: Math.round(5 * Theme.scale)
                                 Rectangle {
                                     anchors.centerIn: parent
-                                    width: 11
-                                    height: 11
-                                    radius: 3
+                                    width: Math.round(11 * Theme.scale)
+                                    height: width
+                                    radius: Math.round(3 * Theme.scale)
                                     color: Theme.accent
                                 }
                             }
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 8
+                            spacing: Theme.space2
                             Text {
                                 textFormat: Text.PlainText
                                 objectName: "gameBarTitle"
-                                width: Math.min(implicitWidth, home.width - artwork.width - 22)
+                                width: Math.min(implicitWidth, home.width - artwork.width - gameRow.spacing)
                                 elide: Text.ElideRight
-                                text: bar.app.busy ? bar.app.activeEmulatorName : "No game running"
+                                text: bar.app.busy ? bar.title : "No game running"
                                 color: Theme.overlayText
                                 font.pixelSize: Math.round(26 * Theme.scale)
                                 font.bold: true
                             }
                             Row {
                                 visible: bar.app.busy
-                                spacing: 14
+                                spacing: Math.round(14 * Theme.scale)
                                 Text {
                                     textFormat: Text.PlainText
                                     text: Theme.capitalize(bar.app.state)
@@ -448,13 +453,24 @@ FocusScope {
                                 visible: index < 4
                                 enabled: available && !bar.app.busy
                                 artTitle: title
-                                label: bar.app.busy ? title + " (stop the running game first)" : "Play " + title
+                                // Disabled while a game runs (no focus, so no label shown then).
+                                label: "Play " + title
                                 onActivated: {
                                     if (bar.library.launch(gameId))
                                         bar.gameBar.close()
                                 }
                             }
                         }
+                    }
+                    Text {
+                        objectName: "homeBusyHint"
+                        textFormat: Text.PlainText
+                        visible: bar.app.busy && bar.library.recentGames.count > 0
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: "Recent games can be started once the running game is stopped."
+                        color: Theme.overlayTextFaint
+                        font.pixelSize: Theme.fontSmall
                     }
                 }
 
@@ -464,7 +480,7 @@ FocusScope {
                     objectName: "settingsPanel"
                     visible: bar.currentKey === "settings"
                     width: parent.width
-                    spacing: 22
+                    spacing: Math.round(22 * Theme.scale)
 
                     PanelTitle { text: "Quick settings" }
                     TileRow {
@@ -473,7 +489,7 @@ FocusScope {
                             objectName: "gameBarSettings"
                             enabled: !bar.app.busy
                             icon: "gear"
-                            label: bar.app.busy ? "Settings (stop the running game first)" : "All settings"
+                            label: "All settings" // disabled while a game runs: explained underneath
                             tone: Theme.accentSoft
                             onActivated: { bar.navigate("settings"); bar.gameBar.close() }
                         }
@@ -500,6 +516,7 @@ FocusScope {
                         text: (bar.app.inputDevices.length > 0 ? "Controller: " + bar.app.inputDevices.join(", ")
                                                                : "No controller connected (" + bar.app.inputBackend + ")")
                               + (bar.system.powerSupported ? "" : "\nPower control is not available on this platform.")
+                              + (bar.app.busy ? "\nAll settings opens once the running game is stopped." : "")
                         color: Theme.overlayTextFaint
                         font.pixelSize: Theme.fontSmall
                     }
@@ -511,18 +528,18 @@ FocusScope {
                     objectName: "audioPanel"
                     visible: bar.currentKey === "audio"
                     width: parent.width
-                    spacing: 22
+                    spacing: Math.round(22 * Theme.scale)
 
                     PanelTitle { text: "Audio" }
                     Rectangle {
                         id: volume
                         objectName: "gameBarVolume"
                         width: parent.width
-                        height: 76
-                        radius: 8
+                        height: Math.round(76 * Theme.scale)
+                        radius: Math.round(8 * Theme.scale)
                         activeFocusOnTab: true
                         color: activeFocus ? bar.barTileHover : bar.barTile
-                        border.width: activeFocus ? 3 : 1
+                        border.width: activeFocus ? Theme.focusWidth : 1
                         border.color: activeFocus ? Theme.overlayFocus : bar.barLine
                         Accessible.role: Accessible.Slider
                         Accessible.name: "Volume"
@@ -534,35 +551,37 @@ FocusScope {
 
                         Row {
                             anchors.fill: parent
-                            anchors.leftMargin: 18
-                            anchors.rightMargin: 18
-                            spacing: 18
+                            id: volumeRow
+                            anchors.leftMargin: Math.round(18 * Theme.scale)
+                            anchors.rightMargin: Math.round(18 * Theme.scale)
+                            spacing: Math.round(18 * Theme.scale)
                             BarIcon {
+                                id: volumeIcon
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 30
-                                height: 30
+                                width: Math.round(30 * Theme.scale)
+                                height: width
                                 name: "speaker"
                                 color: bar.settings.volume === 0 ? Theme.overlayDisabled : Theme.overlayText
                             }
                             Rectangle {
                                 id: track
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 30 - volumeValue.width - 36
-                                height: 6
-                                radius: 3
+                                width: parent.width - volumeIcon.width - volumeValue.width - 2 * parent.spacing
+                                height: Math.round(6 * Theme.scale)
+                                radius: height / 2
                                 color: Theme.overlayTrack
                                 Rectangle {
                                     width: parent.width * bar.settings.volume / 100
                                     height: parent.height
-                                    radius: 3
+                                    radius: height / 2
                                     color: Theme.overlayText
                                 }
                                 Rectangle {
                                     x: parent.width * bar.settings.volume / 100 - width / 2
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 18
-                                    height: 18
-                                    radius: 9
+                                    width: Math.round(18 * Theme.scale)
+                                    height: width
+                                    radius: width / 2
                                     color: Theme.overlayText
                                 }
                             }
@@ -571,7 +590,7 @@ FocusScope {
                                 id: volumeValue
                                 objectName: "gameBarVolumeValue"
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 56
+                                width: Math.round(56 * Theme.scale)
                                 horizontalAlignment: Text.AlignRight
                                 text: bar.settings.volume + "%"
                                 color: Theme.overlayText
@@ -583,7 +602,7 @@ FocusScope {
                             anchors.fill: parent
                             onClicked: (mouse) => {
                                 volume.forceActiveFocus()
-                                const p = (mouse.x - track.x - 18) / track.width
+                                const p = (mouse.x - track.x - volumeRow.anchors.leftMargin) / track.width
                                 bar.settings.volume = Math.max(0, Math.min(100, Math.round(p * 20) * 5))
                             }
                         }
@@ -608,11 +627,11 @@ FocusScope {
                     objectName: "performancePanel"
                     visible: bar.currentKey === "performance"
                     width: parent.width
-                    spacing: 18
+                    spacing: Math.round(18 * Theme.scale)
 
                     PanelTitle { text: "Performance" }
                     Row {
-                        spacing: 12
+                        spacing: Theme.space3
                         Text {
                             textFormat: Text.PlainText
                             id: cpuText
@@ -637,7 +656,7 @@ FocusScope {
                         id: sparkline
                         objectName: "cpuGraph"
                         width: parent.width
-                        height: 90
+                        height: Math.round(90 * Theme.scale)
                         property var values: bar.gameBar.cpuHistory
                         onValuesChanged: requestPaint()
                         onPaint: {
@@ -708,7 +727,7 @@ FocusScope {
         default property alias tiles: row.data
         property Item current: null // the focused tile, if any
         width: parent ? parent.width : 0
-        spacing: 14
+        spacing: Math.round(14 * Theme.scale)
 
         function focusables() {
             const list = []
@@ -733,7 +752,7 @@ FocusScope {
 
         Row {
             id: row
-            spacing: 18
+            spacing: Math.round(18 * Theme.scale)
         }
         Text {
             textFormat: Text.PlainText
@@ -772,16 +791,16 @@ FocusScope {
             activated()
         }
 
-        width: 92
-        height: 92
-        radius: 8
+        width: Math.round(92 * Theme.scale)
+        height: width
+        radius: Math.round(8 * Theme.scale)
         clip: true
         activeFocusOnTab: true
         opacity: enabled ? 1.0 : 0.4
         color: armed ? Theme.overlayArmed : (artTitle.length > 0 ? Theme.artColor(artTitle, 0.3) : tone)
-        border.width: activeFocus ? 3 : 0
+        border.width: activeFocus ? Theme.focusWidth : 0
         border.color: Theme.overlayFocus
-        scale: activeFocus ? 1.06 : 1.0
+        scale: activeFocus && !Theme.reducedMotion ? 1.06 : 1.0
         Behavior on scale { NumberAnimation { duration: Theme.animFast } }
 
         Accessible.role: Accessible.Button
@@ -807,8 +826,8 @@ FocusScope {
         BarIcon {
             visible: tile.artTitle.length === 0
             anchors.centerIn: parent
-            width: 40
-            height: 40
+            width: Theme.iconLarge
+            height: width
             name: tile.icon
             color: Theme.overlayText
         }
@@ -818,7 +837,7 @@ FocusScope {
             anchors.centerIn: parent
             text: Theme.initials(tile.artTitle)
             color: Theme.overlayText
-            font.pixelSize: Math.round(30 * Theme.scale)
+            font.pixelSize: Theme.fontHero
             font.bold: true
             font.italic: true
         }
@@ -842,7 +861,7 @@ FocusScope {
         property int percent: -1
         property string detail
         width: parent ? parent.width : 0
-        spacing: 8
+        spacing: Theme.space2
         Row {
             width: parent.width
             Text {
@@ -863,13 +882,13 @@ FocusScope {
         }
         Rectangle {
             width: parent.width
-            height: 6
-            radius: 3
+            height: Math.round(6 * Theme.scale)
+            radius: height / 2
             color: Theme.overlayTrack
             Rectangle {
                 width: parent.width * Math.max(0, meter.percent) / 100
                 height: parent.height
-                radius: 3
+                radius: height / 2
                 color: meter.percent >= 90 ? Theme.danger : meter.percent >= 75 ? Theme.warning : Theme.overlayGraph
             }
         }

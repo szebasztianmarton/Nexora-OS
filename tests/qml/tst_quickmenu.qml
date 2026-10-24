@@ -4,7 +4,9 @@ import Nexora.Console
 
 // The in-game quick menu against a real running (fake) emulator: hidden and refusing to open
 // without one, Pause / Resume for a pausable emulator, the Display sub-page, and Exit game
-// asking for confirmation (default Cancel) before it stops anything.
+// asking for confirmation (default Cancel) before it stops anything. Also the rest of the
+// in-game chrome that needs no window: the running overlay's Stop button, the header's chips
+// and clock, the game bar's scaled tiles and focus rings, and the empty state.
 Item {
     id: root
     width: 1280
@@ -25,12 +27,56 @@ Item {
         }
         return null
     }
+    // Like findByName, but also through non-visual children (timers).
+    function findObject(item, name) {
+        if (!item)
+            return null
+        if (item.objectName === name)
+            return item
+        const kids = item.data
+        if (!kids)
+            return null
+        for (let i = 0; i < kids.length; ++i) {
+            const found = findObject(kids[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
 
     Rectangle {
         id: behind
         anchors.fill: parent
         focus: true
         activeFocusOnTab: true
+    }
+    Header {
+        id: header
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        app: testApp
+        library: testLibrary
+    }
+    EmptyState {
+        id: emptyState
+        visible: false
+        app: testApp
+    }
+    RunningOverlay {
+        id: running
+        anchors.fill: parent
+        visible: false
+        app: testApp
+    }
+    GameBar {
+        id: gameBarLayer
+        anchors.fill: parent
+        gameBar: testGameBar
+        app: testApp
+        library: testLibrary
+        settings: testSettings
+        system: testSystem
     }
     QuickMenu {
         id: menu
@@ -47,6 +93,16 @@ Item {
 
         function cleanup() {
             testGameBar.closeQuickMenu()
+            if (testGameBar.open)
+                testGameBar.toggle()
+            running.visible = false
+            header.visible = true
+            Theme.userScale = 1.0
+            root.height = 720
+            Theme.highContrast = false
+            Theme.reducedMotion = false
+            Theme.sessionActive = false
+            behind.forceActiveFocus()
             if (testApp.busy) {
                 testApp.stop()
                 tryVerify(function() { return !testApp.busy }, 10000)
@@ -167,6 +223,140 @@ Item {
             tryVerify(function() { return !testApp.busy }, 10000)
             verify(!testGameBar.quickMenuOpen)
             verify(!menu.visible)
+        }
+
+        // The menu sits above the dashboard's hint bar (its scrim dims it, its panel covers part
+        // of it), so it draws its own bar inside its layer, like the game bar, and hands the
+        // dashboard's bar nothing: no key is listed twice.
+        function test_ownHintBarInsideTheMenu() {
+            verify(testSettings.showHints)
+            startGame()
+            verify(testGameBar.openQuickMenu())
+            tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })
+            const bar = root.findByName(menu, "quickMenuHints")
+            verify(bar !== null)
+            verify(bar.visible)
+            verify(bar.hints.length > 0)
+            compare(menu.hints.length, 0)
+            const p = bar.mapToItem(menu, 0, 0)
+            verify(p.x >= 0 && p.y >= 0 && p.x + bar.width <= menu.width && p.y + bar.height <= menu.height)
+            const panel = root.findByName(menu, "quickMenuPanel")
+            verify(panel.mapToItem(menu, 0, 0).y + panel.height <= p.y + 0.5) // the panel ends above it
+        }
+
+        // System info's Back row sits outside the page's NavColumn: it is scrolled into view
+        // too (150 % on a short screen: the page is taller than the panel). The root is 480 px
+        // high, not 720: at 720 px the whole page still fits and nothing needs scrolling.
+        function test_infoBackScrolledIntoViewAtLargeScale() {
+            Theme.userScale = 1.5
+            root.height = 480
+            startGame()
+            verify(testGameBar.openQuickMenu())
+            tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })
+            focusRow("quickSystemInfo")
+            keyClick(Qt.Key_Return)
+            const back = root.findByName(menu, "quickInfoBack")
+            tryVerify(function() { return back.activeFocus })
+            const flick = root.findByName(menu, "quickMenuFlick")
+            verify(flick !== null)
+            tryVerify(function() {
+                const p = back.mapToItem(flick, 0, 0)
+                return p.y >= 0 && p.y + back.height <= flick.height
+            })
+        }
+
+        // Stop is a real button for assistive technology, and keeps its size on focus when
+        // motion is reduced.
+        function test_runningOverlayStopButton() {
+            const stop = root.findByName(running, "stopButton")
+            verify(stop !== null)
+            compare(stop.Accessible.role, Accessible.Button)
+            verify(stop.Accessible.name.indexOf("Stop") >= 0)
+            Theme.reducedMotion = true
+            running.visible = true
+            running.forceActiveFocus()
+            tryVerify(function() { return stop.activeFocus })
+            compare(stop.scale, 1.0)
+            // High contrast: the yellow focus ring, not the danger red.
+            Theme.highContrast = true
+            compare(stop.border.color, Theme.focusRing)
+            compare(stop.border.width, Theme.focusWidth)
+        }
+
+        // While a game runs the recent-game tiles are disabled; a visible line says why.
+        function test_gameBarRecentGamesExplainedWhileBusy() {
+            startGame()
+            testGameBar.toggle()
+            tryVerify(function() { return gameBarLayer.visible })
+            const hint = root.findByName(gameBarLayer, "homeBusyHint")
+            verify(hint !== null)
+            tryVerify(function() { return testLibrary.recentGames.count > 0 })
+            verify(hint.visible)
+            compare(hint.textFormat, Text.PlainText)
+            verify(hint.text.indexOf("stopped") >= 0, hint.text)
+        }
+
+        // Header chips grow with the scale (32 px at 100 %) so their text never overflows; the
+        // state reads "Running", not "running".
+        function test_headerChipsScale() {
+            const chip = root.findByName(header, "stateChip")
+            compare(chip.height, 32)
+            Theme.userScale = 2.25
+            startGame()
+            tryVerify(function() { return chip.visible })
+            const label = root.findByName(chip, "chipLabel")
+            verify(label !== null)
+            verify(chip.height >= label.implicitHeight, chip.height + " < " + label.implicitHeight)
+            verify(label.text.indexOf("Running") >= 0, label.text)
+        }
+
+        // The header clock only ticks while the header can be seen and no game owns the screen.
+        function test_headerClockSleepsDuringASession() {
+            const timer = root.findObject(header, "headerClockTimer")
+            verify(timer !== null)
+            verify(timer.running)
+            Theme.sessionActive = true
+            verify(!timer.running)
+            Theme.sessionActive = false
+            verify(timer.running)
+            header.visible = false
+            verify(!timer.running)
+        }
+
+        // The game bar's tiles scale with the interface, and its focus rings are Theme.focusWidth
+        // (4 px in high contrast) with no scale jump under reduced motion.
+        function test_gameBarScaledTilesAndFocusRings() {
+            Theme.userScale = 1.5
+            Theme.highContrast = true
+            Theme.reducedMotion = true
+            testGameBar.toggle()
+            tryVerify(function() { return gameBarLayer.visible })
+            gameBarLayer.reset()
+            const tab = root.findByName(gameBarLayer, "barTab_home")
+            tryVerify(function() { return tab.activeFocus })
+            compare(tab.width, Math.round(84 * Theme.scale))
+            compare(tab.border.width, Theme.focusWidth)
+            compare(tab.scale, 1.0)
+            keyClick(Qt.Key_Down)
+            const tile = root.findByName(gameBarLayer, "gameBarHome")
+            tryVerify(function() { return tile.activeFocus })
+            compare(tile.width, Math.round(92 * Theme.scale))
+            compare(tile.border.width, Theme.focusWidth)
+            compare(tile.scale, 1.0)
+            keyClick(Qt.Key_Up)
+            keyClick(Qt.Key_Right)
+            keyClick(Qt.Key_Right)
+            keyClick(Qt.Key_Down)
+            const volume = root.findByName(gameBarLayer, "gameBarVolume")
+            tryVerify(function() { return volume.activeFocus })
+            compare(volume.height, Math.round(76 * Theme.scale))
+            compare(volume.border.width, Theme.focusWidth)
+        }
+
+        // The empty state is announced by its title, not as "Empty state".
+        function test_emptyStateAccessibleName() {
+            compare(emptyState.Accessible.name, testApp.configDirectoryFound ? "No emulators configured"
+                                                                            : "Configuration directory not found")
         }
     }
 }

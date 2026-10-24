@@ -7,6 +7,10 @@ Rectangle {
     id: header
     required property AppController app
     required property LibraryController library
+    property GameSessionManager sessions: null
+    // The game's title while a session runs; the emulator's name for a plain emulator launch.
+    readonly property string title: sessions !== null && sessions.active.title ? sessions.active.title
+                                                                            : app.activeEmulatorName
 
     implicitHeight: Theme.headerHeight
     color: Theme.glassActive ? "transparent" : Theme.surface
@@ -28,26 +32,26 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: Theme.spacing * 2
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 8
+        spacing: Theme.space2
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
-            width: 28
-            height: 28
-            radius: 8
+            width: Math.round(28 * Theme.scale)
+            height: width
+            radius: Theme.space2
             rotation: 45
             color: "transparent"
             border.color: Theme.accent
-            border.width: 3
+            border.width: Math.round(3 * Theme.scale)
             Rectangle {
                 anchors.centerIn: parent
-                width: 8
-                height: 8
-                radius: 2
+                width: Theme.space2
+                height: width
+                radius: Math.round(2 * Theme.scale)
                 color: Theme.accent
             }
         }
-        Item { width: 6; height: 1 }
+        Item { width: Math.round(6 * Theme.scale); height: 1 }
         Text {
             textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
@@ -74,21 +78,22 @@ Rectangle {
         property bool pulsing: false
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         radius: height / 2
-        height: 32
-        width: Math.min(chipRow.implicitWidth + 28, 420)
+        // 32 px at 100 %: grows with the scale so the text never overflows the chip.
+        height: Math.round(32 * Theme.scale)
+        width: Math.min(chipRow.implicitWidth + Math.round(28 * Theme.scale), Math.round(420 * Theme.scale))
         color: Theme.surfaceRaised
         border.color: tone
         border.width: 1
         Row {
             id: chipRow
             anchors.centerIn: parent
-            spacing: 8
+            spacing: Theme.space2
             Rectangle {
                 id: dot
                 anchors.verticalCenter: parent.verticalCenter
-                width: 8
-                height: 8
-                radius: 4
+                width: Theme.space2
+                height: width
+                radius: width / 2
                 color: chip.tone
                 SequentialAnimation on opacity {
                     // A continuous pulse, not a discrete transition: reducedMotion stops it
@@ -102,8 +107,9 @@ Rectangle {
             }
             Text {
                 textFormat: Text.PlainText
+                objectName: "chipLabel"
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, 360)
+                width: Math.min(implicitWidth, Math.round(360 * Theme.scale))
                 text: chip.label
                 color: Theme.text
                 font.pixelSize: Theme.fontSmall
@@ -116,7 +122,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: Theme.spacing * 2
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 12
+        spacing: Theme.space3
 
         Chip {
             objectName: "rootChip"
@@ -134,7 +140,7 @@ Rectangle {
         Chip {
             objectName: "stateChip"
             visible: header.app.busy
-            label: header.app.activeEmulatorName + " · " + header.app.state
+            label: header.title + " · " + Theme.capitalize(header.app.state)
             tone: Theme.statusColor(header.app.state)
             pulsing: header.app.state !== "running"
         }
@@ -159,9 +165,12 @@ Rectangle {
                 font.pixelSize: Theme.fontTiny
                 text: Qt.formatDate(new Date(), "ddd d MMM")
             }
+            // Only while the clock can be seen: not under a running game (Theme.sessionActive).
             Timer {
+                objectName: "headerClockTimer"
                 interval: 10000
-                running: true
+                running: header.visible && !Theme.sessionActive
+                triggeredOnStart: true
                 repeat: true
                 onTriggered: {
                     clock.text = Qt.formatTime(new Date(), "hh:mm")

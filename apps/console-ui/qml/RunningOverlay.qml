@@ -8,6 +8,10 @@ FocusScope {
     id: overlay
     objectName: "runningOverlay"
     required property AppController app
+    property GameSessionManager sessions: null
+    // The game's title while a session runs; the emulator's name for a plain emulator launch.
+    readonly property string title: sessions !== null && sessions.active.title ? sessions.active.title
+                                                                            : app.activeEmulatorName
 
     signal quickMenuRequested()
 
@@ -54,7 +58,7 @@ FocusScope {
             width: Math.min(implicitWidth, overlay.width - 96)
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
-            text: overlay.app.activeEmulatorName
+            text: overlay.title
             color: Theme.text
             font.pixelSize: Theme.fontHero
             font.bold: true
@@ -68,31 +72,20 @@ FocusScope {
             color: Theme.statusColor(overlay.app.state)
             font.pixelSize: Theme.fontTitle
         }
-        Rectangle {
+        NxButton {
             id: stopButton
             objectName: "stopButton"
             anchors.horizontalCenter: parent.horizontalCenter
             focus: true
-            height: Math.round(56 * Theme.scale)
-            width: Math.round(240 * Theme.scale)
-            radius: Theme.radius
-            color: Theme.surfaceRaised
-            border.width: activeFocus ? Theme.focusWidth : 1
-            border.color: activeFocus ? Theme.focusRing : Theme.border
+            width: Math.max(implicitWidth, Math.round(240 * Theme.scale))
+            kind: "danger"
+            glyph: "■"
+            text: "Stop emulator"
+            // Dimmed, not disabled, while stopping: a disabled button would drop focus.
             opacity: overlay.app.state === "stopping" ? 0.5 : 1.0
-            scale: activeFocus ? 1.04 : 1.0
-            Text {
-                textFormat: Text.PlainText
-                anchors.centerIn: parent
-                text: "■  Stop emulator"
-                color: Theme.text
-                font.pixelSize: Theme.fontBody
-                font.bold: true
-            }
-            MouseArea { anchors.fill: parent; onClicked: overlay.requestStop() }
-            Keys.onReturnPressed: overlay.requestStop()
-            Keys.onEnterPressed: overlay.requestStop()
-            Keys.onSpacePressed: overlay.requestStop()
+            // High contrast keeps its yellow focus ring; NxButton would draw the danger red.
+            border.color: activeFocus ? (Theme.highContrast ? Theme.focusRing : Theme.danger) : Theme.border
+            onClicked: overlay.requestStop()
         }
         Text {
             textFormat: Text.PlainText
