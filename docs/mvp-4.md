@@ -97,7 +97,7 @@ A review of the MVP 4 code after commit `388781b` found the following problems; 
 
 ## Verification matrix
 
-Statuses follow the project's verification guide: **PASS** (direct evidence), **PARTIAL**, **FAIL**, **NOT RUN**. A NOT RUN is never counted as a PASS. Recorded 2026-10-17 on branch `claude/mvp4-remaining`.
+Statuses follow the project's verification guide: **PASS** (direct evidence), **PARTIAL**, **FAIL**, **NOT RUN**. A NOT RUN is never counted as a PASS. Recorded 2026-10-17 on branch `claude/mvp4-remaining`; a snapshot of that day, not updated since (the current state is in the summary above and in [testing.md](testing.md)).
 
 | Area | Status | Evidence / reason |
 | --- | --- | --- |
@@ -109,9 +109,9 @@ Statuses follow the project's verification guide: **PASS** (direct evidence), **
 | Emulator Manager | PASS (fake) | Fake-emulator lifecycle in `tst_emulatormanager`: launch, normal/non-zero exit, crash, missing executable, startup failure, bounded stop with SIGKILL escalation, stop during Starting, whole process group (grandchildren), pause/resume, second launch blocked, argument list (no shell). **Real emulators: NOT RUN.** |
 | Game library | PASS | Scanner and library tests on temporary directories with known files (`tst_libraryscanner`, `tst_gamelibrary`, `tst_libraryquery`, integration cancel test): only configured dirs, worker-thread merge, missing/duplicate files, hide-not-delete, `@other` filter. |
 | Persistence | PASS (process restart) / NOT RUN (reboot) | `tst_uicontext` restart simulation (settings, library, removed games persist); headless CLI run as a non-root user: `--backup` → modify settings → `--restore` restored the original file; corrupt settings moved aside. Persistence across a reboot of the image: NOT RUN. |
-| Buildroot | PARTIAL | `check-defconfig.sh` 0 problems, `check-package` 0 warnings, kernel fragment checked against a generated config, savedefconfig round trip identical; CI "Buildroot" validation green on `16f3ab3`. A full build is in progress in this container (toolchain, host LLVM/Clang, target LLVM and ~80 packages built); the `nexora-os` package itself not yet built for the target. <!-- TASK12-RESULT --> |
-| Image generation | NOT RUN | Image build not finished: the container was reclaimed repeatedly while idle and the multi-hour build had to be resumed several times. <!-- TASK12-RESULT --> |
-| Boot (VM / hardware) | NOT RUN | No image yet; `scripts/image/qemu-boot-test.sh` ready (UI must start and stay up for a settle window). <!-- TASK12-RESULT --> |
+| Buildroot | PARTIAL | `check-defconfig.sh` 0 problems, `check-package` 0 warnings, kernel fragment checked against a generated config, savedefconfig round trip identical; CI "Buildroot" validation green on `16f3ab3`. A full build was in progress when this was recorded (toolchain, host LLVM/Clang, target LLVM and ~80 packages built); the `nexora-os` package itself was not yet built for the target. |
+| Image generation | NOT RUN | Image build not finished on that date: the container was reclaimed repeatedly while idle and the multi-hour build had to be resumed several times. |
+| Boot (VM / hardware) | NOT RUN | No image yet on that date; `scripts/image/qemu-boot-test.sh` ready (UI must start and stay up for a settle window). |
 | Recovery / update / rollback | PARTIAL | Helpers tested on the build host against scratch partitions and grubenv, under bash and the target's BusyBox `sh` (`test_update_helper`: install, tamper, trial-boot refusal, symlink/FIFO swaps, torn grubenv repair, bootok confirm/rollback); GRUB script syntax-checked; boot-counting state machine reviewed by hand. On a booted image: NOT RUN. |
 | CI | PASS | GitHub Actions "CI" run 73 and "Buildroot" run 12 green on `16f3ab3` (lint, shellcheck, docs check, GCC/Clang `-Werror`, Release, security and system labels, qmllint, screenshots). `release.yml` has never run (needs a tag and the signing secret). |
 | Documentation | PASS | `scripts/release/check-docs.sh`: 21 required documents, 0 broken links; docs re-synced with the code after the fixes. Mermaid diagrams not rendered (no renderer). |
