@@ -1,3 +1,6 @@
 ## 2024-10-11 - QML Component Accessibility
 **Learning:** In Qt/QML, web ARIA tags don't work. Instead, screen readers rely on the `Accessible` attached properties. Context properties in repeaters (like `modelData` and `index`) do not need to be prefixed with the delegate ID (like `tab.index`) inside the Accessible block, and `pressed()` can just be called directly without relying on an ID prefix.
 **Action:** Always use `Accessible.role`, `Accessible.name`, `Accessible.description`, and `Accessible.onPressAction` for custom interactive QML components, being careful with implicit context properties.
+## 2024-10-23 - QML Component Accessibility for Tabs and Radio Buttons
+**Learning:** In QML Accessibility, tabs (`Accessible.PageTab`) should use `Accessible.selected` to map to the correct state (e.g. `QAccessible::State::Selected`). Conversely, elements with the role `Accessible.RadioButton` must use `Accessible.checkable` and `Accessible.checked` to correctly represent their state.
+**Action:** Ensure proper state properties are applied based on the accessibility role in custom interactive QML components (`Accessible.selected` for tabs, `Accessible.checkable` and `Accessible.checked` for radio buttons and checkboxes).
