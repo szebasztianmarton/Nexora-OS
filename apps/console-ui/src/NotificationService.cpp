@@ -329,7 +329,8 @@ void NotificationService::loadHistory()
         if (loaded.size() >= MaxPersisted)
             break;
     }
-    m_history = loaded + m_history;
+    // Newest first: entries posted earlier in this run stay in front of the previous run's.
+    m_history = m_history + loaded;
     while (m_history.size() > MaxHistory)
         m_history.removeLast();
     emit historyChanged();
