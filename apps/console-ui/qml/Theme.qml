@@ -20,6 +20,13 @@ import QtQuick
 //                  palette for a pure-black-background / white-text / yellow-focus-ring one;
 //                  every colour that can appear as text keeps a contrast ratio of at least
 //                  7:1 against the background it is drawn on.
+//   reduceTransparency  Theme.reduceTransparency (= settings.reduceTransparency). Glass fills
+//                  become the dense surfaceFloating and the backdrop blur is switched off.
+//   gpuEffects     Theme.gpuEffects (= UiCapabilities.gpuEffects). True only on a hardware
+//                  renderer; the precondition for the real backdrop blur.
+//   sessionActive  Theme.sessionActive (an emulator is starting/running/stopping). The blur is
+//                  off then so the GPU is left to the emulator.
+//   glassBlur      Derived: glass look + gpuEffects, with no reduceTransparency, no session.
 //   reducedMotion  Theme.reducedMotion (= settings.reducedMotion). Collapses animFast/
 //                  animNormal/animSlow to 0; continuous ambient animations (the library-scan
 //                  spinner, a pulsing status dot) stop outright instead of running at speed 0.
@@ -32,8 +39,15 @@ QtObject {
     property bool highContrast: false
     property bool glass: false
     property bool reducedMotion: false
+    property bool reduceTransparency: false
+    // UiCapabilities.gpuEffects (hardware renderer) and an emulator session being active; both
+    // bound by Main.qml.
+    property bool gpuEffects: false
+    property bool sessionActive: false
     // Glass look in effect (high contrast replaces it).
     readonly property bool glassActive: glass && !highContrast
+    // Real backdrop blur (GlassEffectGpu) in effect; otherwise glass surfaces use the flat layers.
+    readonly property bool glassBlur: glassActive && gpuEffects && !reduceTransparency && !sessionActive
 
     // --- Palette -----------------------------------------------------------------------------
     readonly property color background: highContrast ? "#000000" : glass ? "#070a14" : "#0b0d13"
@@ -53,8 +67,27 @@ QtObject {
     readonly property color warning: highContrast ? "#ffa500" : "#f2b84b"
     readonly property color danger: highContrast ? "#ff3b3b" : "#ff6372"
     readonly property color favorite: highContrast ? "#ffd400" : "#ffc94d"
-    // Glass sheen along the top edge of panels and cards (transparent outside glass).
-    readonly property color glassSheen: glassActive ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+
+    // --- Liquid Glass ---------------------------------------------------------------------------
+    readonly property real glassBlurRadius: Math.round(32 * scale)
+    readonly property real glassSaturation: 0.35
+    readonly property color glassFillRegular: reduceTransparency ? surfaceFloating : Qt.rgba(1, 1, 1, 0.10)
+    readonly property color glassFillRegularActive: reduceTransparency ? surfaceHover : Qt.rgba(1, 1, 1, 0.15)
+    readonly property color glassFillClear: reduceTransparency ? surfaceFloating : Qt.rgba(1, 1, 1, 0.05)
+    // Dense floating panels on the GPU path: a dark tint of surfaceFloating over the blurred
+    // backdrop, so body text keeps >= 4.5:1 also over brightly blurred cover art.
+    readonly property color glassFillDense: reduceTransparency ? surfaceFloating : Qt.rgba(0.10, 0.12, 0.19, 0.65)
+    // Prominent (tinted) fill. Reduce transparency: an opaque 50 % mix of the tint into the
+    // background, so the light label keeps >= 4.5:1 (about 6.7:1 for the accent).
+    function prominentFill(tint) {
+        return reduceTransparency
+            ? Qt.rgba((tint.r + background.r) / 2, (tint.g + background.g) / 2, (tint.b + background.b) / 2, 1)
+            : Qt.rgba(tint.r, tint.g, tint.b, 0.30)
+    }
+    readonly property color glassFillProminent: prominentFill(accent)
+    readonly property color glassRim: Qt.rgba(1, 1, 1, 0.20)
+    readonly property color glassRimStrong: Qt.rgba(1, 1, 1, 0.30)
+    readonly property color glassHighlight: Qt.rgba(1, 1, 1, reduceTransparency ? 0.06 : 0.18)
     // Dedicated focus-ring colour: equal to accent in the normal theme, but kept separate so
     // a future palette can tune focus visibility without touching the accent colour itself.
     readonly property color focusRing: highContrast ? "#ffd400" : accent
@@ -101,6 +134,7 @@ QtObject {
     readonly property real radiusSmall: Math.round(10 * scale)
     readonly property real radius: Math.round(12 * scale)
     readonly property real radiusLarge: Math.round(18 * scale)
+    readonly property real radiusXL: Math.round(24 * scale)
 
     // --- Typography (base px × scale) -----------------------------------------------------------
     readonly property real fontTiny: Math.round(12 * scale)

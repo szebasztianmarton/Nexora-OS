@@ -1,0 +1,81 @@
+import QtQuick
+import Nexora.Console
+
+// The Liquid Glass background (≈ SwiftUI glassEffect). Put it inside a panel, filling it, below
+// the content. Variants: "regular", "clear" (lighter, for cards and rows) and "prominent"
+// (accent tinted, primary actions). |interactive| + |active| (focus/press, set by the owner)
+// brighten the fill and the rim and lift the surface slightly.
+//
+// Theme.glassBlur && allowBlur: GlassEffectGpu blurs |backdrop| (or the enclosing GlassGroup's
+// backdrop) under the surface; otherwise, or when that file cannot load, GlassEffectFlat. The
+// backdrop must not be an ancestor of the surface; such a backdrop is ignored. Invisible
+// outside the glass theme. |dense| (floating panels) uses dark fills for body text.
+Item {
+    id: surface
+    property string variant: "regular"
+    property color tint: Theme.accent
+    property real radius: Theme.radiusLarge
+    property bool interactive: false
+    property bool active: false
+    property Item backdrop: null
+    property bool allowBlur: true
+    // Floating panels: without the blur the regular fill would let whatever lies behind compete
+    // with the text, so the flat path uses the dense Theme.surfaceFloating instead; over the
+    // blur the darker Theme.glassFillDense keeps body text readable.
+    property bool dense: false
+
+    readonly property Item group: {
+        for (let p = surface.parent; p; p = p.parent) {
+            if (p.blurredSource !== undefined && p.backdrop !== undefined)
+                return p
+        }
+        return null
+    }
+    readonly property Item effectiveBackdrop: {
+        const b = backdrop ? backdrop : (group ? group.backdrop : null)
+        for (let p = surface; p; p = p.parent) {
+            if (p === b)
+                return null
+        }
+        return b
+    }
+    readonly property bool lit: interactive && active
+    readonly property color fillColor: dense ? (blurred ? Theme.glassFillDense : Theme.surfaceFloating)
+        : variant === "prominent"
+        ? (tint === Theme.accent ? Theme.glassFillProminent : Theme.prominentFill(tint))
+        : variant === "clear" ? Theme.glassFillClear
+        : lit ? Theme.glassFillRegularActive : Theme.glassFillRegular
+    readonly property color rimColor: lit ? Theme.glassRimStrong : Theme.glassRim
+    readonly property bool wantsGpu: Theme.glassBlur && allowBlur && effectiveBackdrop !== null
+    readonly property bool blurred: state === "gpu"
+
+    visible: Theme.glassActive
+    state: wantsGpu && gpuLoader.status === Loader.Ready ? "gpu" : "flat"
+    states: [State { name: "flat" }, State { name: "gpu" }]
+
+    scale: lit && !Theme.reducedMotion ? 1.02 : 1.0
+    Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+
+    Loader {
+        id: gpuLoader
+        anchors.fill: parent
+        active: surface.wantsGpu
+        source: "GlassEffectGpu.qml"
+        onStatusChanged: if (status === Loader.Error) console.debug("nexora.ui: glass blur unavailable, using flat glass")
+        onLoaded: {
+            item.fillColor = Qt.binding(() => surface.fillColor)
+            item.radius = Qt.binding(() => surface.radius)
+            item.rimColor = Qt.binding(() => surface.rimColor)
+            item.backdrop = Qt.binding(() => surface.effectiveBackdrop)
+            item.blurredSource = Qt.binding(() => surface.group && !surface.backdrop ? surface.group.blurredSource : null)
+        }
+    }
+    GlassEffectFlat {
+        objectName: "flat"
+        anchors.fill: parent
+        visible: surface.state === "flat"
+        fillColor: surface.fillColor
+        radius: surface.radius
+        rimColor: surface.rimColor
+    }
+}

@@ -1,5 +1,6 @@
 #include "UiBootstrap.h"
 
+#include "UiCapabilities.h"
 #include "UiContext.h"
 
 #include "nexora/shared/Logging.h"
@@ -30,6 +31,8 @@ QQuickWindow *loadMainWindow(QQmlApplicationEngine &engine, UiContext *context)
     auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first());
     if (!window)
         qCCritical(lcUi) << "Failed to load the main QML window";
+    else
+        UiCapabilities::probe(window);
     return window;
 }
 

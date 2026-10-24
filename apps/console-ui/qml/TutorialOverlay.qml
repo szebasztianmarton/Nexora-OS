@@ -8,6 +8,8 @@ FocusScope {
     id: tutorial
     objectName: "tutorialOverlay"
     required property LibraryController library
+    // Set by Main.qml: the window's scene, blurred behind the panel (glass blur only).
+    property Item glassBackdrop: null
 
     // Emitted when the tutorial is finished or skipped; |openSettings| asks the window to
     // open the Settings tab (on finish while no library folder exists yet).
@@ -81,10 +83,12 @@ FocusScope {
             nextButton.forceActiveFocus()
     }
 
+    // Glass: the window's shared modal scrim (Main.qml) dims the whole window, so none here.
     Rectangle {
+        objectName: "tutorialScrim"
         anchors.fill: parent
-        color: Theme.background
-        opacity: 0.94
+        color: Theme.glassActive ? "transparent" : Theme.background
+        opacity: Theme.glassActive ? 1.0 : 0.94
     }
     // Swallow pointer input to the screens underneath.
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true }
@@ -94,10 +98,11 @@ FocusScope {
         anchors.centerIn: parent
         width: Math.min(tutorial.width - Theme.spacing * 4, 760)
         height: content.implicitHeight + Theme.spacing * 4
-        radius: Theme.radius * 1.5
-        color: Theme.surfaceFloating
-        GlassSheen {}
+        radius: Theme.glassActive ? Theme.radiusXL : Theme.radius * 1.5
+        color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+        GlassSurface { anchors.fill: parent; z: -1; radius: card.radius; dense: true; backdrop: tutorial.glassBackdrop }
         border.color: Theme.border
+        border.width: Theme.glassActive ? 0 : 1
 
         Column {
             id: content

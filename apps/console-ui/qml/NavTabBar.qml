@@ -39,16 +39,37 @@ FocusScope {
     readonly property real labelPadding: compact ? Theme.space2 : Theme.space5
     readonly property real labelFontSize: compact ? Math.round(Theme.fontBody * 0.82) : Theme.fontBody
 
-    Rectangle {
+    // Docked (dark / high contrast): a plain strip with a bottom rule. Glass: a floating glass
+    // bar (Main.qml places it).
+    GlassSurface { anchors.fill: parent; z: -1; radius: Theme.radiusXL }
+    // Glass: the bar floats over the scrolling pages; presses on it (also between its controls)
+    // must not reach a card scrolled underneath. Below the bar's own content in z.
+    MouseArea {
+        objectName: "tabBarClickShield"
         anchors.fill: parent
-        color: Theme.glassActive ? Theme.surface : Theme.background
+        z: -1
+        enabled: Theme.glassActive
+        hoverEnabled: false
+        acceptedButtons: Qt.AllButtons
+        onWheel: (wheel) => wheel.accepted = false // scrolling still reaches the page
     }
     Rectangle {
+        visible: !Theme.glassActive
+        anchors.fill: parent
+        color: Theme.background
+    }
+    Rectangle {
+        visible: !Theme.glassActive
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 1
         color: Theme.border
+    }
+
+    // Glass: one capsule slides onto the current tab (the tab itself stays transparent).
+    GlassFocusPill {
+        target: { void tabRepeater.count; return tabRepeater.itemAt(bar.currentIndex) }
     }
 
     component KeyCap: Rectangle {
@@ -81,6 +102,7 @@ FocusScope {
         Item { width: Theme.space2; height: 1 }
 
         Repeater {
+            id: tabRepeater
             model: bar.tabs
             delegate: Rectangle {
                 id: tab
@@ -93,7 +115,7 @@ FocusScope {
                 width: Math.min(bar.maxTabWidth, Math.max(bar.compact ? 0 : 96 * Theme.scale,
                                                           tabLabel.implicitWidth + bar.labelPadding))
                 radius: height / 2
-                color: current ? (bar.activeFocus ? Theme.accent : Theme.accentSoft)
+                color: current ? (Theme.glassActive ? "transparent" : bar.activeFocus ? Theme.accent : Theme.accentSoft)
                      : tabMouse.containsMouse ? Theme.surfaceRaised : "transparent"
                 border.width: current && bar.activeFocus ? Theme.focusWidth : 0
                 border.color: Theme.highContrast ? Theme.focusRing : Theme.text

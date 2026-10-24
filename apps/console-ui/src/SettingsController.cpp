@@ -140,6 +140,11 @@ int SettingsController::uiScale() const
 {
     return m_settings->intValue(Settings::UiScale);
 }
+bool SettingsController::reduceTransparency() const
+{
+    return m_settings->boolValue(Settings::UiReduceTransparency);
+}
+
 bool SettingsController::reducedMotion() const
 {
     return m_settings->boolValue(Settings::UiReducedMotion);

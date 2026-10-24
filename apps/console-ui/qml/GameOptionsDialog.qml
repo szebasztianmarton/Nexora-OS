@@ -14,6 +14,8 @@ FocusScope {
     property var details: ({})
     property var rows: []
     property Item returnFocus: null
+    // Set by Main.qml: the window's scene, blurred behind the panel (glass blur only).
+    property Item glassBackdrop: null
 
     readonly property var hints: nameKeyboard.visible ? nameKeyboard.hints
         : [{ button: "↑ ↓", action: "Select" }, { button: "A / Enter", action: "Choose" },
@@ -146,21 +148,25 @@ FocusScope {
         }
     }
 
+    // Glass: the window's shared modal scrim (Main.qml) dims the whole window, so none here.
     Rectangle {
+        objectName: "gameOptionsScrim"
         anchors.fill: parent
-        color: Theme.background
-        opacity: 0.8
+        color: Theme.glassActive ? "transparent" : Theme.background
+        opacity: Theme.glassActive ? 1.0 : 0.8
     }
     MouseArea { anchors.fill: parent; onClicked: dialog.close() }
 
     Rectangle {
+        id: panel
         anchors.centerIn: parent
         width: Math.min(parent.width - 64, 620)
         height: Math.min(parent.height - 48, column.implicitHeight + Theme.spacing * 3)
-        radius: Theme.radius
-        color: Theme.surfaceFloating
-        GlassSheen {}
+        radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
+        color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+        GlassSurface { anchors.fill: parent; z: -1; radius: panel.radius; dense: true; backdrop: dialog.glassBackdrop }
         border.color: Theme.border
+        border.width: Theme.glassActive ? 0 : 1
         MouseArea { anchors.fill: parent } // keep clicks inside
 
         Column {

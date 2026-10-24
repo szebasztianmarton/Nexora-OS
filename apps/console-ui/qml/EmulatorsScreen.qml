@@ -8,6 +8,10 @@ FocusScope {
     objectName: "emulatorsScreen"
     required property AppController app
     required property SettingsController settings
+    // Height the floating glass bars cover at the top / bottom of the page (set by Main.qml;
+    // 0 when the bars are docked).
+    property real chromeTop: 0
+    property real chromeBottom: 0
 
     readonly property alias currentIndex: list.currentIndex
     readonly property bool pickerOpen: picker.visible
@@ -47,7 +51,7 @@ FocusScope {
         id: title
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.topMargin: Theme.spacing * 1.5
+        anchors.topMargin: Theme.spacing * 1.5 + screen.chromeTop
         anchors.leftMargin: Theme.spacing * 2
         text: "Emulators"
         color: Theme.text
@@ -80,7 +84,8 @@ FocusScope {
         anchors.top: statusLine.bottom
         anchors.bottom: parent.bottom
         anchors.topMargin: Theme.spacing
-        anchors.bottomMargin: Theme.spacing
+        // Horizontal list: the cards stop above the hint bar rather than scrolling under it.
+        anchors.bottomMargin: Theme.spacing + screen.chromeBottom
         leftMargin: Theme.spacing * 2
         rightMargin: Theme.spacing * 2
         orientation: ListView.Horizontal
@@ -169,19 +174,23 @@ FocusScope {
 
         Rectangle {
             anchors.fill: parent
-            color: Theme.background
-            opacity: 0.8
+            color: Theme.glassActive ? Qt.rgba(0, 0, 0, 0.40) : Theme.background
+            opacity: Theme.glassActive ? 1.0 : 0.8
         }
         MouseArea { anchors.fill: parent; onClicked: picker.close() }
 
         Rectangle {
-            anchors.centerIn: parent
+            id: pickerPanel
+            x: (parent.width - width) / 2
+            y: screen.chromeTop + (parent.height - screen.chromeTop - screen.chromeBottom - height) / 2
             width: Math.min(parent.width - 64, 520)
-            height: Math.min(parent.height - 48, pickerColumn.implicitHeight + Theme.spacing * 3)
-            radius: Theme.radius
-            color: Theme.surfaceFloating
-            GlassSheen {}
+            height: Math.min(parent.height - screen.chromeTop - screen.chromeBottom - 48,
+                             pickerColumn.implicitHeight + Theme.spacing * 3)
+            radius: Theme.glassActive ? Theme.radiusXL : Theme.radius
+            color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
+            GlassSurface { anchors.fill: parent; z: -1; radius: pickerPanel.radius; dense: true }
             border.color: Theme.border
+            border.width: Theme.glassActive ? 0 : 1
             MouseArea { anchors.fill: parent } // keep clicks inside
 
             Column {

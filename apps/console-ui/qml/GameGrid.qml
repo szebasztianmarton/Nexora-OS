@@ -11,6 +11,9 @@ GridView {
     id: grid
     required property LibraryController library
     property bool listMode: false
+    // Height the glass hint bar covers at the bottom of the view: the cards scroll under it,
+    // but the current one stays above it.
+    property real chromeBottom: 0
     readonly property bool effectiveListMode: listMode || !cardsFit
 
     signal detailsRequested(real gameId)
@@ -22,9 +25,9 @@ GridView {
     highlightMoveDuration: Theme.animMove
     highlightRangeMode: GridView.ApplyRange
     preferredHighlightBegin: Theme.space3
-    preferredHighlightEnd: height - cellHeight - Theme.space3
+    preferredHighlightEnd: height - chromeBottom - cellHeight - Theme.space3
     topMargin: Theme.space3
-    bottomMargin: Theme.space3
+    bottomMargin: Theme.space3 + chromeBottom
 
     // A card is its art (0.62 x the cell width) plus the title/emulator area.
     readonly property real cardInfoHeight: Math.round(70 * Theme.scale) + Theme.space4

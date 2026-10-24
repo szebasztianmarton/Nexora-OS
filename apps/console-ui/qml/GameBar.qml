@@ -289,6 +289,8 @@ FocusScope {
             color: bar.barSurface
             border.color: bar.barLine
             border.width: 1
+            // Glass: the highlight and rim over the overlay colours (no blur).
+            GlassSurface { anchors.fill: parent; variant: "clear"; allowBlur: false; radius: panel.radius }
             // Clicks inside the panel never reach the scrim (which would close the bar).
             MouseArea { anchors.fill: parent }
 

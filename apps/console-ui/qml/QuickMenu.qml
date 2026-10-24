@@ -100,6 +100,8 @@ FocusScope {
         width: Math.min(parent.width * 0.42, 560 * Theme.scale)
         color: Theme.overlaySurface
         border.color: Theme.overlayLine
+        // Glass: the highlight and rim over the overlay colours (no blur).
+        GlassSurface { anchors.fill: parent; variant: "clear"; allowBlur: false; radius: 0 }
         MouseArea { anchors.fill: parent }
 
         Flickable {
@@ -119,6 +121,16 @@ FocusScope {
                     contentY = Math.max(0, p.y - Theme.space2)
                 else if (p.y + item.height > contentY + height)
                     contentY = Math.min(p.y + item.height - height + Theme.space2, Math.max(0, contentHeight - height))
+            }
+
+            // Glass: one capsule glides to the focused entry of the visible page.
+            GlassFocusPill {
+                radius: Theme.radiusSmall // SettingRow's corners
+                target: {
+                    const nav = menu.page === "display" ? displayRows : menu.page === "info" ? null : mainRows
+                    const t = nav ? nav.lastFocused : infoBack
+                    return t && t.visible && menu.visible ? t : null
+                }
             }
 
             Column {

@@ -1,14 +1,28 @@
 import QtQuick
 import Nexora.Console
 
-// Branding plus global status: running emulator, library scan, root warning, clock.
+// Branding plus global status: running emulator, library scan, root warning, clock. A docked
+// bar in dark / high contrast; a floating glass bar in the glass theme (Main.qml places it).
 Rectangle {
     id: header
     required property AppController app
     required property LibraryController library
 
     implicitHeight: Theme.headerHeight
-    color: Theme.surface
+    color: Theme.glassActive ? "transparent" : Theme.surface
+
+    GlassSurface { anchors.fill: parent; z: -1; radius: Theme.radiusXL }
+    // Glass: the bar floats over the scrolling pages; presses on it (also between its controls)
+    // must not reach a card scrolled underneath. Below the bar's own content in z.
+    MouseArea {
+        objectName: "headerClickShield"
+        anchors.fill: parent
+        z: -1
+        enabled: Theme.glassActive
+        hoverEnabled: false
+        acceptedButtons: Qt.AllButtons
+        onWheel: (wheel) => wheel.accepted = false // scrolling still reaches the page
+    }
 
     Row {
         anchors.left: parent.left

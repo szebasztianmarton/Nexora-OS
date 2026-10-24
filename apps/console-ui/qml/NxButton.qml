@@ -12,6 +12,17 @@ Rectangle {
     property string confirmText: "Press again to confirm"
     property bool armed: false
     property bool compact: false
+    // "auto": glassProminent for primary, glass for normal, solid for danger and outside the
+    // glass theme. "solid" is the plain filled button of the dark / high contrast themes.
+    property string style: "auto"   // auto, glass, glassProminent, solid
+    readonly property string effectiveStyle: {
+        if (!Theme.glassActive || kind === "danger")
+            return "solid"
+        if (style !== "auto")
+            return style
+        return kind === "primary" ? "glassProminent" : "glass"
+    }
+    readonly property bool glassy: effectiveStyle !== "solid" && !armed
     readonly property bool highlighted: activeFocus || mouse.containsMouse
     // High contrast: a focused primary button is filled with the yellow accent, so its label
     // is drawn in the background colour (white on #ffd400 would be ~1.4:1).
@@ -39,17 +50,29 @@ Rectangle {
     activeFocusOnTab: true
     implicitHeight: compact ? Theme.controlHeightCompact : Theme.controlHeight
     implicitWidth: Math.max((compact ? 96 : 140) * Theme.scale, content.implicitWidth + (compact ? Theme.space5 + Theme.space1 : Theme.space6 + Theme.space2))
-    radius: Theme.radiusSmall
+    radius: glassy ? height / 2 : Theme.radiusSmall
     opacity: enabled ? 1.0 : 0.45
     color: armed ? Qt.darker(Theme.danger, 2.4)
+         : glassy ? "transparent"
          : kind === "primary" ? (activeFocus ? Theme.accent : Theme.accentSoft)
          : mouse.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
-    border.width: activeFocus ? Theme.focusWidth : 1
+    border.width: activeFocus ? Theme.focusWidth : (glassy ? 0 : 1)
     border.color: activeFocus ? (armed || kind === "danger" ? Theme.danger
                                  : Theme.highContrast ? Theme.focusRing
                                  : (kind === "primary" ? Theme.text : Theme.accent))
                               : (armed ? Theme.danger : Theme.border)
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+    GlassSurface {
+        anchors.fill: parent
+        z: -1
+        visible: button.glassy && Theme.glassActive
+        radius: button.height / 2
+        variant: button.effectiveStyle === "glassProminent" ? "prominent" : "regular"
+        interactive: true
+        active: button.highlighted
+        allowBlur: false
+    }
 
     onActiveFocusChanged: if (!activeFocus) armed = false
 
