@@ -95,6 +95,28 @@ A review of the MVP 4 code after commit `388781b` found the following problems; 
 | Layout at large scale | 1080p was drawn at 720p sizes; cards, tabs, keyboard and editor overflowed at 150 % | `Theme.scale` = user scale × resolution factor; grid falls back to list rows; tabs, keyboard and editor fit |
 | Feedback and performance | Settings › System actions failed silently; failed game edits were not reported; the synchronous hardware probe ran on every visit | errors next to the actions and as notices; lazy probe (once per 30 s) |
 
+## Verification matrix
+
+Statuses follow the project's verification guide: **PASS** (direct evidence), **PARTIAL**, **FAIL**, **NOT RUN**. A NOT RUN is never counted as a PASS. Recorded 2026-10-17 on branch `claude/mvp4-remaining`.
+
+| Area | Status | Evidence / reason |
+| --- | --- | --- |
+| Repository changes | PASS | Diff `2636d9a..HEAD` reviewed by two independent review passes (backend/shell and QML UI); 50 confirmed findings fixed, each with a regression test that failed before the fix (see [Fixed during verification](#fixed-during-verification)). `git diff --check` clean; no TODO/FIXME/"not implemented" in `apps/`, `shared/`, `buildroot-external/`, `scripts/`. |
+| Desktop build | PASS | Ubuntu 24.04 container, Qt 6.4.2, `-DNEXORA_WARNINGS_AS_ERRORS=ON`: GCC 13 Debug (`16f3ab3`), GCC 13 Release (`388781b`), Clang 18 Debug (`64b014f`) all build with exit code 0. |
+| Automated tests | PASS | `ctest`: 41/41 pass on each build above (27 unit, 11 integration, 3 system; 9 also labelled security). |
+| UI runtime | PARTIAL | The real binary starts offscreen with the example emulator configs and prints no QML warnings; every screen, dialog and the quick menu were driven by keys in `tst_qmlsmoke` / QML tests at 1280×720 and 1920×1080, incl. high contrast and 150 % scale, with screenshots inspected. Not run on a real display, EGLFS or the image. |
+| Controller | PARTIAL | Mapping, navigation, deadzone, hold/chord logic unit-tested (`tst_gamepadnavigator`, input tests); UI driven by synthesized key events. **Physical controller: NOT RUN** (no device available). |
+| Emulator Manager | PASS (fake) | Fake-emulator lifecycle in `tst_emulatormanager`: launch, normal/non-zero exit, crash, missing executable, startup failure, bounded stop with SIGKILL escalation, stop during Starting, whole process group (grandchildren), pause/resume, second launch blocked, argument list (no shell). **Real emulators: NOT RUN.** |
+| Game library | PASS | Scanner and library tests on temporary directories with known files (`tst_libraryscanner`, `tst_gamelibrary`, `tst_libraryquery`, integration cancel test): only configured dirs, worker-thread merge, missing/duplicate files, hide-not-delete, `@other` filter. |
+| Persistence | PASS (process restart) / NOT RUN (reboot) | `tst_uicontext` restart simulation (settings, library, removed games persist); headless CLI run as a non-root user: `--backup` → modify settings → `--restore` restored the original file; corrupt settings moved aside. Persistence across a reboot of the image: NOT RUN. |
+| Buildroot | PARTIAL | `check-defconfig.sh` 0 problems, `check-package` 0 warnings, kernel fragment checked against a generated config, savedefconfig round trip identical; CI "Buildroot" validation green on `16f3ab3`. A full build is in progress in this container (toolchain, host LLVM/Clang, target LLVM and ~80 packages built); the `nexora-os` package itself not yet built for the target. <!-- TASK12-RESULT --> |
+| Image generation | NOT RUN | Image build not finished: the container was reclaimed repeatedly while idle and the multi-hour build had to be resumed several times. <!-- TASK12-RESULT --> |
+| Boot (VM / hardware) | NOT RUN | No image yet; `scripts/image/qemu-boot-test.sh` ready (UI must start and stay up for a settle window). <!-- TASK12-RESULT --> |
+| Recovery / update / rollback | PARTIAL | Helpers tested on the build host against scratch partitions and grubenv, under bash and the target's BusyBox `sh` (`test_update_helper`: install, tamper, trial-boot refusal, symlink/FIFO swaps, torn grubenv repair, bootok confirm/rollback); GRUB script syntax-checked; boot-counting state machine reviewed by hand. On a booted image: NOT RUN. |
+| CI | PASS | GitHub Actions "CI" run 73 and "Buildroot" run 12 green on `16f3ab3` (lint, shellcheck, docs check, GCC/Clang `-Werror`, Release, security and system labels, qmllint, screenshots). `release.yml` has never run (needs a tag and the signing secret). |
+| Documentation | PASS | `scripts/release/check-docs.sh`: 21 required documents, 0 broken links; docs re-synced with the code after the fixes. Mermaid diagrams not rendered (no renderer). |
+| Security | PARTIAL | Targeted review of the update chain, root helpers, redaction, path handling and process launching; findings fixed; 9 `security`-labelled tests pass. Not a full audit; no secure boot or disk encryption (see [security.md](security.md)). |
+
 ## Acceptance
 
 Criteria from the brief, §18.
