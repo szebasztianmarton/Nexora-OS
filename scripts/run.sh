@@ -20,7 +20,7 @@ binary="$root/build/$preset/bin/nexora-console-ui"
 if [[ ! -x "$binary" ]]; then
     "$root/scripts/build.sh" "$preset"
 else
-    cmake --build --preset "$preset" >/dev/null
+    (cd "$root" && cmake --build --preset "$preset" >/dev/null)
 fi
 
 if [[ $(id -u) -eq 0 ]] && [[ " $* " != *" --allow-root "* ]] && [[ "${NEXORA_ALLOW_ROOT:-}" != 1 ]]; then

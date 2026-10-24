@@ -81,11 +81,11 @@ start_recovery() {
 
 start() {
 	printf 'Starting %s: ' "$DAEMON"
-	if grep -qw "nexora.recovery" /proc/cmdline; then
+	if grep -qwF "nexora.recovery" /proc/cmdline; then
 		start_recovery
 		return
 	fi
-	if grep -qw "nexora.noui" /proc/cmdline; then
+	if grep -qwF "nexora.noui" /proc/cmdline; then
 		echo "skipped (nexora.noui on kernel command line)"
 		return 0
 	fi
@@ -130,7 +130,14 @@ stop() {
 		echo "FAIL"
 		return "$status"
 	fi
+	# Bounded wait (about 10 s), then KILL so that a hung daemon cannot block shutdown.
+	tries=0
 	while running; do
+		if [ "$tries" -ge 100 ]; then
+			start-stop-daemon --stop --quiet --signal KILL --pidfile "$PIDFILE"
+			break
+		fi
+		tries=$((tries + 1))
 		sleep 0.1
 	done
 	rm -f "$PIDFILE"

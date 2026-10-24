@@ -22,7 +22,7 @@ Ez a leírás lépésről lépésre bemutatja, hogyan lehet a Nexora OS-t egy Wi
 
 | Rész | Hely | Leírás |
 | --- | --- | --- |
-| **Fő alkalmazás (MVP 1 + MVP 2)** | gyökérkönyvtár (`apps/`, `shared/`, `tests/`, `CMakePresets.json`) | Kontrollerrel vezérelhető dashboard (Home, Games, Emulators, Settings, Diagnostics), Emulator Manager, játékkönyvtár (SQLite), beállítások, evdev/SDL3 bemenet. 19 automatizált teszt. |
+| **Fő alkalmazás (MVP 1–4)** | gyökérkönyvtár (`apps/`, `shared/`, `tests/`, `CMakePresets.json`) | Kontrollerrel vezérelhető dashboard (Home, Games, Emulators, Settings, Diagnostics), Emulator Manager, játékkönyvtár (SQLite), beállítások, evdev/SDL3 bemenet. 49 automatizált CTest-teszt. |
 | **Buildroot image** | `buildroot-external/` | Bootolható x86-64 UEFI disk image, amely közvetlenül a fő alkalmazásba indul. |
 | **Console UI prototípus** | `prototypes/console-ui/` | A `claude/nexora-console-ui` ágon készült, külön fejlesztett konzolfelület (Kezdőlap, Könyvtár, Kedvencek, Emulátorok, 8 beállítási kategória, első indítási varázsló, SDL2). Önálló CMake-projekt. |
 
@@ -79,6 +79,8 @@ cd Nexora-OS
 git checkout main
 ```
 
+**Sorvégek:** ebben a repóban kapcsold ki a sorvég-konverziót: `git config core.autocrlf false` (a fenti `git checkout` előtt, vagy utána a fájlok újra-kicsekkolásával). Ha a rendszer- vagy globális gitconfig `core.autocrlf=true`-t állít (Git for Windows alapértelmezése, ha a repót Windowsból is használod), a munkafa CRLF sorvégű fájlokat kaphat; a `.gitattributes` életbe lépése előtt kicsekkolt fájlok így CRLF-esek maradtak, és ez eltörte a Buildroot-buildet. Ellenőrzés: `scripts/check-line-endings.sh` (CTest-ként: `check_line_endings`), amely hibát jelez, ha a `git ls-files --eol` bármely fájlra `i/crlf`-et vagy `w/crlf`-et mutat.
+
 A fájlok Windowsból is elérhetők a Fájlkezelőben: `\\wsl$\Ubuntu-24.04\home\<felhasználó>\Nexora-OS`. VS Code-dal: a repó mappájában `code .` (a *WSL* bővítménnyel).
 
 ## 5. Fő alkalmazás (MVP 2): fordítás és automatizált tesztek
@@ -107,8 +109,10 @@ scripts/build.sh ci --test
 Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `ctest`-et. **Elvárt eredmény:**
 
 ```
-100% tests passed, 0 tests failed out of 19
+100% tests passed, 0 tests failed out of 49
 ```
+
+A 4 `system` tesztből 3 (image-segédszkriptek, GRUB-szintaxis, shellcheck) csak akkor regisztrálódik, ha a `bash`, a `grub-common` és a `shellcheck` telepítve van, a `test_release_scripts` pedig csak `openssl`-lel; nélkülük kevesebb a tesztek száma. A negyedik, a `check_line_endings`, mindig regisztrálódik.
 
 ### 5.3 Tesztek külön-külön
 
@@ -116,8 +120,8 @@ Ez a `ci` presettel (Debug, `-Werror`) konfigurál, fordít, majd lefuttatja a `
 cmake --preset debug
 cmake --build --preset debug
 
-ctest --preset debug -L unit            # 14 unit teszt
-ctest --preset debug -L integration     # 5 integrációs teszt
+ctest --preset debug -L unit            # 31 unit teszt
+ctest --preset debug -L integration     # 14 integrációs teszt
 ctest --preset debug -R tst_qmlsmoke --output-on-failure -V   # egy teszt részletes kimenettel
 ```
 
@@ -358,7 +362,7 @@ qemu-system-x86_64 \
 Másold ki és pipáld ki az eredményeket (dátum, Windows-build, GPU):
 
 - [ ] WSL 2 + Ubuntu 24.04 telepítve, nem root felhasználó
-- [ ] `scripts/build.sh ci --test` → 19/19 teszt sikeres
+- [ ] `scripts/build.sh ci --test` → 49/49 teszt sikeres
 - [ ] `--check-config` mindkét példakonfigurációra 0-s kóddal tér vissza
 - [ ] Fő alkalmazás elindul ablakban (WSLg), billentyűzettel navigálható
 - [ ] `fake-ok` / `fake-fail` / `fake-crash` / `fake-long` indítása és visszatérés rendben (`NEXORA_DEV_FAKE_EMULATOR_CONFIGS=ON` build)

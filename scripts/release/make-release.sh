@@ -93,6 +93,8 @@ if [[ -e "$work" ]]; then
     rm -rf "$work"
 fi
 mkdir -m 0700 "$work"
+stage=""
+trap 'rm -rf "${stage:-}" "$work"' EXIT
 mkdir "$work/src"
 git archive --format=tar HEAD | tar -x -C "$work/src"
 src="$work/src"
@@ -116,7 +118,6 @@ fi
 "${norandom[@]}" cmake --build "$build" -j "$jobs"
 
 stage="$(mktemp -d)"
-trap 'rm -rf "$stage" "$work"' EXIT
 DESTDIR="$stage/$name" cmake --install "$build" >/dev/null
 # Everything was installed under DESTDIR/usr; ship the tree relative to the prefix.
 mv "$stage/$name/usr" "$stage/$name.tmp"

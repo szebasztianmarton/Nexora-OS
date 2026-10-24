@@ -55,3 +55,8 @@ if(NEXORA_SHELLCHECK)
 else()
     message(STATUS "shellcheck_image_scripts not registered (needs shellcheck)")
 endif()
+
+# No tracked file may have CRLF line endings (a CRLF script breaks the Buildroot build).
+# Skipped (exit 77) when the source tree is not a git checkout git can read.
+add_test(NAME check_line_endings COMMAND sh ${PROJECT_SOURCE_DIR}/scripts/check-line-endings.sh)
+set_tests_properties(check_line_endings PROPERTIES LABELS system TIMEOUT 60 SKIP_RETURN_CODE 77)
