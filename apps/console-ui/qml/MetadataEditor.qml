@@ -2,7 +2,8 @@ import QtQuick
 import Nexora.Console
 
 // Edits the user metadata of one game (display title and notes) with the on-screen keyboard.
-// Modal: Up/Down choose a row, Accept edits it / runs it, Back cancels without saving.
+// Modal: Up/Down choose a row, Accept edits it / runs it, Back (Esc, Backspace) cancels without
+// saving; with unsaved edits it asks first ("Discard changes?", Cancel by default).
 // Saving goes through LibraryController.setGameMetadata(); an empty title means "use the
 // title derived from the file name". A failed save keeps the editor open with the edits (the
 // library shows why in a notice). The panel never grows past the space it is given (large
@@ -19,6 +20,10 @@ FocusScope {
     property string originalTitle: ""
     property string title: ""
     property string notes: ""
+    // The values open() loaded: Back asks before throwing away anything that differs.
+    property string loadedTitle: ""
+    property string loadedNotes: ""
+    readonly property bool hasChanges: title !== loadedTitle || notes !== loadedNotes
     property Item restoreFocusItem: null
     // Glass: the panel stays between the floating bars (the owning page passes its
     // chromeTop/chromeBottom, 0 when docked); the scrim still covers the whole page.
@@ -27,6 +32,8 @@ FocusScope {
 
     readonly property bool keyboardOpen: keyboard.visible
     readonly property var hints: keyboard.visible ? keyboard.hints
+        : confirmDiscard.visible ? [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Confirm" },
+                                    { button: "B / Esc", action: "Cancel" }]
         : [{ button: "↑ ↓", action: "Move" }, { button: "A / Enter", action: "Edit" },
            { button: "B / Esc", action: "Cancel" }]
 
@@ -41,6 +48,8 @@ FocusScope {
         // A title equal to the derived one is shown as "not overridden".
         title = details.title === originalTitle ? "" : details.title
         notes = details.notes || ""
+        loadedTitle = title
+        loadedNotes = notes
         restoreFocusItem = Window.activeFocusItem
         visible = true
         rows.focusFirst()
@@ -51,6 +60,13 @@ FocusScope {
         if (restoreFocusItem && restoreFocusItem.visible)
             restoreFocusItem.forceActiveFocus()
         restoreFocusItem = null
+    }
+    // Back: closes at once when nothing changed, otherwise asks before discarding the edits.
+    function cancel() {
+        if (hasChanges)
+            confirmDiscard.open()
+        else
+            close()
     }
     function save() {
         if (!library.setGameMetadata(gameId, title.trim(), notes.trim()))
@@ -135,6 +151,7 @@ FocusScope {
                         value: editor.title.length > 0 ? editor.title : editor.originalTitle + " (from file name)"
                         description: "A / Enter: edit with the on-screen keyboard"
                         actionText: ""
+                        activatable: true
                         onAccepted: keyboard.open("Title", editor.title.length > 0 ? editor.title : editor.originalTitle)
                     }
                     SettingRow {
@@ -142,6 +159,7 @@ FocusScope {
                         label: "Notes"
                         value: editor.notes.length > 0 ? editor.notes : "None"
                         valueColor: editor.notes.length > 0 ? Theme.text : Theme.textFaint
+                        activatable: true
                         onAccepted: keyboard.open("Notes", editor.notes)
                     }
                     SettingRow {
@@ -180,10 +198,22 @@ FocusScope {
         }
     }
 
+    ConfirmDialog {
+        id: confirmDiscard
+        objectName: "confirmDiscardEdits"
+        chromeTop: editor.chromeTop
+        chromeBottom: editor.chromeBottom
+        title: "Discard changes?"
+        message: "The title and notes you edited are not saved."
+        confirmText: "Discard"
+        dangerous: true
+        onConfirmed: editor.close()
+    }
+
     // Modal: Back cancels, nothing else reaches the screen behind it.
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back)
-            editor.close()
+        if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back || event.key === Qt.Key_Backspace)
+            editor.cancel()
         event.accepted = true
     }
 }
