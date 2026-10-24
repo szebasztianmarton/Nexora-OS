@@ -20,8 +20,9 @@ FocusScope {
 
     readonly property var inputController: app ? app.input : null
     readonly property bool available: inputController !== null
-    readonly property var hints: [{ button: "B / Esc", action: "Close" },
-                                  { button: "Hold " + Theme.buttonLabel(backButton), action: "Exit test" }]
+    // Back is test input here: only Esc closes at once, holding Back for 2 s exits.
+    readonly property var hints: [{ button: "Esc", action: "Close" },
+                                  { button: "Hold " + Theme.buttonLabel(backButton) + " 2 s", action: "Exit" }]
 
     property Item restoreFocusItem: null
 
@@ -56,7 +57,7 @@ FocusScope {
 
     Column {
         anchors.centerIn: parent
-        width: Math.min(parent.width - Theme.spacing * 4, 640)
+        width: Math.min(parent.width - Theme.spacing * 4, 640 * Theme.scale)
         spacing: Theme.spacing
 
         Text {
@@ -82,7 +83,7 @@ FocusScope {
 
         Rectangle {
             width: parent.width
-            height: 96
+            height: 96 * Theme.scale
             radius: Theme.radius
             color: Theme.surfaceRaised
             border.color: Theme.border

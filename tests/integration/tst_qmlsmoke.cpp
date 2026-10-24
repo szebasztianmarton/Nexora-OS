@@ -328,6 +328,24 @@ private:
         return actions;
     }
 
+    // "<button> <action>" for every hint the bar lists.
+    static QStringList hintPairs(Ui &ui)
+    {
+        QStringList pairs;
+        for (const QVariant &hint : find(ui, "hintBar")->property("hints").toList()) {
+            const QVariantMap map = hint.toMap();
+            pairs.append(map.value(QStringLiteral("button")).toString() + u' '
+                         + map.value(QStringLiteral("action")).toString());
+        }
+        return pairs;
+    }
+
+    // What every ConfirmDialog lists: focus starts on Cancel, so Accept selects, not confirms.
+    static QStringList confirmHints()
+    {
+        return {QStringLiteral("← → Choose"), QStringLiteral("A / Enter Select"), QStringLiteral("B / Esc Cancel")};
+    }
+
 #define CHECK_NO_WARNINGS() QVERIFY2(ui.warnings.isEmpty(), qPrintable(describe(ui.warnings)))
 
 private slots:
@@ -1218,6 +1236,14 @@ private slots:
         key(ui, Qt::Key_Escape);
         QTRY_VERIFY(!panel->isVisible());
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "systemUpdateButton")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        // While checking or installing Back does nothing, so the hints do not offer Close.
+        for (const QString &state : {QStringLiteral("checking"), QStringLiteral("installing")}) {
+            QString hints;
+            for (const QVariant &hint : callQml(panel, "stateHints", state).toList())
+                hints += hint.toMap().value(QStringLiteral("action")).toString() + u',';
+            QVERIFY2(!hints.contains(QStringLiteral("Close")), qPrintable(state + u':' + hints));
+        }
+        QVERIFY(callQml(panel, "stateHints", QStringLiteral("idle")).toList().size() > 0);
 
         // Quick menu: hidden without a game; Menu / F1 on the running overlay opens it.
         auto *menu = find(ui, "quickMenu");
@@ -1462,7 +1488,9 @@ private slots:
             QVERIFY(panel->isVisible());
         }
         QVERIFY2(!hintActions(ui).contains(QStringLiteral("Confirm")), qPrintable(hintActions(ui).join(u',')));
-        QVERIFY2(hintActions(ui).contains(QStringLiteral("Close")), qPrintable(hintActions(ui).join(u',')));
+        // Back is reported as raw input in test mode; only Esc closes, holding Back exits.
+        QVERIFY2(hintPairs(ui).contains(QStringLiteral("Esc Close")), qPrintable(hintPairs(ui).join(u',')));
+        QVERIFY2(!hintPairs(ui).join(u',').contains(QStringLiteral("B / Esc")), qPrintable(hintPairs(ui).join(u',')));
         auto *help = find(ui, "inputTestHelp");
         QVERIFY(help);
         if (ui.app->input())
@@ -1660,6 +1688,14 @@ private slots:
             QQuickItem *label = firstText(find(ui, tab));
             QVERIFY2(label && !label->property("truncated").toBool(), tab);
         }
+        // The grid's hints fit inside the hint bar (the ones that do not fit are left out).
+        auto *hintBar = find(ui, "hintBar");
+        const QList<QQuickItem *> hintItems = visibleWithPrefix(hintBar, QStringLiteral("hintItem"));
+        QVERIFY(!hintItems.isEmpty());
+        for (QQuickItem *item : hintItems)
+            QVERIFY2(sceneRect(hintBar).contains(sceneRect(item)),
+                     qPrintable(item->property("action").toString() + QDebug::toString(sceneRect(item))
+                                + QDebug::toString(sceneRect(hintBar))));
         shot(ui, qPrintable(QStringLiteral("large-scale-%1-games").arg(windowSize.height())));
 
         // Details -> Edit details -> keyboard.
@@ -2214,6 +2250,155 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(tabBar->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(find(ui, "settingTheme")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // A game started while the update panel is open (e.g. from the game bar): the panel gives
+    // way and the running overlay is shown with focus, never hidden under the panel.
+    void updatePanelGivesWayToRunningGame()
+    {
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("fake"), QStringLiteral("\"--sleep-ms\",\"30000\",\"{file}\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        touch(games, QStringLiteral("Alpha Quest.rom"));
+        Ui ui;
+        load(ui, config.path());
+        if (QTest::currentTestFailed())
+            return;
+        addGames(ui, games);
+        if (QTest::currentTestFailed())
+            return;
+        auto *panel = find(ui, "updatePanel");
+        auto *overlay = find(ui, "runningOverlay");
+        QVERIFY(panel && overlay);
+        // Stacked below the overlay too, for the states in which the panel stays open.
+        QVERIFY2(panel->z() < overlay->z(), qPrintable(QStringLiteral("%1 >= %2").arg(panel->z()).arg(overlay->z())));
+        callQml(ui.window, "openUpdatePanel");
+        QTRY_VERIFY(panel->isVisible());
+
+        QVERIFY(ui.context->library()->launch(ui.context->library()->games()->gameIdAt(0)));
+        QTRY_COMPARE_WITH_TIMEOUT(ui.app->state(), QStringLiteral("running"), Timeout);
+        QTRY_VERIFY(overlay->isVisible());
+        QTRY_VERIFY(!panel->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(focusInside(ui, overlay), qPrintable(focusName(ui)), Timeout);
+        QVERIFY(ui.app->stop());
+        QTRY_VERIFY_WITH_TIMEOUT(!overlay->isVisible(), Timeout);
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // A plain F is not a shortcut (only Ctrl+F is): it is not swallowed by the window.
+    void plainFIsNotSwallowed()
+    {
+        QTemporaryDir config;
+        Ui ui;
+        load(ui, config.path());
+        if (QTest::currentTestFailed())
+            return;
+        auto *tabBar = find(ui, "tabBar");
+        tabBar->forceActiveFocus();
+        QTRY_VERIFY(tabBar->hasActiveFocus());
+        QKeyEvent plain(QEvent::KeyPress, Qt::Key_F, Qt::NoModifier, QStringLiteral("f"));
+        QCoreApplication::sendEvent(ui.window, &plain);
+        QVERIFY(!plain.isAccepted());
+        QKeyEvent ctrl(QEvent::KeyPress, Qt::Key_F, Qt::ControlModifier);
+        QCoreApplication::sendEvent(ui.window, &ctrl);
+        QVERIFY(ctrl.isAccepted());
+        QCOMPARE(currentTab(ui), int(Games));
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // Every confirmation lists the same keys, the ones that were missing hints included
+    // (Home's Quick Resume removal, the resume failure dialog).
+    void confirmDialogHints()
+    {
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("alpha"));
+        Ui ui;
+        load(ui, config.path());
+        if (QTest::currentTestFailed())
+            return;
+        for (const char *name : {"confirmRemoveQuickResume", "resumeFailedDialog"}) {
+            auto *dialog = find(ui, name);
+            QVERIFY2(dialog, name);
+            QMetaObject::invokeMethod(dialog, "open");
+            QTRY_VERIFY(dialog->isVisible());
+            QVERIFY2(hintPairs(ui) == confirmHints(), qPrintable(hintPairs(ui).join(u',')));
+            key(ui, Qt::Key_Escape);
+            QTRY_VERIFY(!dialog->isVisible());
+        }
+
+        QVERIFY(!ui.context->system()->createBackup(false).isEmpty());
+        goTo(ui, Settings);
+        callQml(find(ui, "settingsScreen"), "refreshBackups");
+        find(ui, "restoreBackupRow")->forceActiveFocus();
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY2(hintPairs(ui) == confirmHints(), qPrintable(hintPairs(ui).join(u',')));
+        key(ui, Qt::Key_Escape);
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // The page hints say what they do: the search field (Enter = results, Down = next row),
+    // Back to the tab bar, the empty Favorites button, the empty Emulators tab.
+    void pageHintsMatchKeys()
+    {
+        QTemporaryDir config;
+        Ui ui;
+        load(ui, config.path());
+        if (QTest::currentTestFailed())
+            return;
+        QTRY_VERIFY2(hintPairs(ui).contains(QStringLiteral("B / Esc Tabs")), qPrintable(hintPairs(ui).join(u',')));
+
+        goTo(ui, Games);
+        QTRY_VERIFY2(hintPairs(ui).contains(QStringLiteral("B / Esc Tabs")), qPrintable(hintPairs(ui).join(u',')));
+        callQml(ui.window, "focusSearch");
+        QTRY_VERIFY(find(ui, "searchField")->hasActiveFocus());
+        QVERIFY2(hintPairs(ui).contains(QStringLiteral("Enter Results")), qPrintable(hintPairs(ui).join(u',')));
+        QVERIFY2(hintPairs(ui).contains(QStringLiteral("↓ Next row")), qPrintable(hintPairs(ui).join(u',')));
+        key(ui, Qt::Key_Down);
+        QTRY_VERIFY2_WITH_TIMEOUT(!find(ui, "searchField")->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        goTo(ui, Favorites);
+        QTRY_VERIFY(find(ui, "favoritesScreenBrowse")->hasActiveFocus());
+        const QString browse = find(ui, "favoritesScreenBrowse")->property("text").toString();
+        QVERIFY2(hintActions(ui).contains(browse), qPrintable(hintActions(ui).join(u',')));
+
+        goTo(ui, Emulators);
+        QTRY_VERIFY(find(ui, "emptyState")->isVisible());
+        QVERIFY2(!hintActions(ui).contains(QStringLiteral("Launch")), qPrintable(hintActions(ui).join(u',')));
+        QVERIFY2(!hintActions(ui).contains(QStringLiteral("Diagnostics")), qPrintable(hintActions(ui).join(u',')));
+
+        goTo(ui, Settings);
+        QTRY_VERIFY2(hintPairs(ui).contains(QStringLiteral("B / Esc Tabs")), qPrintable(hintPairs(ui).join(u',')));
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // The tour describes the current UI: eight tabs, System (not Diagnostics), details before
+    // Play, Settings › Library.
+    void tutorialCopyIsCurrent()
+    {
+        QTemporaryDir config;
+        Ui ui;
+        load(ui, config.path(), {1280, 720}, true);
+        if (QTest::currentTestFailed())
+            return;
+        QString copy;
+        for (const QVariant &step : find(ui, "tutorialOverlay")->property("steps").toList()) {
+            const QVariantMap map = step.toMap();
+            copy += map.value(QStringLiteral("body")).toString() + u'\n';
+            for (const QVariant &control : map.value(QStringLiteral("controls")).toList())
+                copy += control.toMap().value(QStringLiteral("button")).toString() + u' '
+                    + control.toMap().value(QStringLiteral("action")).toString() + u'\n';
+        }
+        for (const char *stale : {"Diagnostics", "five tabs", "blue outline", "Library folders", "Start / F1",
+                                  "Select a game to start it"})
+            QVERIFY2(!copy.contains(QString::fromUtf8(stale)), stale);
+        QVERIFY(copy.contains(QStringLiteral("eight tabs")));
 
         CHECK_NO_WARNINGS();
     }

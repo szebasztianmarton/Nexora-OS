@@ -23,29 +23,29 @@ FocusScope {
                 + "less than a minute, and you can skip it at any time.",
           controls: [] },
         { glyph: "✥", title: "Moving around",
-          body: "Use the D-pad or the left stick to move between items. The highlighted item "
-                + "has a blue outline.\n\nOn a keyboard, the arrow keys, Enter and Esc do the same.",
+          body: "Use the D-pad or the left stick to move. The selected item has an outline "
+                + "(yellow in high contrast).\n\nOn a keyboard, the arrow keys, Enter and Esc do the same.",
           controls: [{ button: "D-pad / ↑ ↓ ← →", action: "Move" },
                      { button: "A / Enter", action: "Select" },
                      { button: "B / Esc", action: "Back" }] },
         { glyph: "▤", title: "Tabs",
-          body: "Nexora has five tabs: Home, Games, Emulators, Settings and Diagnostics.\n\n"
-                + "Switch tabs with the shoulder buttons, or press Up at the top of a page to "
-                + "reach the tab bar.",
+          body: "Nexora has eight tabs: Home, Games, Systems, Favorites, Recent, Emulators, "
+                + "Settings and System.\n\nSwitch tabs with the shoulder buttons. Press B or Up "
+                + "to reach the tab bar.",
           controls: [{ button: "L1 / R1", action: "Previous / next tab" },
                      { button: "PgUp / PgDn", action: "Same on a keyboard" },
-                     { button: "Start / F1", action: "Diagnostics" }] },
+                     { button: "Menu / F1", action: "System" }] },
         { glyph: "+", title: "Add your games",
-          body: "Nexora finds games in the library folders you choose. Add one under "
-                + "Settings → Library folders; the folder is scanned automatically.\n\n"
+          body: "Nexora finds games in the folders you choose. Add one under "
+                + "Settings → Library. It is scanned automatically.\n\n"
                 + "Games are matched to your emulators by file extension. Nexora does not "
                 + "include any games or BIOS files.",
           controls: [] },
         { glyph: "▶", title: "Playing",
-          body: "Select a game to start it in its emulator. Mark the games you love as "
-                + "favorites; they appear on Home together with your recently played games.\n\n"
+          body: "Select a game to open its details, then choose Play. Mark the games you love "
+                + "as favorites. They appear on Home with your recently played games.\n\n"
                 + "To leave a game, quit the emulator, or hold Select + Start for one second.",
-          controls: [{ button: "A / Enter", action: "Play" },
+          controls: [{ button: "A / Enter", action: "Details" },
                      { button: "Y / F", action: "Favorite" },
                      { button: "X / “/”", action: "Search" },
                      { button: "Select + Start (hold)", action: "Return to Nexora" }] },
@@ -96,7 +96,7 @@ FocusScope {
     Rectangle {
         id: card
         anchors.centerIn: parent
-        width: Math.min(tutorial.width - Theme.spacing * 4, 760)
+        width: Math.min(tutorial.width - Theme.spacing * 4, 760 * Theme.scale)
         height: content.implicitHeight + Theme.spacing * 4
         radius: Theme.glassActive ? Theme.radiusXL : Theme.radius * 1.5
         color: Theme.glassActive ? "transparent" : Theme.surfaceFloating
@@ -116,9 +116,9 @@ FocusScope {
                 width: parent.width
                 spacing: Theme.spacing
                 Rectangle {
-                    width: 56
-                    height: 56
-                    radius: 28
+                    width: Theme.iconLarge + Theme.space4
+                    height: width
+                    radius: width / 2
                     color: Theme.accentSoft
                     Text {
                         textFormat: Text.PlainText
@@ -171,11 +171,11 @@ FocusScope {
                     delegate: Row {
                         id: control
                         required property var modelData
-                        spacing: 8
+                        spacing: Theme.space2
                         Rectangle {
-                            height: 30
-                            width: Math.max(30, keyLabel.implicitWidth + 18)
-                            radius: 6
+                            height: Theme.space6
+                            width: Math.max(height, keyLabel.implicitWidth + Theme.space4)
+                            radius: Theme.space1
                             color: Theme.surfaceRaised
                             border.color: Theme.border
                             Text {
@@ -209,14 +209,14 @@ FocusScope {
                 Row {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: Theme.space2
                     Repeater {
                         model: tutorial.steps.length
                         delegate: Rectangle {
                             required property int index
-                            width: index === tutorial.step ? 24 : 8
-                            height: 8
-                            radius: 4
+                            width: index === tutorial.step ? Theme.space5 : Theme.space2
+                            height: Theme.space2
+                            radius: height / 2
                             color: index <= tutorial.step ? Theme.accent : Theme.border
                             Behavior on width { NumberAnimation { duration: Theme.animNormal } }
                         }
@@ -225,7 +225,7 @@ FocusScope {
 
                 Row {
                     anchors.right: parent.right
-                    spacing: 12
+                    spacing: Theme.space3
                     NxButton {
                         id: skipButton
                         objectName: "tutorialSkip"

@@ -27,6 +27,10 @@ FocusScope {
     property real chromeBottom: 0
 
     readonly property alias confirmButton: confirmButton
+    // Hint bar entries while open; every owner lists these so the wording cannot drift. Focus
+    // starts on Cancel, so Accept selects the focused button rather than confirming.
+    readonly property var hints: [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Select" },
+                                  { button: "B / Esc", action: "Cancel" }]
     readonly property alias cancelButton: cancelButton
 
     signal confirmed()

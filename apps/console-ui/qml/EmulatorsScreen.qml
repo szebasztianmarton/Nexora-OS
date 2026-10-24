@@ -18,8 +18,11 @@ FocusScope {
     readonly property var hints: picker.visible
         ? [{ button: "↑ ↓", action: "Select profile" }, { button: "A / Enter", action: "Launch" },
            { button: "Y / F", action: "Set as default" }, { button: "B / Esc", action: "Cancel" }]
-        : [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Launch" },
-           { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "Diagnostics" }]
+        : list.count > 0
+          ? [{ button: "← →", action: "Select" }, { button: "A / Enter", action: "Launch" },
+             { button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "System" }]
+          : [{ button: "L1 / R1", action: "Switch tab" }, { button: "Menu / F1", action: "System" },
+             { button: "B / Esc", action: "Tabs" }]
 
     function focusDefault() { list.focus = true }
 
