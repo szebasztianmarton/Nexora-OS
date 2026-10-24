@@ -225,6 +225,27 @@ Item {
             verify(!menu.visible)
         }
 
+        // Exit game's confirmation lists its keys in the menu's own hint bar: the bar stays above
+        // the dialog's scrim, and the dialog's panel ends above the bar.
+        function test_hintBarAboveExitConfirmation() {
+            verify(testSettings.showHints)
+            startGame()
+            verify(testGameBar.openQuickMenu())
+            tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })
+            focusRow("quickExit")
+            keyClick(Qt.Key_Return)
+            const dialog = root.findByName(menu, "confirmExitGame")
+            tryVerify(function() { return dialog.visible })
+            const bar = root.findByName(menu, "quickMenuHints")
+            verify(bar.visible)
+            compare(bar.parent, dialog.parent)
+            verify(bar.z > dialog.z, bar.z + " <= " + dialog.z)
+            compare(bar.hints, dialog.hints)
+            compare(dialog.chromeBottom, bar.height)
+            keyClick(Qt.Key_Escape)
+            verify(!dialog.visible)
+        }
+
         // The menu sits above the dashboard's hint bar (its scrim dims it, its panel covers part
         // of it), so it draws its own bar inside its layer, like the game bar, and hands the
         // dashboard's bar nothing: no key is listed twice.

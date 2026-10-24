@@ -393,6 +393,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: menu.settings.showHints
+        z: 51 // above confirmExit (z 50): its scrim must not dim the keys it lists here
         color: Theme.overlayFooter // covers the dashboard's own hint bar underneath
         hints: menu.menuHints
     }
@@ -404,6 +405,7 @@ FocusScope {
         message: "Unsaved progress in the emulator may be lost."
         confirmText: "Exit game"
         dangerous: true
+        chromeBottom: hintBar.visible ? hintBar.height : 0
         onConfirmed: {
             menu.app.stop()
             menu.gameBar.closeQuickMenu()
