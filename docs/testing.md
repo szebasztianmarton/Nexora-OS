@@ -10,6 +10,7 @@ The test suite uses Qt Test, Qt Quick Test and a few shell tests, all registered
 | Clang 18.1.3, Debug, `-DNEXORA_WARNINGS_AS_ERRORS=ON` | build clean, **41/41** pass | 2026-10-16, commit `388781b` |
 | GCC 13.3, Debug (default warnings, no `-Werror` option), after the verification fixes | build OK, **41/41** pass (27 unit, 11 integration, 3 system; 9 `security`) | 2026-10-17, commit `64b014f` |
 | `scripts/qmllint.sh` | 0 errors, 155 warnings | 2026-10-17, commit `64b014f` |
+| `scripts/qmllint.sh`, after the review fixes | 0 errors, 257 warnings (192 in `apps/console-ui`, 65 in `tests/qml`; mostly unqualified access) | 2026-10-24, branch `wf/R2-qml` |
 | `scripts/shellcheck.sh` | clean (16 POSIX sh, 12 bash scripts) | 2026-10-17, commit `64b014f` |
 | `clang-format-18 --dry-run --Werror` on all tracked C++ | clean | 2026-10-16 (not re-run for `64b014f`) |
 | `--check-config` on `config/emulators` and `config/examples/emulators` | OK | 2026-10-16 |

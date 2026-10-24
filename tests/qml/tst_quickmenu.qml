@@ -225,6 +225,27 @@ Item {
             verify(!menu.visible)
         }
 
+        // Exit game's confirmation lists its keys in the menu's own hint bar: the bar stays above
+        // the dialog's scrim, and the dialog's panel ends above the bar.
+        function test_hintBarAboveExitConfirmation() {
+            verify(testSettings.showHints)
+            startGame()
+            verify(testGameBar.openQuickMenu())
+            tryVerify(function() { return root.findByName(menu, "quickReturn").activeFocus })
+            focusRow("quickExit")
+            keyClick(Qt.Key_Return)
+            const dialog = root.findByName(menu, "confirmExitGame")
+            tryVerify(function() { return dialog.visible })
+            const bar = root.findByName(menu, "quickMenuHints")
+            verify(bar.visible)
+            compare(bar.parent, dialog.parent)
+            verify(bar.z > dialog.z, bar.z + " <= " + dialog.z)
+            compare(bar.hints, dialog.hints)
+            compare(dialog.chromeBottom, bar.height)
+            keyClick(Qt.Key_Escape)
+            verify(!dialog.visible)
+        }
+
         // The menu sits above the dashboard's hint bar (its scrim dims it, its panel covers part
         // of it), so it draws its own bar inside its layer, like the game bar, and hands the
         // dashboard's bar nothing: no key is listed twice.
@@ -265,17 +286,18 @@ Item {
             })
         }
 
-        // Stop is a real button for assistive technology, and keeps its size on focus when
-        // motion is reduced.
+        // Stop is a real button for assistive technology. It is an NxButton, which never lifts
+        // on focus: it keeps its size even with motion allowed (a reintroduced lift fails here).
         function test_runningOverlayStopButton() {
             const stop = root.findByName(running, "stopButton")
             verify(stop !== null)
             compare(stop.Accessible.role, Accessible.Button)
             verify(stop.Accessible.name.indexOf("Stop") >= 0)
-            Theme.reducedMotion = true
+            Theme.reducedMotion = false
             running.visible = true
             running.forceActiveFocus()
             tryVerify(function() { return stop.activeFocus })
+            wait(Theme.animSlow) // a lift animation would have finished by now
             compare(stop.scale, 1.0)
             // High contrast: the yellow focus ring, not the danger red.
             Theme.highContrast = true
@@ -310,13 +332,14 @@ Item {
             verify(label.text.indexOf("Running") >= 0, label.text)
         }
 
-        // The header clock only ticks while the header can be seen and no game owns the screen.
-        function test_headerClockSleepsDuringASession() {
+        // The header clock ticks whenever the header can be seen, also during a session (the
+        // header stays on screen above the running overlay); it sleeps only while hidden.
+        function test_headerClockTicksWhileVisible() {
             const timer = root.findObject(header, "headerClockTimer")
             verify(timer !== null)
             verify(timer.running)
             Theme.sessionActive = true
-            verify(!timer.running)
+            verify(timer.running)
             Theme.sessionActive = false
             verify(timer.running)
             header.visible = false
