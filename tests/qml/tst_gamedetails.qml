@@ -292,6 +292,25 @@ Item {
             compare(testLibrary.gameDetails(id).title, original)
         }
 
+        // Clicking the dimmed area outside the panel is Back too: with unsaved edits it asks first.
+        function test_clickOutsideWithChangesAsksBeforeDiscarding() {
+            const editor = openEditor()
+            editor.title = "Changed title"
+            const panel = root.findByName(editor, "metadataPanel")
+            verify(panel.mapToItem(editor, 0, 0).x > 10)
+            mouseClick(editor, 5, 5)
+            const dialog = root.findByName(editor, "confirmDiscardEdits")
+            tryVerify(function() { return dialog.visible })
+            verify(editor.visible)
+            compare(editor.title, "Changed title")
+            keyClick(Qt.Key_Escape) // Cancel keeps the edit
+            verify(!dialog.visible)
+            verify(editor.visible)
+            editor.title = editor.loadedTitle
+            mouseClick(editor, 5, 5) // nothing changed: closes at once
+            verify(!editor.visible)
+        }
+
         // Glass at 150 % on 720p: the panel stays between the floating bars.
         function test_keyboardStaysBetweenTheGlassBars() {
             Theme.userScale = 1.5

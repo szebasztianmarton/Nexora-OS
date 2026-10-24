@@ -80,7 +80,7 @@ FocusScope {
         color: Theme.glassActive ? Theme.modalScrim : Theme.background
         opacity: Theme.glassActive ? 1.0 : 0.8
     }
-    MouseArea { anchors.fill: parent; onClicked: editor.close() }
+    MouseArea { anchors.fill: parent; onClicked: editor.cancel() } // like Back: asks first with edits
 
     Rectangle {
         id: panel
