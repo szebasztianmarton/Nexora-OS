@@ -12,6 +12,9 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
+#include <map>
+#include <memory>
+
 namespace nexora::shared {
 class Settings;
 }
@@ -50,6 +53,17 @@ class LibraryController : public QObject
     // systemFilter value for the games without a recognised system (the "Other" bucket,
     // whose SystemListModel row has an empty systemId).
     Q_PROPERTY(QString otherSystemFilter READ otherSystemFilter CONSTANT)
+    // Pinned games in pin order (Home "Pinned" row).
+    Q_PROPERTY(nexora::ui::GameListModel *pinnedGames READ pinnedGames CONSTANT)
+    // [{id, name, count}] sorted by name (docs/game-library.md#collections).
+    Q_PROPERTY(QVariantList collections READ collections NOTIFY collectionsChanged)
+    // Games tab: 0 = no collection filter, otherwise only that collection's games.
+    Q_PROPERTY(qint64 collectionFilter READ collectionFilter WRITE setCollectionFilter NOTIFY queryChanged)
+    // Home: the visible sections in order (home.sections without collections that are gone).
+    Q_PROPERTY(QStringList homeSections READ homeSections NOTIFY homeLayoutChanged)
+    // Settings › Home: every known section {id, label, visible}, visible ones first in their
+    // order (see homeSectionRows()).
+    Q_PROPERTY(QVariantList homeSectionRows READ homeSectionRows NOTIFY homeLayoutChanged)
 
 public:
     LibraryController(library::GameLibrary *library, shared::Settings *settings, AppController *app,
@@ -60,6 +74,11 @@ public:
     GameListModel *favoriteGames() { return &m_favorites; }
     GameListModel *recentlyAdded() { return &m_recentlyAdded; }
     SystemListModel *systems() { return &m_systems; }
+    GameListModel *pinnedGames() { return &m_pinned; }
+    QVariantList collections() const;
+    qint64 collectionFilter() const { return m_collectionFilter; }
+    void setCollectionFilter(qint64 collectionId);
+    QStringList homeSections() const;
 
     QString searchText() const { return m_query.search; }
     void setSearchText(const QString &text);
@@ -106,8 +125,8 @@ public:
     //  "automatic" (no usable override set), "emulators" (every emulator declaring the file's
     //  extension: id, name, available, reason, selected), "profiles" (enabled launch profiles
     //  of the effective emulator: id, name, isDefault), favorite, playCount, lastPlayed (ISO),
-    //  lastPlayedText (local, for display), addedAt (ISO), present, notes}. Empty map for an
-    //  unknown id.
+    //  lastPlayedText (local, for display), addedAt (ISO), present, notes, playSeconds,
+    //  playTimeText, pinned}. Empty map for an unknown id.
     Q_INVOKABLE QVariantMap gameDetails(qint64 id) const;
     // Display name of a catalog system id ("" for an unknown or empty id). Used by the
     // game details screen to label the system candidates it offers.
@@ -125,6 +144,29 @@ public:
     // Unhides every removed game. Returns how many were restored.
     Q_INVOKABLE int restoreRemovedGames();
 
+    // Collections. Failures emit notice(..., true). createCollection returns the new id or 0;
+    // with |gameId| > 0 that game is added to it. Deleting a collection never removes games.
+    Q_INVOKABLE qint64 createCollection(const QString &name, qint64 gameId = 0);
+    Q_INVOKABLE bool renameCollection(qint64 id, const QString &name);
+    Q_INVOKABLE bool deleteCollection(qint64 id);
+    Q_INVOKABLE bool setInCollection(qint64 gameId, qint64 collectionId, bool member);
+    Q_INVOKABLE QVariantList collectionsOf(qint64 gameId) const; // collection ids
+    // A view of one collection's games, in the order they were added; owned and kept up to
+    // date by the controller. Null for an unknown id.
+    Q_INVOKABLE nexora::ui::GameListModel *collectionGames(qint64 collectionId);
+    Q_INVOKABLE QString collectionName(qint64 collectionId) const;
+    Q_INVOKABLE bool setPinned(qint64 gameId, bool pinned);
+
+    // Settings › Home: every known section {id, label, visible}, visible ones first in their
+    // order. Moving only reorders visible sections; showing appends to the end.
+    QVariantList homeSectionRows() const;
+    Q_INVOKABLE bool setHomeSectionVisible(const QString &id, bool visible);
+    Q_INVOKABLE bool moveHomeSection(const QString &id, int delta);
+    Q_INVOKABLE void resetHomeLayout();
+
+    // "3 h 12 min", "45 min", "Less than a minute", "Not played yet".
+    static QString formatPlayTime(qint64 seconds);
+
     // Recomputes scan options from emulator definitions + settings; rescans only when
     // they changed since the last completed scan (or |force|).
     // |autoScan| = false only updates the options (the caller scans itself).
@@ -140,9 +182,14 @@ signals:
     void scanProgressChanged();
     // For the UI: a message to show after an action (e.g. "Added /games").
     void notice(const QString &message, bool isError);
+    void collectionsChanged();
+    void homeLayoutChanged();
 
 private:
     void rebuildViews();
+    void rebuildCollectionModel(qint64 id, GameListModel *model, const QList<library::GameEntry> &all);
+    void setupModel(GameListModel *model);
+    bool writeHomeSections(const QStringList &sections);
     void rebuildEmulatorInfo();
     bool launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile);
     void rebuildSystems();
@@ -163,6 +210,9 @@ private:
     GameListModel m_recent;
     GameListModel m_favorites;
     GameListModel m_recentlyAdded;
+    GameListModel m_pinned;
+    std::map<qint64, std::unique_ptr<GameListModel>> m_collectionModels;
+    qint64 m_collectionFilter = 0;
     SystemListModel m_systems;
     QTimer m_searchDebounce;
     QHash<QString, std::pair<QString, QString>> m_emulatorInfo; // id -> (name, unavailable reason)

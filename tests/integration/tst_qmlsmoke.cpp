@@ -22,6 +22,9 @@
 //   quickSystemInfo, quickExit, confirmExitGame, quickSuspend, quickMenuState   (quick menu)
 //   quickResumeRow, quickResumeList, quickResumeCard_<n>, confirmRemoveQuickResume,
 //   resumeFailedDialog                                                           (Quick Resume)
+//   pinnedRow, collectionRow_<id>, homeSection_<id> (":" -> "_"), resetHomeLayoutRow,
+//   collection_<n>, deleteCollection_<n>, newCollectionRow, collectionNameKeyboard,
+//   gameOptionsNameKeyboard, collectionChip_<id>, gameDetailsPlayTime        (collections, Home)
 //   updatePanel, updateState, updateMessage, updateUnsupported, updateAcknowledge,
 //   updateClose, statusValue_updates                                            (updates)
 //   systemActions, systemUpdateButton, exportDiagnosticsButton, systemDetails     (System)
@@ -726,8 +729,9 @@ private slots:
         auto *options = find(ui, "gameOptionsList");
         QTRY_VERIFY2_WITH_TIMEOUT(options->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
         QCOMPARE(find(ui, "gameOptionsTitle")->property("text").toString(), QStringLiteral("Alpha Quest"));
-        // Play, Emulator: automatic, Emu one, Emu two, favorite, Quick Resume, close.
-        QCOMPARE(options->property("count").toInt(), 7);
+        // Play, Emulator: automatic, Emu one, Emu two, favorite, pin, new collection, Quick Resume,
+        // close.
+        QCOMPARE(options->property("count").toInt(), 9);
         shot(ui, "game-options");
         // Tab switching keys do not leak through the modal dialog.
         key(ui, Qt::Key_PageDown);
@@ -740,7 +744,7 @@ private slots:
         key(ui, Qt::Key_Return);
         QCOMPARE(library->gameDetails(alpha).value(QStringLiteral("emulatorId")).toString(), QStringLiteral("two"));
         QVERIFY(dialog->isVisible());
-        QTRY_COMPARE(options->property("count").toInt(), 9); // + "Play with Fast", "emulator defaults"
+        QTRY_COMPARE(options->property("count").toInt(), 11); // + "Play with Fast", "emulator defaults"
         shot(ui, "game-options-emulator-chosen");
 
         // Back closes it and focus returns to the game.
@@ -1310,6 +1314,109 @@ private slots:
         key(ui, Qt::Key_Return);
         QTRY_VERIFY(sessions->records().isEmpty());
         QTRY_VERIFY(!row->isVisible());
+
+        CHECK_NO_WARNINGS();
+    }
+
+    // Collections and pinning from Game options (on-screen keyboard names the collection), the
+    // Games collection chip, the Pinned / collection rows on Home and Settings › Home ordering.
+    void collectionsPinningAndHomeLayout_data() { addWindowSizeRows(); }
+    void collectionsPinningAndHomeLayout()
+    {
+        QFETCH(QSize, windowSize);
+        QTemporaryDir config;
+        writeConfig(config, QStringLiteral("one"), QStringLiteral("\"--sleep-ms\",\"30000\""),
+                    QStringLiteral("\"extensions\":[\".rom\"]"));
+        QTemporaryDir games;
+        touch(games, QStringLiteral("Alpha Quest.rom"));
+        touch(games, QStringLiteral("Beta Racer.rom"));
+        Ui ui;
+        load(ui, config.path(), windowSize);
+        addGames(ui, games);
+        auto *library = ui.context->library();
+        key(ui, Qt::Key_PageDown);
+        auto *grid = find(ui, "gameGrid");
+        QTRY_COMPARE_WITH_TIMEOUT(grid->property("count").toInt(), 2, Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(grid->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+        const qint64 alpha = library->games()->gameIdAt(0);
+
+        // Game options: Pin to Home, then New collection… typed on the on-screen keyboard.
+        key(ui, Qt::Key_O);
+        auto *dialog = find(ui, "gameOptions");
+        QTRY_VERIFY(dialog->isVisible());
+        auto *options = find(ui, "gameOptionsList");
+        auto rowIndex = [&](const QString &kind) {
+            const QVariantList rows = dialog->property("rows").toList();
+            for (int i = 0; i < rows.size(); ++i) {
+                if (rows.at(i).toMap().value(QStringLiteral("kind")).toString() == kind)
+                    return i;
+            }
+            return -1;
+        };
+        auto choose = [&](const QString &kind) {
+            const int target = rowIndex(kind);
+            QVERIFY(target >= 0);
+            for (int i = 0; i < 20 && options->property("currentIndex").toInt() != target; ++i)
+                key(ui, options->property("currentIndex").toInt() < target ? Qt::Key_Down : Qt::Key_Up);
+            QCOMPARE(options->property("currentIndex").toInt(), target);
+            key(ui, Qt::Key_Return);
+        };
+        choose(QStringLiteral("pin"));
+        QVERIFY(library->gameDetails(alpha).value(QStringLiteral("pinned")).toBool());
+        choose(QStringLiteral("newCollection"));
+        auto *keyboard = find(ui, "gameOptionsNameKeyboard");
+        QTRY_VERIFY(keyboard->isVisible());
+        shot(ui, "game-options-new-collection");
+        typeText(ui, QStringLiteral("RPG"));
+        key(ui, Qt::Key_Menu); // Menu (Start) finishes; Accept would type the focused key
+        QTRY_VERIFY(!keyboard->isVisible());
+        QTRY_COMPARE(library->collections().size(), 1);
+        const qint64 rpg = qint64(library->collections().first().toMap().value(QStringLiteral("id")).toDouble());
+        QCOMPARE(library->collectionsOf(alpha), QVariantList{double(rpg)});
+        QVERIFY(rowIndex(QStringLiteral("collection")) >= 0); // listed with a check mark now
+        shot(ui, "game-options-collections");
+        key(ui, Qt::Key_Escape);
+        QTRY_VERIFY(!dialog->isVisible());
+
+        // Games: the collection chip filters the grid.
+        auto *chip = find(ui, QStringLiteral("collectionChip_%1").arg(rpg).toLatin1().constData());
+        QTRY_VERIFY(chip && chip->isVisible());
+        QTest::mouseClick(ui.window, Qt::LeftButton, {},
+                          chip->mapToScene(QPointF(chip->width() / 2, chip->height() / 2)).toPoint());
+        QTRY_COMPARE(grid->property("count").toInt(), 1);
+        QTest::mouseClick(ui.window, Qt::LeftButton, {},
+                          chip->mapToScene(QPointF(chip->width() / 2, chip->height() / 2)).toPoint());
+        QTRY_COMPARE(grid->property("count").toInt(), 2);
+
+        // Home: Pinned comes before Continue playing by default.
+        goTo(ui, Home);
+        auto *pinned = find(ui, "pinnedRow");
+        auto *recent = find(ui, "recentRow");
+        QTRY_VERIFY(pinned->isVisible());
+        QTRY_VERIFY(pinned->y() < recent->y());
+
+        // Settings › Home: move Continue playing up past Pinned, show the collection.
+        goTo(ui, Settings);
+        auto *recentSetting = find(ui, "homeSection_recent");
+        QVERIFY(recentSetting);
+        recentSetting->forceActiveFocus();
+        key(ui, Qt::Key_Left);
+        QTRY_VERIFY(library->homeSections().indexOf(QStringLiteral("recent"))
+                    < library->homeSections().indexOf(QStringLiteral("pinned")));
+        QTRY_VERIFY2(find(ui, "homeSection_recent")->hasActiveFocus(), qPrintable(focusName(ui))); // focus follows
+        auto *collectionSetting = find(ui, QStringLiteral("homeSection_collection_%1").arg(rpg).toLatin1().constData());
+        QVERIFY(collectionSetting);
+        collectionSetting->forceActiveFocus();
+        key(ui, Qt::Key_Return);
+        QTRY_VERIFY(library->homeSections().contains(QStringLiteral("collection:%1").arg(rpg)));
+        shot(ui, "settings-home");
+
+        goTo(ui, Home);
+        QTRY_VERIFY(recent->y() < pinned->y());
+        auto *collectionRow = find(ui, QStringLiteral("collectionRow_%1").arg(rpg).toLatin1().constData());
+        QTRY_VERIFY(collectionRow && collectionRow->isVisible());
+        QTRY_VERIFY(collectionRow->y() > pinned->y()); // appended at the end
+        shot(ui, "home-pinned-collection");
 
         CHECK_NO_WARNINGS();
     }

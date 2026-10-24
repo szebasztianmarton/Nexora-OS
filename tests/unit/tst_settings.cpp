@@ -302,6 +302,24 @@ private slots:
         QVERIFY(!s.setValue(Settings::SessionsExcludedGames, QStringList{QStringLiteral("abc")}, &error));
     }
 
+    void homeSectionsValidate()
+    {
+        QTemporaryDir dir;
+        Settings s({{}, dir.filePath(QStringLiteral("user/settings.json"))});
+        QVERIFY(s.load());
+        QCOMPARE(s.stringListValue(Settings::HomeSections).size(), 7);
+        QString error;
+        QVERIFY(s.setValue(
+            Settings::HomeSections,
+            QStringList{QStringLiteral("recent"), QStringLiteral("collection:12"), QStringLiteral("recent")}, &error));
+        QCOMPARE(s.stringListValue(Settings::HomeSections),
+                 (QStringList{QStringLiteral("recent"), QStringLiteral("collection:12")})); // de-duplicated
+        QVERIFY(s.setValue(Settings::HomeSections, QStringList{}, &error)); // an empty Home is allowed
+        QVERIFY(!s.setValue(Settings::HomeSections, QStringList{QStringLiteral("ads")}, &error));
+        QVERIFY(!s.setValue(Settings::HomeSections, QStringList{QStringLiteral("collection:0")}, &error));
+        QVERIFY(!s.setValue(Settings::HomeSections, QStringList{QStringLiteral("collection:x")}, &error));
+    }
+
     void defaultForSystemValidatesKeysAndValues()
     {
         QTemporaryDir dir;

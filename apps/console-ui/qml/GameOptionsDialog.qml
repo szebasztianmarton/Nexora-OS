@@ -15,8 +15,9 @@ FocusScope {
     property var rows: []
     property Item returnFocus: null
 
-    readonly property var hints: [{ button: "↑ ↓", action: "Select" }, { button: "A / Enter", action: "Choose" },
-                                  { button: "B / Esc", action: "Close" }]
+    readonly property var hints: nameKeyboard.visible ? nameKeyboard.hints
+        : [{ button: "↑ ↓", action: "Select" }, { button: "A / Enter", action: "Choose" },
+           { button: "B / Esc", action: "Close" }]
 
     visible: false
     z: 8
@@ -79,6 +80,16 @@ FocusScope {
         }
         r.push({ kind: "favorite", id: "", label: details.favorite ? "Remove from favorites" : "Add to favorites",
                  detail: "" })
+        r.push({ kind: "pin", id: "", label: details.pinned ? "Unpin from Home" : "Pin to Home",
+                 detail: details.pinned ? "Shown in the Pinned row on Home" : "Adds it to the Pinned row on Home" })
+        const member = library.collectionsOf(gameId)
+        for (const c of library.collections) {
+            const inIt = member.indexOf(c.id) >= 0
+            r.push({ kind: "collection", id: c.id, label: "Collection: " + c.name, checked: inIt,
+                     detail: inIt ? "In this collection · A / Enter removes it" : "A / Enter adds it" })
+        }
+        r.push({ kind: "newCollection", id: "", label: "New collection…",
+                 detail: "Creates a collection with this game" })
         if (sessions) {
             const enabled = sessions.isQuickResumeEnabled(gameId)
             r.push({ kind: "quickResume", id: "", label: "Quick Resume: " + (enabled ? "on" : "off"),
@@ -111,6 +122,19 @@ FocusScope {
             sessions.setQuickResumeEnabled(id, !sessions.isQuickResumeEnabled(id))
             reload()
             optionList.currentIndex = Math.min(index, rows.length - 1)
+            break
+        case "pin":
+            library.setPinned(id, !details.pinned)
+            reload()
+            optionList.currentIndex = Math.min(index, rows.length - 1)
+            break
+        case "collection":
+            library.setInCollection(id, row.id, !row.checked)
+            reload()
+            optionList.currentIndex = Math.min(index, rows.length - 1)
+            break
+        case "newCollection":
+            nameKeyboard.open("New collection", "")
             break
         case "favorite":
             library.toggleFavorite(id)
@@ -211,7 +235,8 @@ FocusScope {
                         anchors.leftMargin: Theme.spacing * 0.75
                         anchors.verticalCenter: parent.verticalCenter
                         width: 22
-                        text: option.modelData.kind === "emulator" ? (option.modelData.checked ? "●" : "○") : ""
+                        text: option.modelData.kind === "emulator" ? (option.modelData.checked ? "●" : "○")
+                              : option.modelData.kind === "collection" ? (option.modelData.checked ? "☑" : "☐") : ""
                         color: Theme.accent
                         font.pixelSize: Theme.fontBody
                     }
@@ -274,5 +299,20 @@ FocusScope {
             if (!dialog.library.gameDetails(dialog.gameId).title)
                 dialog.close()
         }
+    }
+
+    OnScreenKeyboard {
+        id: nameKeyboard
+        objectName: "gameOptionsNameKeyboard"
+        maxLength: 60
+        onAccepted: (value) => {
+            if (dialog.library.createCollection(value, dialog.gameId) > 0) {
+                const keep = optionList.currentIndex
+                dialog.reload()
+                optionList.currentIndex = Math.min(keep, dialog.rows.length - 1)
+            }
+            optionList.forceActiveFocus()
+        }
+        onCancelled: optionList.forceActiveFocus()
     }
 }

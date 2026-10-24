@@ -139,6 +139,24 @@ Validator gameIds()
     };
 }
 
+// Visible Home sections in order (docs/settings.md#home-layout).
+Validator homeSections()
+{
+    return [](QVariant &v) {
+        static const QRegularExpression re(
+            QStringLiteral("^(statusCards|quickResume|pinned|recent|favorites|recentlyAdded|systems|"
+                           "collection:[1-9][0-9]{0,18})$"));
+        return toStringList(
+            v,
+            [](QString &s) -> QString {
+                return re.match(s).hasMatch() ? QString()
+                                              : QStringLiteral("entries must be Home section ids (\"recent\", "
+                                                               "\"collection:3\", ...)");
+            },
+            200);
+    };
+}
+
 Validator resolution()
 {
     return [](QVariant &v) -> QString {
@@ -236,6 +254,11 @@ const QList<Settings::Spec> &Settings::specs()
          intRange(0, 365)},
         {SessionsExcludedGames, QStringList{}, QStringLiteral("Games that always start fresh (no Quick Resume)"),
          gameIds()},
+        {HomeSections,
+         QStringList{QStringLiteral("statusCards"), QStringLiteral("quickResume"), QStringLiteral("pinned"),
+                     QStringLiteral("recent"), QStringLiteral("favorites"), QStringLiteral("recentlyAdded"),
+                     QStringLiteral("systems")},
+         QStringLiteral("Visible Home sections, in order"), homeSections()},
         {EmulatorDefaultForSystem, QVariantMap{}, QStringLiteral("Default emulator per game system id"),
          stringMap(systemId, id, QStringLiteral("expected system id -> emulator id"))},
     };

@@ -4,7 +4,10 @@
 
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QString>
+
+#include <optional>
 
 namespace nexora::library {
 
@@ -22,6 +25,7 @@ struct QueryOptions
     SortOrder sort = SortOrder::Title;
     QString emulatorId; // empty = any
     QString systemId; // empty = any; UnknownSystemFilter = no recognised system
+    std::optional<QSet<qint64>> gameIds; // set = only these games (a collection)
     QHash<QString, QString> systemNames; // system id -> short name, searched as well as the title
     int recentLimit = 20; // LibraryFilter::Recent keeps this many most recent entries
 };

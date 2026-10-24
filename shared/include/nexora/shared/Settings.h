@@ -58,6 +58,7 @@ public:
     static inline const QString SessionsMaxMegabytes = QStringLiteral("sessions.maxMegabytes");
     static inline const QString SessionsMaxAgeDays = QStringLiteral("sessions.maxAgeDays");
     static inline const QString SessionsExcludedGames = QStringLiteral("sessions.excludedGames");
+    static inline const QString HomeSections = QStringLiteral("home.sections");
 
     struct Paths
     {

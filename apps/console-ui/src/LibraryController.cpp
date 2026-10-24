@@ -10,6 +10,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
+#include <QQmlEngine>
+#include <QSet>
 
 #include <algorithm>
 #include <utility>
@@ -27,23 +29,14 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
     , m_catalog(catalog)
 {
     m_query.sort = library::LibraryQuery::sortOrderFromString(settings->stringValue(Settings::LibrarySortOrder));
-    const auto info = [this](const QString &emulatorId) -> std::pair<QString, QString> {
-        const auto it = m_emulatorInfo.constFind(emulatorId);
-        if (it != m_emulatorInfo.cend())
-            return *it;
-        return {QString(), m_app->unavailableReason(emulatorId)};
-    };
-    const auto systemInfo = [this](const QString &systemId) -> QString {
-        if (systemId.isEmpty() || !m_catalog)
-            return {};
-        const auto *system = m_catalog->find(systemId);
-        return system ? system->shortName : QString();
-    };
     rebuildEmulatorInfo();
-    for (GameListModel *model : {&m_games, &m_recent, &m_favorites, &m_recentlyAdded}) {
-        model->setEmulatorInfo(info);
-        model->setSystemInfo(systemInfo);
-    }
+    for (GameListModel *model : {&m_games, &m_recent, &m_favorites, &m_recentlyAdded, &m_pinned})
+        setupModel(model);
+    connect(m_library, &library::GameLibrary::collectionsChanged, this, [this] {
+        emit collectionsChanged();
+        emit homeLayoutChanged(); // collection names and existence
+        rebuildViews();
+    });
 
     m_searchDebounce.setSingleShot(true);
     m_searchDebounce.setInterval(150);
@@ -108,6 +101,8 @@ LibraryController::LibraryController(library::GameLibrary *library, shared::Sett
             setSortOrder(m_settings->stringValue(Settings::LibrarySortOrder));
         } else if (key == Settings::EmulatorDefaultForSystem) {
             rebuildViews();
+        } else if (key == Settings::HomeSections) {
+            emit homeLayoutChanged();
         }
     });
     rebuildViews();
@@ -430,6 +425,9 @@ QVariantMap LibraryController::gameDetails(qint64 id) const
          entry->addedAt.isValid() ? entry->addedAt.toUTC().toString(Qt::ISODate) : QString()},
         {QStringLiteral("present"), entry->present},
         {QStringLiteral("notes"), entry->notes},
+        {QStringLiteral("playSeconds"), double(entry->playSeconds)},
+        {QStringLiteral("playTimeText"), formatPlayTime(entry->playSeconds)},
+        {QStringLiteral("pinned"), entry->pinned > 0},
     };
 }
 
@@ -558,7 +556,12 @@ void LibraryController::rebuildViews()
     const QList<library::GameEntry> all = m_library->entries();
     const QList<library::GameEntry> gamesSource
         = m_query.filter == library::LibraryFilter::Missing ? m_library->missingEntries() : all;
-    m_games.setEntries(library::LibraryQuery::apply(gamesSource, m_query));
+    library::QueryOptions query = m_query;
+    if (m_collectionFilter > 0) {
+        const QList<qint64> ids = m_library->collectionGameIds(m_collectionFilter);
+        query.gameIds = QSet<qint64>(ids.cbegin(), ids.cend());
+    }
+    m_games.setEntries(library::LibraryQuery::apply(gamesSource, query));
 
     library::QueryOptions recent;
     recent.filter = library::LibraryFilter::Recent;
@@ -577,8 +580,278 @@ void LibraryController::rebuildViews()
         recentlyAdded.resize(20);
     m_recentlyAdded.setEntries(recentlyAdded);
 
+    QList<library::GameEntry> pinned;
+    std::copy_if(all.cbegin(), all.cend(), std::back_inserter(pinned), [](const auto &e) { return e.pinned > 0; });
+    std::sort(pinned.begin(), pinned.end(), [](const auto &a, const auto &b) { return a.pinned < b.pinned; });
+    m_pinned.setEntries(pinned);
+
+    for (auto it = m_collectionModels.begin(); it != m_collectionModels.end(); ++it)
+        rebuildCollectionModel(it->first, it->second.get(), all);
+
     rebuildSystems();
     emit contentChanged();
+}
+
+void LibraryController::setupModel(GameListModel *model)
+{
+    model->setEmulatorInfo([this](const QString &emulatorId) -> std::pair<QString, QString> {
+        const auto it = m_emulatorInfo.constFind(emulatorId);
+        if (it != m_emulatorInfo.cend())
+            return *it;
+        return {QString(), m_app->unavailableReason(emulatorId)};
+    });
+    model->setSystemInfo([this](const QString &systemId) -> QString {
+        if (systemId.isEmpty() || !m_catalog)
+            return {};
+        const auto *system = m_catalog->find(systemId);
+        return system ? system->shortName : QString();
+    });
+}
+
+void LibraryController::rebuildCollectionModel(qint64 id, GameListModel *model, const QList<library::GameEntry> &all)
+{
+    QHash<qint64, const library::GameEntry *> byId;
+    for (const auto &e : all)
+        byId.insert(e.id, &e);
+    QList<library::GameEntry> games;
+    for (qint64 gameId : m_library->collectionGameIds(id)) {
+        if (const auto *e = byId.value(gameId))
+            games.append(*e);
+    }
+    model->setEntries(games);
+}
+
+// --- Collections and pinning -------------------------------------------------------------
+
+QVariantList LibraryController::collections() const
+{
+    QVariantList list;
+    for (const auto &c : m_library->collections())
+        list.append(QVariantMap{{QStringLiteral("id"), double(c.id)},
+                                {QStringLiteral("name"), c.name},
+                                {QStringLiteral("count"), c.count}});
+    return list;
+}
+
+QString LibraryController::collectionName(qint64 collectionId) const
+{
+    for (const auto &c : m_library->collections()) {
+        if (c.id == collectionId)
+            return c.name;
+    }
+    return {};
+}
+
+void LibraryController::setCollectionFilter(qint64 collectionId)
+{
+    if (collectionId == m_collectionFilter)
+        return;
+    m_collectionFilter = collectionId;
+    emit queryChanged();
+    rebuildViews();
+}
+
+qint64 LibraryController::createCollection(const QString &name, qint64 gameId)
+{
+    const auto id = m_library->createCollection(name);
+    if (!id) {
+        emit notice(QStringLiteral("Could not create the collection: %1").arg(m_library->lastError()), true);
+        return 0;
+    }
+    if (gameId > 0)
+        setInCollection(gameId, *id, true);
+    emit notice(QStringLiteral("Collection \"%1\" created").arg(collectionName(*id)), false);
+    return *id;
+}
+
+bool LibraryController::renameCollection(qint64 id, const QString &name)
+{
+    if (!m_library->renameCollection(id, name)) {
+        emit notice(QStringLiteral("Could not rename the collection: %1").arg(m_library->lastError()), true);
+        return false;
+    }
+    return true;
+}
+
+bool LibraryController::deleteCollection(qint64 id)
+{
+    const QString name = collectionName(id);
+    if (!m_library->deleteCollection(id)) {
+        emit notice(QStringLiteral("Could not delete the collection: %1").arg(m_library->lastError()), true);
+        return false;
+    }
+    m_collectionModels.erase(id);
+    if (m_collectionFilter == id)
+        setCollectionFilter(0);
+    QStringList sections = m_settings->stringListValue(Settings::HomeSections);
+    if (sections.removeAll(QStringLiteral("collection:%1").arg(id)) > 0)
+        writeHomeSections(sections);
+    emit notice(QStringLiteral("Collection \"%1\" deleted; its games stay in the library").arg(name), false);
+    return true;
+}
+
+bool LibraryController::setInCollection(qint64 gameId, qint64 collectionId, bool member)
+{
+    if (!m_library->setInCollection(collectionId, gameId, member)) {
+        emit notice(QStringLiteral("Could not change the collection: %1").arg(m_library->lastError()), true);
+        return false;
+    }
+    return true;
+}
+
+QVariantList LibraryController::collectionsOf(qint64 gameId) const
+{
+    QVariantList ids;
+    for (qint64 id : m_library->collectionsOf(gameId))
+        ids.append(double(id));
+    return ids;
+}
+
+GameListModel *LibraryController::collectionGames(qint64 collectionId)
+{
+    if (collectionName(collectionId).isEmpty())
+        return nullptr;
+    auto &slot = m_collectionModels[collectionId];
+    if (!slot) {
+        slot = std::make_unique<GameListModel>();
+        QQmlEngine::setObjectOwnership(slot.get(), QQmlEngine::CppOwnership);
+        setupModel(slot.get());
+        rebuildCollectionModel(collectionId, slot.get(), m_library->entries());
+    }
+    return slot.get();
+}
+
+bool LibraryController::setPinned(qint64 gameId, bool pinned)
+{
+    if (!m_library->setPinned(gameId, pinned)) {
+        emit notice(pinned ? QStringLiteral("Could not pin the game: %1").arg(m_library->lastError())
+                           : QStringLiteral("Could not unpin the game: %1").arg(m_library->lastError()),
+                    true);
+        return false;
+    }
+    return true;
+}
+
+// --- Home layout ---------------------------------------------------------------------------
+
+namespace {
+
+const QStringList &builtInSections()
+{
+    static const QStringList ids{QStringLiteral("statusCards"), QStringLiteral("quickResume"),
+                                 QStringLiteral("pinned"),      QStringLiteral("recent"),
+                                 QStringLiteral("favorites"),   QStringLiteral("recentlyAdded"),
+                                 QStringLiteral("systems")};
+    return ids;
+}
+
+QString builtInLabel(const QString &id)
+{
+    static const QHash<QString, QString> labels{
+        {QStringLiteral("statusCards"), QStringLiteral("Status cards")},
+        {QStringLiteral("quickResume"), QStringLiteral("Quick Resume")},
+        {QStringLiteral("pinned"), QStringLiteral("Pinned")},
+        {QStringLiteral("recent"), QStringLiteral("Continue playing")},
+        {QStringLiteral("favorites"), QStringLiteral("Favorites")},
+        {QStringLiteral("recentlyAdded"), QStringLiteral("Recently added")},
+        {QStringLiteral("systems"), QStringLiteral("Systems")},
+    };
+    return labels.value(id);
+}
+
+} // namespace
+
+QStringList LibraryController::homeSections() const
+{
+    QSet<qint64> existing;
+    for (const auto &c : m_library->collections())
+        existing.insert(c.id);
+    QStringList visible;
+    for (const QString &id : m_settings->stringListValue(Settings::HomeSections)) {
+        if (id.startsWith(QLatin1String("collection:")) && !existing.contains(id.mid(11).toLongLong()))
+            continue; // deleted collection
+        visible.append(id);
+    }
+    return visible;
+}
+
+QVariantList LibraryController::homeSectionRows() const
+{
+    const QStringList visible = homeSections();
+    QVariantList rows;
+    QStringList known = builtInSections();
+    const auto all = m_library->collections();
+    for (const auto &c : all)
+        known.append(QStringLiteral("collection:%1").arg(c.id));
+    auto label = [&](const QString &id) {
+        if (!id.startsWith(QLatin1String("collection:")))
+            return builtInLabel(id);
+        const qint64 cid = id.mid(11).toLongLong();
+        for (const auto &c : all) {
+            if (c.id == cid)
+                return QStringLiteral("Collection: %1").arg(c.name);
+        }
+        return id;
+    };
+    for (const QString &id : visible)
+        rows.append(QVariantMap{
+            {QStringLiteral("id"), id}, {QStringLiteral("label"), label(id)}, {QStringLiteral("visible"), true}});
+    for (const QString &id : std::as_const(known)) {
+        if (!visible.contains(id))
+            rows.append(QVariantMap{
+                {QStringLiteral("id"), id}, {QStringLiteral("label"), label(id)}, {QStringLiteral("visible"), false}});
+    }
+    return rows;
+}
+
+bool LibraryController::writeHomeSections(const QStringList &sections)
+{
+    QString error;
+    if (!m_settings->setValue(Settings::HomeSections, sections, &error)) {
+        emit notice(QStringLiteral("Could not change the Home layout: %1").arg(error), true);
+        return false;
+    }
+    m_settings->save();
+    return true;
+}
+
+bool LibraryController::setHomeSectionVisible(const QString &id, bool visible)
+{
+    QStringList sections = homeSections();
+    if (visible == sections.contains(id))
+        return true;
+    if (visible)
+        sections.append(id);
+    else
+        sections.removeAll(id);
+    return writeHomeSections(sections);
+}
+
+bool LibraryController::moveHomeSection(const QString &id, int delta)
+{
+    QStringList sections = homeSections();
+    const qsizetype from = sections.indexOf(id);
+    const qsizetype to = from + delta;
+    if (from < 0 || to < 0 || to >= sections.size())
+        return false;
+    sections.move(from, to);
+    return writeHomeSections(sections);
+}
+
+void LibraryController::resetHomeLayout()
+{
+    m_settings->setValue(Settings::HomeSections, Settings::spec(Settings::HomeSections)->defaultValue);
+    m_settings->save();
+}
+
+QString LibraryController::formatPlayTime(qint64 seconds)
+{
+    if (seconds < 60)
+        return seconds <= 0 ? QStringLiteral("Not played yet") : QStringLiteral("Less than a minute");
+    const qint64 minutes = seconds / 60;
+    if (minutes < 60)
+        return QStringLiteral("%1 min").arg(minutes);
+    return QStringLiteral("%1 h %2 min").arg(minutes / 60).arg(minutes % 60);
 }
 
 } // namespace nexora::ui

@@ -1,9 +1,10 @@
 import QtQuick
 import Nexora.Console
 
-// Home: quick actions, status cards (controllers, system health, updates), the rows
-// "Quick Resume" (games saved by suspending them; hidden when empty), "Continue playing",
-// "Favorites", "Recently added" and "Systems", and a getting-started
+// Home: quick actions, then the sections chosen in Settings › Home (library.homeSections, in
+// that order): status cards (controllers, system health, updates), the rows "Quick Resume"
+// (games saved by suspending them), "Pinned", "Continue playing", "Favorites", "Recently
+// added", "Systems" and any collection; and a getting-started
 // panel while the library is empty. Up/Down move between sections, Left/Right inside one;
 // Accept on a game opens its details.
 FocusScope {
@@ -83,14 +84,63 @@ FocusScope {
         function onContentChanged() { screen.systemsRevision += 1 }
     }
 
+    // --- Layout (Settings › Home) ----------------------------------------------------------
+    readonly property var layout: library.homeSections
+    readonly property var collectionSections: layout.filter(id => id.startsWith("collection:"))
+    function shows(id) { return layout.indexOf(id) >= 0 }
+    // |collections| is passed so the binding re-evaluates on renames.
+    function collectionTitle(id, collections) {
+        for (let i = 0; i < collections.length; ++i) {
+            if (collections[i].id === id)
+                return collections[i].name
+        }
+        return ""
+    }
+    function sectionItem(id) {
+        switch (id) {
+        case "statusCards": return statusCards
+        case "quickResume": return quickResumeRow
+        case "pinned": return pinnedRow
+        case "recent": return recentRow
+        case "favorites": return favoritesRow
+        case "recentlyAdded": return addedRow
+        case "systems": return systemsRow
+        }
+        for (let i = 0; i < collectionRows.count; ++i) {
+            const row = collectionRows.itemAt(i)
+            if (row && row.sectionId === id)
+                return row
+        }
+        return null
+    }
+    // Puts the section items into the column in the configured order (hidden ones last).
+    function applyLayout() {
+        const ordered = [hero, emptyPanel]
+        for (const id of layout) {
+            const item = sectionItem(id)
+            if (item && ordered.indexOf(item) < 0)
+                ordered.push(item)
+        }
+        for (let i = 0; i < column.children.length; ++i) {
+            const child = column.children[i]
+            if (ordered.indexOf(child) < 0)
+                ordered.push(child)
+        }
+        column.children = ordered
+    }
+    onLayoutChanged: Qt.callLater(applyLayout)
+
     // Focusable sections in visual order (rows without content are skipped).
     function sections() {
-        const list = [actions, statusCards]
-        if (quickResumeRow.hasSessions) list.push(quickResumeRow)
-        if (recentRow.hasGames) list.push(recentRow)
-        if (favoritesRow.hasGames) list.push(favoritesRow)
-        if (addedRow.hasGames) list.push(addedRow)
-        if (systemsRow.visible) list.push(systemsRow)
+        const list = [actions]
+        for (const id of layout) {
+            const item = sectionItem(id)
+            if (!item || !item.visible)
+                continue
+            if (item === statusCards || item === systemsRow
+                    || (item === quickResumeRow ? item.hasSessions : item.hasGames))
+                list.push(item)
+        }
         return list
     }
     function currentSection() {
@@ -110,12 +160,10 @@ FocusScope {
         return true
     }
     function focusDefault() {
-        if (quickResumeRow.hasSessions) {
-            quickResumeRow.focus = true
-        } else if (recentRow.hasGames) {
-            recentRow.focus = true
-        } else if (favoritesRow.hasGames) {
-            favoritesRow.focus = true
+        // The first section with games, in the configured order.
+        const list = sections().filter(s => s !== actions && s !== statusCards && s !== systemsRow)
+        if (list.length > 0) {
+            list[0].focus = true
         } else {
             (noDirectories ? settingsButton : noGames ? rescanButton : browseButton).focus = true
             actions.focus = true
@@ -131,7 +179,10 @@ FocusScope {
             flick.contentY = Math.min(bottom - flick.height, Math.max(0, flick.contentHeight - flick.height))
     }
 
-    Component.onCompleted: focusDefault()
+    Component.onCompleted: {
+        applyLayout()
+        focusDefault()
+    }
 
     Keys.onDownPressed: moveSection(1)
     Keys.onUpPressed: (event) => { event.accepted = moveSection(-1) }
@@ -153,7 +204,8 @@ FocusScope {
             spacing: Theme.space5
 
             Item {
-                width: parent.width
+                id: hero
+                width: column.width
                 height: Math.max(heroText.height, actions.height)
 
                 Column {
@@ -236,7 +288,8 @@ FocusScope {
             FocusScope {
                 id: statusCards
                 objectName: "statusCards"
-                width: parent.width
+                visible: screen.shows("statusCards")
+                width: column.width
                 height: cardRow.height
                 property int current: 0
                 onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
@@ -365,7 +418,7 @@ FocusScope {
                 id: emptyPanel
                 objectName: "homeEmptyState"
                 visible: screen.noGames
-                width: parent.width
+                width: column.width
                 height: emptyColumn.implicitHeight + Theme.space5 * 2
                 radius: Theme.radius
                 color: Theme.surface
@@ -417,7 +470,8 @@ FocusScope {
             QuickResumeRow {
                 id: quickResumeRow
                 objectName: "quickResumeRow"
-                width: parent.width
+                visible: hasSessions && screen.shows("quickResume")
+                width: column.width
                 sessions: screen.sessions
                 onRemoveRequested: (sessionId, title, savedAt) => {
                     confirmRemoveState.sessionId = sessionId
@@ -429,10 +483,24 @@ FocusScope {
             }
 
             GameRow {
+                id: pinnedRow
+                objectName: "pinnedRow"
+                visible: hasGames && screen.shows("pinned")
+                width: column.width
+                library: screen.library
+                model: screen.library.pinnedGames
+                title: "Pinned"
+                emptyText: ""
+                onActivated: (gameId) => screen.detailsRequested(gameId)
+                onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
+                onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
+            }
+
+            GameRow {
                 id: recentRow
                 objectName: "recentRow"
-                visible: !screen.noGames
-                width: parent.width
+                visible: !screen.noGames && screen.shows("recent")
+                width: column.width
                 library: screen.library
                 model: screen.library.recentGames
                 title: "Continue playing"
@@ -445,8 +513,8 @@ FocusScope {
             GameRow {
                 id: favoritesRow
                 objectName: "favoritesRow"
-                visible: !screen.noGames
-                width: parent.width
+                visible: !screen.noGames && screen.shows("favorites")
+                width: column.width
                 library: screen.library
                 model: screen.library.favoriteGames
                 title: "Favorites"
@@ -459,8 +527,8 @@ FocusScope {
             GameRow {
                 id: addedRow
                 objectName: "recentlyAddedRow"
-                visible: !screen.noGames
-                width: parent.width
+                visible: !screen.noGames && screen.shows("recentlyAdded")
+                width: column.width
                 library: screen.library
                 model: screen.library.recentlyAdded
                 title: "Recently added"
@@ -470,12 +538,33 @@ FocusScope {
                 onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
             }
 
+            // One row per collection shown on Home (Settings › Home).
+            Repeater {
+                id: collectionRows
+                model: screen.collectionSections
+                onItemAdded: Qt.callLater(screen.applyLayout)
+                delegate: GameRow {
+                    required property string modelData
+                    readonly property string sectionId: modelData
+                    readonly property real collectionId: Number(modelData.substring(11))
+                    objectName: "collectionRow_" + collectionId
+                    width: column.width
+                    library: screen.library
+                    model: screen.library.collectionGames(collectionId)
+                    title: screen.collectionTitle(collectionId, screen.library.collections)
+                    emptyText: "Add games to this collection from their options (Select / O)."
+                    onActivated: (gameId) => screen.detailsRequested(gameId)
+                    onOptionsRequested: (gameId) => screen.optionsRequested(gameId)
+                    onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
+                }
+            }
+
             // Installed systems; Accept opens Games filtered to that system.
             FocusScope {
                 id: systemsRow
                 objectName: "homeSystemsRow"
-                visible: screen.systemsWithGames.length > 0
-                width: parent.width
+                visible: screen.systemsWithGames.length > 0 && screen.shows("systems")
+                width: column.width
                 height: systemsHeading.height + Theme.space3 + systemsList.height
                 onActiveFocusChanged: if (activeFocus) screen.ensureVisible(this)
                 Text {
