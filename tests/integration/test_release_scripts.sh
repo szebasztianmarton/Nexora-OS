@@ -192,6 +192,31 @@ else
     failed "make-release does not run check-image-version.sh on rootfs.ext4"
 fi
 
+# --- check-line-endings ----------------------------------------------------------------
+# A copy of the script in a scratch git repository (it checks the tree it lives in).
+if command -v git >/dev/null 2>&1; then
+    eol_root="$tmp/eol-repo"
+    mkdir -p "$eol_root/scripts"
+    cp "$repo/scripts/check-line-endings.sh" "$eol_root/scripts/"
+    printf 'echo one\necho two\n' > "$eol_root/lf.sh"
+    git -C "$eol_root" init -q
+    git -C "$eol_root" config core.autocrlf false
+    git -C "$eol_root" add .
+    git -C "$eol_root" -c user.name=test -c user.email=test@example.invalid commit -qm lf
+    expect_ok "check-line-endings passes on LF files" sh "$eol_root/scripts/check-line-endings.sh"
+    printf 'echo one\r\necho two\r\n' > "$eol_root/lf.sh"
+    expect_fail "check-line-endings detects a CRLF file" sh "$eol_root/scripts/check-line-endings.sh"
+    printf 'echo one\necho two\r\n' > "$eol_root/lf.sh"
+    expect_fail "check-line-endings detects mixed line endings in the work tree" \
+        sh "$eol_root/scripts/check-line-endings.sh"
+    git -C "$eol_root" add lf.sh
+    git -C "$eol_root" -c user.name=test -c user.email=test@example.invalid commit -qm mixed
+    expect_fail "check-line-endings detects mixed line endings in the index" \
+        sh "$eol_root/scripts/check-line-endings.sh"
+else
+    echo "SKIP: git not found; check-line-endings not exercised"
+fi
+
 echo
 if [[ $failures -ne 0 ]]; then
     echo "test_release_scripts.sh: $failures check(s) failed" >&2

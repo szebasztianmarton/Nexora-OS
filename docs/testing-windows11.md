@@ -79,7 +79,7 @@ cd Nexora-OS
 git checkout main
 ```
 
-**Sorvégek:** ebben a repóban kapcsold ki a sorvég-konverziót: `git config core.autocrlf false` (a fenti `git checkout` előtt, vagy utána a fájlok újra-kicsekkolásával). Ha a rendszer- vagy globális gitconfig `core.autocrlf=true`-t állít (Git for Windows alapértelmezése, ha a repót Windowsból is használod), a munkafa CRLF sorvégű fájlokat kaphat; a `.gitattributes` életbe lépése előtt kicsekkolt fájlok így CRLF-esek maradtak, és ez eltörte a Buildroot-buildet. Ellenőrzés: `scripts/check-line-endings.sh` (CTest-ként: `check_line_endings`), amely hibát jelez, ha a `git ls-files --eol` bármely fájlra `i/crlf`-et vagy `w/crlf`-et mutat.
+**Sorvégek:** ebben a repóban kapcsold ki a sorvég-konverziót: `git config core.autocrlf false` (a fenti `git checkout` előtt, vagy utána a fájlok újra-kicsekkolásával). Ha a rendszer- vagy globális gitconfig `core.autocrlf=true`-t állít (Git for Windows alapértelmezése, ha a repót Windowsból is használod), a munkafa CRLF sorvégű fájlokat kaphat; a `.gitattributes` életbe lépése előtt kicsekkolt fájlok így CRLF-esek maradtak, és ez eltörte a Buildroot-buildet. Ellenőrzés: `scripts/check-line-endings.sh` (CTest-ként: `check_line_endings`), amely hibát jelez, ha a `git ls-files --eol` bármely fájlra `i/crlf`-et, `w/crlf`-et, `i/mixed`-et vagy `w/mixed`-et (vegyes sorvégeket) mutat.
 
 A fájlok Windowsból is elérhetők a Fájlkezelőben: `\\wsl$\Ubuntu-24.04\home\<felhasználó>\Nexora-OS`. VS Code-dal: a repó mappájában `code .` (a *WSL* bővítménnyel).
 
