@@ -666,6 +666,29 @@ private slots:
         QCOMPARE(input.navigator()->deadzone(), 0.4); // ...and so did the live navigator state
     }
 
+    // Settings::valueChanged listeners (library directories, default profiles, notification
+    // options) must see the restored values too: a restore that only emits reloaded()
+    // leaves the LibraryController scanning the pre-restore directories.
+    void restoreBackupNotifiesSettingsListeners()
+    {
+        ui::UiContext ctx(options());
+        ctx.start();
+        QVERIFY(ctx.library()->addDirectory(gamesDir()));
+        waitForScan(ctx);
+        QCOMPARE(ctx.library()->games()->rowCount(), 2);
+
+        const QString backupPath = ctx.system()->createBackup(false);
+        QVERIFY2(!backupPath.isEmpty(), qPrintable(ctx.system()->lastError()));
+
+        QVERIFY(ctx.library()->removeDirectory(gamesDir()));
+        QVERIFY(ctx.library()->directories().isEmpty());
+
+        QSignalSpy directories(ctx.library(), &ui::LibraryController::directoriesChanged);
+        QVERIFY2(ctx.system()->restoreBackup(backupPath), qPrintable(ctx.system()->lastError()));
+        QCOMPARE(ctx.library()->directories(), QStringList{gamesDir()});
+        QCOMPARE(directories.size(), 1);
+    }
+
     // Exercises LibraryController::rebuildSystems() (the real production path, with a real
     // GameLibrary, system catalog and emulator set) rather than SystemListModel in
     // isolation: the "Other" row (unrecognised systemId) must appear exactly when there is

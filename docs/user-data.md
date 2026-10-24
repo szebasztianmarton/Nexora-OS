@@ -146,7 +146,7 @@ Restore is all or nothing:
 1. The manifest is read and **every** file is verified first: each path must be relative, must not contain `..`, must not be a symlink, must map to a known location, and its SHA-256 must match; a file in the backup that the manifest does not list is also a reason to refuse. Any problem → nothing is changed.
 2. The UI cancels and waits for a running scan and closes the library database.
 3. Each current file is renamed to `<file>.pre-restore-<timestamp>`, then the backup copy is put in place. If any step fails, every file already swapped in this restore is rolled back to its previous content.
-4. The database is reopened, settings are reloaded and re-applied (volume, mute, mapping, dead zone, log level).
+4. The database is reopened, settings are reloaded and re-applied (volume, mute, mapping, dead zone, log level), and every setting whose value the restore changed is announced to its listeners (library directories and scan options, default profiles, notification options, display mode).
 
 Tested: `tst_backupservice` (hash verification, tampered file refused with nothing changed, `../../etc/passwd` entry refused, saves only on request, `.pre-restore-*` left behind, listing order, multi-file rollback) and `tst_uicontext` (round trip through the controller, settings re-applied).
 
