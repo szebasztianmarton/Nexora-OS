@@ -124,6 +124,19 @@ Item {
             compare(topLeft.y, 0)
         }
 
+        // One game can have a session per emulator (newest first): the dialog offers the one
+        // Play would resume, the effective emulator's, and nothing when only another one has one.
+        function test_gameOptionsMatchesTheEffectiveEmulatorsSession() {
+            const list = [{ gameId: 7, emulatorId: "b", savedAt: "new" },
+                          { gameId: 8, emulatorId: "a", savedAt: "other game" },
+                          { gameId: 7, emulatorId: "a", savedAt: "old" },
+                          { gameId: 7, emulatorId: "a", savedAt: "older" }]
+            compare(options.quickResumeSession(list, 7, "a").savedAt, "old")
+            compare(options.quickResumeSession(list, 7, "b").savedAt, "new")
+            compare(options.quickResumeSession(list, 7, "c"), null)
+            compare(options.quickResumeSession([], 7, "a"), null)
+        }
+
         function test_gameOptionsListFitsThePanel() {
             Theme.userScale = 2.25
             const list = openOptionsWithRows(10)

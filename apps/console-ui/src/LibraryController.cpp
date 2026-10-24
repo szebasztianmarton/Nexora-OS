@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
+#include <QSignalBlocker>
 
 #include <algorithm>
 #include <memory>
@@ -338,12 +339,7 @@ bool LibraryController::addDirectory(const QString &path)
         return false;
     }
     dirs.append(clean);
-    QString error;
-    if (!m_settings->setValue(Settings::LibraryDirectories, dirs, &error)) {
-        emit notice(error, true);
-        return false;
-    }
-    if (!saveDirectories(previous))
+    if (!saveDirectories(previous, dirs))
         return false;
     emit notice(QStringLiteral("Added %1").arg(clean), false);
     return true;
@@ -355,25 +351,34 @@ bool LibraryController::removeDirectory(const QString &path)
     QStringList dirs = previous;
     if (!dirs.removeOne(path))
         return false;
-    QString error;
-    if (!m_settings->setValue(Settings::LibraryDirectories, dirs, &error)) {
-        emit notice(error, true);
-        return false;
-    }
-    if (!saveDirectories(previous))
+    if (!saveDirectories(previous, dirs))
         return false;
     emit notice(QStringLiteral("Removed %1").arg(path), false);
     return true;
 }
 
-bool LibraryController::saveDirectories(const QStringList &previous)
+bool LibraryController::saveDirectories(const QStringList &previous, const QStringList &dirs)
 {
-    if (m_settings->save())
-        return true;
-    // Not on disk means not kept: the running library must not scan what a restart forgets.
-    m_settings->setValue(Settings::LibraryDirectories, previous);
-    emit notice(QStringLiteral("Could not save %1").arg(m_settings->paths().userFile), true);
-    return false;
+    // Not on disk means not kept: the running library must not scan what a restart forgets,
+    // so nothing hears about the change (no scan starts) until it is saved.
+    bool saved = false;
+    {
+        const QSignalBlocker blocker(m_settings);
+        QString error;
+        if (!m_settings->setValue(Settings::LibraryDirectories, dirs, &error)) {
+            emit notice(error, true);
+            return false;
+        }
+        saved = m_settings->save();
+        if (!saved)
+            m_settings->setValue(Settings::LibraryDirectories, previous);
+    }
+    if (!saved) {
+        emit notice(QStringLiteral("Could not save %1").arg(m_settings->paths().userFile), true);
+        return false;
+    }
+    emit m_settings->valueChanged(Settings::LibraryDirectories, m_settings->value(Settings::LibraryDirectories));
+    return true;
 }
 
 int LibraryController::purgeMissing()

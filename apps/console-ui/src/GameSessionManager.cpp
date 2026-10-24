@@ -324,6 +324,7 @@ QVariantList GameSessionManager::suspended() const
             {QStringLiteral("id"), r.id},
             {QStringLiteral("gameId"), double(r.gameId)},
             {QStringLiteral("title"), r.gameTitle},
+            {QStringLiteral("emulatorId"), r.emulatorId},
             {QStringLiteral("emulatorName"), config ? config->name : r.emulatorId},
             {QStringLiteral("savedAt"), QLocale().toString(latest.savedAt.toLocalTime(), QLocale::ShortFormat)},
             {QStringLiteral("bytes"),

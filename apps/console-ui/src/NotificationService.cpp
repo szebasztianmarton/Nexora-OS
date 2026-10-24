@@ -271,7 +271,8 @@ QVariantMap NotificationService::toMap(const Notification &n)
 
 void NotificationService::persist() const
 {
-    if (m_historyFile.isEmpty())
+    // Before loadHistory() the file still holds the previous run: writing now would drop it.
+    if (m_historyFile.isEmpty() || !m_historyLoaded)
         return;
     QJsonArray items;
     for (const Notification &n : m_history) {
@@ -296,8 +297,17 @@ void NotificationService::persist() const
 
 void NotificationService::loadHistory()
 {
-    if (m_historyFile.isEmpty() || !QFileInfo::exists(m_historyFile))
+    m_historyLoaded = true;
+    // Warnings posted before the load are written now, but no file is created for nothing.
+    const auto persistEarlier = [this] {
+        if (std::any_of(m_history.cbegin(), m_history.cend(),
+                        [](const Notification &n) { return n.severity != Severity::Info; }))
+            persist();
+    };
+    if (m_historyFile.isEmpty() || !QFileInfo::exists(m_historyFile)) {
+        persistEarlier();
         return;
+    }
     QString error;
     const auto bytes = shared::readFileLimited(m_historyFile, MaxHistoryFileSize, &error);
     const QJsonDocument doc = bytes ? QJsonDocument::fromJson(*bytes) : QJsonDocument();
@@ -305,6 +315,7 @@ void NotificationService::loadHistory()
     if (!bytes || !doc.isObject() || root.value(QStringLiteral("version")).toInt() != HistoryFormatVersion) {
         qCWarning(lcUi).noquote() << "Notification history unreadable; moved aside:"
                                   << shared::moveAside(m_historyFile);
+        persistEarlier();
         return;
     }
     QList<Notification> loaded;
@@ -334,6 +345,7 @@ void NotificationService::loadHistory()
     while (m_history.size() > MaxHistory)
         m_history.removeLast();
     emit historyChanged();
+    persist(); // the file now holds the merged list
 }
 
 } // namespace nexora::ui

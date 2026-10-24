@@ -146,8 +146,9 @@ private:
     void rebuildEmulatorInfo();
     bool launchEntry(qint64 gameId, const QString &profileId, bool applyDefaultProfile);
     void rebuildSystems();
-    // Saves a directory change; on failure restores |previous| and tells the user.
-    bool saveDirectories(const QStringList &previous);
+    // Sets and saves |dirs|; on failure restores |previous| and tells the user. Listeners hear
+    // about the change only once it is on disk.
+    bool saveDirectories(const QStringList &previous, const QStringList &dirs);
     // Why an edit of game |id| failed, for the notice shown to the user.
     QString failureReason(qint64 id) const;
     // The emulator the entry would actually launch with: its override if still a
