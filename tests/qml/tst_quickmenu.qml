@@ -286,17 +286,18 @@ Item {
             })
         }
 
-        // Stop is a real button for assistive technology, and keeps its size on focus when
-        // motion is reduced.
+        // Stop is a real button for assistive technology. It is an NxButton, which never lifts
+        // on focus: it keeps its size even with motion allowed (a reintroduced lift fails here).
         function test_runningOverlayStopButton() {
             const stop = root.findByName(running, "stopButton")
             verify(stop !== null)
             compare(stop.Accessible.role, Accessible.Button)
             verify(stop.Accessible.name.indexOf("Stop") >= 0)
-            Theme.reducedMotion = true
+            Theme.reducedMotion = false
             running.visible = true
             running.forceActiveFocus()
             tryVerify(function() { return stop.activeFocus })
+            wait(Theme.animSlow) // a lift animation would have finished by now
             compare(stop.scale, 1.0)
             // High contrast: the yellow focus ring, not the danger red.
             Theme.highContrast = true
