@@ -1846,9 +1846,9 @@ private slots:
                 QCOMPARE(sceneRect(tabBar), QRectF(0, top, size.width(), tabBar->height()));
                 if (hints)
                     QCOMPARE(sceneRect(hintBar), QRectF(0, bottom, size.width(), hintBar->height()));
-                for (const char *page : {"homeScreen", "gamesScreen", "systemsScreen", "favoritesScreen",
-                                         "recentScreen", "emulatorsScreen", "settingsScreen", "systemScreen",
-                                         "gameDetails"})
+                for (const char *page :
+                     {"homeScreen", "gamesScreen", "systemsScreen", "favoritesScreen", "recentScreen",
+                      "emulatorsScreen", "settingsScreen", "systemScreen", "gameDetails"})
                     QVERIFY2(sceneRect(find(ui, page)) == QRectF(0, pagesTop, size.width(), bottom - pagesTop),
                              qPrintable(row + u' ' + QString::fromLatin1(page)));
                 for (const char *overlay : {"runningOverlay", "tutorialOverlay", "gameOptions", "updatePanel"})
@@ -2056,11 +2056,11 @@ private slots:
         for (int i = 0; i < 100 && !resetRow->hasActiveFocus(); ++i)
             key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(resetRow->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
-        QTRY_VERIFY2_WITH_TIMEOUT(sceneRect(resetRow).bottom() <= hintTop,
-                                  qPrintable(QStringLiteral("row bottom %1 > hint bar top %2")
-                                                 .arg(sceneRect(resetRow).bottom())
-                                                 .arg(hintTop)),
-                                  Timeout);
+        QTRY_VERIFY2_WITH_TIMEOUT(
+            sceneRect(resetRow).bottom() <= hintTop,
+            qPrintable(
+                QStringLiteral("row bottom %1 > hint bar top %2").arg(sceneRect(resetRow).bottom()).arg(hintTop)),
+            Timeout);
         shot(ui, qPrintable(QStringLiteral("glass-chrome-%1-settings").arg(windowSize.height())));
 
         CHECK_NO_WARNINGS();
