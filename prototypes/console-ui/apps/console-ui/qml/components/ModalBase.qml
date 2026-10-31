@@ -23,6 +23,9 @@ FocusScope {
     z: 100
     focus: true
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: title
+
     function close() {
         if (_closing) return
         _closing = true
