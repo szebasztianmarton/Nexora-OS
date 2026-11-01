@@ -24,6 +24,10 @@ FocusScope {
     // Set by Main.qml: the window's scene, blurred behind the panel (glass blur only).
     property Item glassBackdrop: null
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Software update"
+    Accessible.description: "Software update panel"
+
     readonly property string updateState: updates.state
     readonly property bool busy: updateState === "checking" || updateState === "verifying" || updateState === "installing"
     // Back / Close work except while a bundle is checked or installed (verifying can be cancelled).

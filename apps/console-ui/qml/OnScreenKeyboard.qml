@@ -29,6 +29,10 @@ FocusScope {
     property real chromeTop: 0
     property real chromeBottom: 0
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Keyboard"
+    Accessible.description: "On-screen keyboard"
+
     readonly property var rows: [
         ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
         ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],

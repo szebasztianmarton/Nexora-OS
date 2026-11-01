@@ -983,6 +983,7 @@ FocusScope {
                 onAccepted: confirmPowerOff.open()
             }
             Text {
+                objectName: "powerUnsupportedText"
                 textFormat: Text.PlainText
                 visible: !screen.system.powerSupported
                 width: parent.width
@@ -993,6 +994,7 @@ FocusScope {
                 font.pixelSize: Theme.fontSmall
             }
             Text {
+                objectName: "systemLastErrorText"
                 textFormat: Text.PlainText
                 visible: screen.system.lastError.length > 0
                 width: parent.width
