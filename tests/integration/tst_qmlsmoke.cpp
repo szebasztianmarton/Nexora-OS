@@ -2128,10 +2128,21 @@ private slots:
         for (int i = 0; i < 100 && !resetRow->hasActiveFocus(); ++i)
             key(ui, Qt::Key_Down);
         QTRY_VERIFY2_WITH_TIMEOUT(resetRow->hasActiveFocus(), qPrintable(focusName(ui)), Timeout);
+
+        QQuickItem *lastItem = resetRow;
+        if (auto *poRow = find(ui, "powerOffRow"); poRow && poRow->isVisible()) {
+            lastItem = poRow;
+        } else if (auto *puText = find(ui, "powerUnsupportedText"); puText && puText->isVisible()) {
+            lastItem = puText;
+        }
+        if (auto *errText = find(ui, "systemLastErrorText"); errText && errText->isVisible()) {
+            lastItem = errText;
+        }
+
         QTRY_VERIFY2_WITH_TIMEOUT(
-            sceneRect(resetRow).bottom() <= hintTop,
+            sceneRect(lastItem).bottom() <= hintTop,
             qPrintable(
-                QStringLiteral("row bottom %1 > hint bar top %2").arg(sceneRect(resetRow).bottom()).arg(hintTop)),
+                QStringLiteral("row bottom %1 > hint bar top %2").arg(sceneRect(lastItem).bottom()).arg(hintTop)),
             Timeout);
         shot(ui, qPrintable(QStringLiteral("glass-chrome-%1-settings").arg(windowSize.height())));
 
