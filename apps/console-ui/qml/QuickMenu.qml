@@ -22,6 +22,10 @@ FocusScope {
     readonly property bool sessionActive: sessions !== null && sessions.active.id !== undefined
     readonly property bool sessionWorking: sessions !== null && sessions.working
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Quick menu"
+    Accessible.description: "In-game options"
+
     property string page: "main" // main, display, info
     readonly property bool confirmOpen: confirmExit.visible
     readonly property var menuHints: confirmExit.visible

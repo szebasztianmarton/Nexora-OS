@@ -15,6 +15,10 @@ FocusScope {
     // open the Settings tab (on finish while no library folder exists yet).
     signal done(bool openSettings)
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Tutorial"
+    Accessible.description: "Welcome tutorial"
+
     readonly property bool noDirectories: library.directories.length === 0
     readonly property var steps: [
         { glyph: "✦", title: "Welcome to Nexora",

@@ -30,6 +30,10 @@ FocusScope {
     property real chromeTop: 0
     property real chromeBottom: 0
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Edit game details"
+    Accessible.description: "Edit game details"
+
     readonly property bool keyboardOpen: keyboard.visible
     readonly property var hints: keyboard.visible ? keyboard.hints
         : confirmDiscard.visible ? confirmDiscard.hints
