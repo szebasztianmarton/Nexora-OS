@@ -46,9 +46,9 @@ private:
     {
         ScanOptions o;
         o.roots = {root};
-        o.extensionMap
-            = {{QStringLiteral(".iso"), {QStringLiteral("pcsx2"), QStringLiteral("xenia"), QStringLiteral("generic")}},
-               {QStringLiteral(".xex"), {QStringLiteral("xenia")}}};
+        o.extensionMap = {{QStringLiteral(".iso"), {QStringLiteral("pcsx2"), QStringLiteral("xenia"),
+                                                     QStringLiteral("generic")}},
+                          {QStringLiteral(".xex"), {QStringLiteral("xenia")}}};
         o.extensionSystems = {{QStringLiteral(".iso"), {QStringLiteral("ps2"), QStringLiteral("xbox360")}},
                               {QStringLiteral(".xex"), {QStringLiteral("xbox360")}}};
         o.emulatorSystems = {{QStringLiteral("pcsx2"), {QStringLiteral("ps2")}},

@@ -19,9 +19,7 @@ constexpr qint64 PartitionBases[] = {0x0, 0x2080000, 0xFD90000};
 class FileDescriptor
 {
 public:
-    explicit FileDescriptor(int fd)
-        : m_fd(fd)
-    { }
+    explicit FileDescriptor(int fd) : m_fd(fd) {}
     ~FileDescriptor()
     {
         if (m_fd >= 0)

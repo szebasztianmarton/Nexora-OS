@@ -1460,9 +1460,8 @@ private slots:
         QTRY_VERIFY(emptyTitle->isVisible());
         QCOMPARE(emptyTitle->property("text").toString(), QStringLiteral("No games in “Empty”"));
         auto *emptyAction = find(ui, "gamesEmptyAction");
-        QTest::mouseClick(
-            ui.window, Qt::LeftButton, {},
-            emptyAction->mapToScene(QPointF(emptyAction->width() / 2, emptyAction->height() / 2)).toPoint());
+        QTest::mouseClick(ui.window, Qt::LeftButton, {},
+                          emptyAction->mapToScene(QPointF(emptyAction->width() / 2, emptyAction->height() / 2)).toPoint());
         QTRY_COMPARE(library->collectionFilter(), qint64(0));
         QTRY_COMPARE(grid->property("count").toInt(), 2);
         QVERIFY(library->deleteCollection(empty));
@@ -2531,8 +2530,8 @@ private slots:
                 copy += control.toMap().value(QStringLiteral("button")).toString() + u' '
                     + control.toMap().value(QStringLiteral("action")).toString() + u'\n';
         }
-        for (const char *stale :
-             {"Diagnostics", "five tabs", "blue outline", "Library folders", "Start / F1", "Select a game to start it"})
+        for (const char *stale : {"Diagnostics", "five tabs", "blue outline", "Library folders", "Start / F1",
+                                  "Select a game to start it"})
             QVERIFY2(!copy.contains(QString::fromUtf8(stale)), stale);
         QVERIFY(copy.contains(QStringLiteral("eight tabs")));
 

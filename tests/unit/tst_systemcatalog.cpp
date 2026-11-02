@@ -26,9 +26,8 @@ private slots:
     {
         const SystemCatalog catalog = SystemCatalog::builtIn();
         QVERIFY2(catalog.systems().size() >= 20, qPrintable(QString::number(catalog.systems().size())));
-        for (const char *id :
-             {"nes", "snes", "n64", "gb",       "gbc", "gba",     "nds", "genesis",   "sms",    "gamegear",
-              "psx", "ps2",  "psp", "gamecube", "wii", "xbox360", "pce", "atari2600", "arcade", "dos"})
+        for (const char *id : {"nes", "snes", "n64", "gb", "gbc", "gba", "nds", "genesis", "sms", "gamegear", "psx",
+                               "ps2", "psp", "gamecube", "wii", "xbox360", "pce", "atari2600", "arcade", "dos"})
             QVERIFY2(catalog.find(QLatin1String(id)), id);
         QVERIFY(catalog.find(QStringLiteral("nope")) == nullptr);
         QCOMPARE(catalog.find(QStringLiteral("snes"))->shortName, QStringLiteral("SNES"));

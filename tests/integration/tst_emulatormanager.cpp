@@ -304,8 +304,7 @@ private slots:
         QTest::addColumn<bool>("ignoreSigterm");
         QTest::addColumn<QString>("footer");
         QTest::newRow("exits on SIGTERM") << false << QStringLiteral("was stopped");
-        QTest::newRow("ignores SIGTERM") << true
-                                         << QStringLiteral("did not stop in time and was terminated forcefully");
+        QTest::newRow("ignores SIGTERM") << true << QStringLiteral("did not stop in time and was terminated forcefully");
     }
 
     void shutdownTerminatesBeforeKilling()
