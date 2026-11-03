@@ -636,6 +636,8 @@ FocusScope {
                     PanelTitle { text: "Performance" }
                     Row {
                         spacing: Theme.space3
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: "CPU: " + (bar.gameBar.cpuPercent >= 0 ? bar.gameBar.cpuPercent + "%" : "Unavailable")
                         Text {
                             textFormat: Text.PlainText
                             id: cpuText
@@ -866,6 +868,8 @@ FocusScope {
         property string detail
         width: parent ? parent.width : 0
         spacing: Theme.space2
+        Accessible.role: Accessible.StaticText
+        Accessible.name: meter.label + ": " + (meter.percent >= 0 ? meter.percent + "%" : "Unavailable") + (meter.detail ? ", " + meter.detail : "")
         Row {
             width: parent.width
             Text {
