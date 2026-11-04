@@ -306,7 +306,7 @@ FocusScope {
         id: flick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.height + Theme.spacing * 4 + screen.chromeTop + screen.chromeBottom
+        contentHeight: column.height + Theme.spacing * 4.5 + screen.chromeTop + screen.chromeBottom
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Behavior on contentY { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic } }
