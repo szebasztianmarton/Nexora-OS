@@ -636,6 +636,10 @@ FocusScope {
                     PanelTitle { text: "Performance" }
                     Row {
                         spacing: Theme.space3
+
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: "CPU: " + cpuText.text
+
                         Text {
                             textFormat: Text.PlainText
                             id: cpuText
@@ -864,6 +868,10 @@ FocusScope {
         property string label
         property int percent: -1
         property string detail
+
+        Accessible.role: Accessible.StaticText
+        Accessible.name: label + ": " + detail
+
         width: parent ? parent.width : 0
         spacing: Theme.space2
         Row {
