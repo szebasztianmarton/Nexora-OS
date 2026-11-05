@@ -10,3 +10,6 @@
 ## 2024-10-13 - [Missing Accessible role and name for grouped status items in QML GameBar]
 **Learning:** Some custom UI groupings like the battery status in GameBar.qml display visual icons alongside text but lack grouping `Accessible` properties. Without `Accessible.role` and `Accessible.name` applied to the wrapper, screen readers skip or incorrectly read the information.
 **Action:** When creating custom grouped status indicators (like an icon plus a percentage text) in QML, attach `Accessible.role: Accessible.StaticText` and a dynamically bound `Accessible.name` to the wrapper (e.g., Row or Item) so screen readers read the aggregate status as a single, coherent element.
+## 2024-11-05 - Missing Accessible properties for TutorialOverlay
+**Learning:** Floating dialog panels, such as `TutorialOverlay.qml`, lack `Accessible` properties natively, meaning screen readers won't identify them as dialogs or read their title/description.
+**Action:** Always ensure custom floating dialog panels are given `Accessible.role: Accessible.Dialog` along with bound `Accessible.name` and `Accessible.description` properties.
