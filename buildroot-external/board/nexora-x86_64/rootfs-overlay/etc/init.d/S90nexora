@@ -140,7 +140,7 @@ stop() {
 	# without its supervisor.
 	tries=0
 	while [ -n "$(start-stop-daemon --stop --test --quiet --pidfile "$PIDFILE")" ] || running; do
-    # Wait until the supervisor process finishes.
+	# Wait until the supervisor process finishes.
 		if [ "$tries" -ge $((NEXORA_STOP_TIMEOUT * 10)) ]; then
 			start-stop-daemon --stop --quiet --signal KILL --exec "$APP"
 			start-stop-daemon --stop --quiet --signal KILL --pidfile "$PIDFILE"
