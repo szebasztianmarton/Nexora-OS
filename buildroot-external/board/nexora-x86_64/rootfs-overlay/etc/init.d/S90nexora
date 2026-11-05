@@ -139,7 +139,8 @@ stop() {
 	# shutdown; then KILL the UI as well, so that "stop" never leaves it running
 	# without its supervisor.
 	tries=0
-	while running; do
+	while [ -n "$(start-stop-daemon --stop --test --quiet --pidfile "$PIDFILE")" ] || running; do
+    # Wait until the supervisor process finishes.
 		if [ "$tries" -ge $((NEXORA_STOP_TIMEOUT * 10)) ]; then
 			start-stop-daemon --stop --quiet --signal KILL --exec "$APP"
 			start-stop-daemon --stop --quiet --signal KILL --pidfile "$PIDFILE"
