@@ -62,6 +62,10 @@ FocusScope {
     readonly property var hints: [{ button: "← →", action: "Choose" }, { button: "A / Enter", action: "Select" },
                                   { button: "B / Esc", action: "Previous step" }]
 
+    Accessible.role: Accessible.Dialog
+    Accessible.name: tutorial.steps[tutorial.step].title
+    Accessible.description: tutorial.steps[tutorial.step].body
+
     // Starts again from the first step with the main button focused.
     function restart() {
         step = 0

@@ -245,7 +245,8 @@ private slots:
     {
         QTemporaryDir dir;
         const QString user = dir.filePath(QStringLiteral("settings.json"));
-        write(user, wrap(R"({"audio.volume": 30, "ui.showHints": false, "library.directories": ["/games/a"]})").toUtf8());
+        write(user,
+              wrap(R"({"audio.volume": 30, "ui.showHints": false, "library.directories": ["/games/a"]})").toUtf8());
         Settings s({{}, user});
         QVERIFY(s.load());
         QCOMPARE(s.intValue(Settings::AudioVolume), 30);
