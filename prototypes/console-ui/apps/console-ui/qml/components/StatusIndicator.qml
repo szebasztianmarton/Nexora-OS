@@ -19,6 +19,9 @@ Rectangle {
         }
     }
 
+    Accessible.role: Accessible.StaticText
+    Accessible.name: text
+
     implicitHeight: Dimensions.s(34)
     implicitWidth: row.implicitWidth + Dimensions.spacingMd * 2
     radius: height / 2
