@@ -92,8 +92,8 @@ run_stop ""
 [ -f "$STATE/ui" ] && fail "UI still running after stop (hung session)"
 [ -f "$STATE/supervisor" ] && fail "supervisor still running after stop (hung session)"
 ticks=$(cat "$STATE/ticks")
-if [ "$ticks" -lt 300 ]; then
-    fail "stop gave up after ${ticks} ticks of 0.1 s, before 30 s"
+if [ "$ticks" -lt 350 ]; then
+    fail "stop gave up after ${ticks} ticks of 0.1 s, before 35 s"
 fi
 ui_kill=$(grep -n 'signal=KILL .*exec=/usr/bin/nexora-console-ui' "$STATE/calls" | head -n 1 | cut -d: -f1)
 sup_kill=$(grep -n 'signal=KILL pidfile=/var/run/nexora.pid' "$STATE/calls" | head -n 1 | cut -d: -f1)
