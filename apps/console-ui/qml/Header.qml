@@ -34,6 +34,9 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.space2
 
+        Accessible.role: Accessible.StaticText
+        Accessible.name: "NEXORA OS"
+
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: Math.round(28 * Theme.scale)
@@ -78,6 +81,10 @@ Rectangle {
         property bool pulsing: false
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         radius: height / 2
+
+        Accessible.role: Accessible.StaticText
+        Accessible.name: label
+
         // 32 px at 100 %: grows with the scale so the text never overflows the chip.
         height: Math.round(32 * Theme.scale)
         width: Math.min(chipRow.implicitWidth + Math.round(28 * Theme.scale), Math.round(420 * Theme.scale))
@@ -147,6 +154,10 @@ Rectangle {
 
         Column {
             anchors.verticalCenter: parent.verticalCenter
+
+            Accessible.role: Accessible.Clock
+            Accessible.name: clock.text + ", " + date.text
+
             Text {
                 textFormat: Text.PlainText
                 id: clock
