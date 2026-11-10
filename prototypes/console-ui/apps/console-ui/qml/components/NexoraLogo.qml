@@ -5,6 +5,8 @@ import QtQuick.Shapes
 // wordmark. Replace the mark with an official asset when one exists.
 Row {
     id: logo
+    Accessible.role: Accessible.StaticText
+    Accessible.name: "Nexora OS"
     property bool showWordmark: true
     property real markSize: Dimensions.s(40)
     spacing: Dimensions.spacingSm

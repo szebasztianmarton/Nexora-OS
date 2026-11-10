@@ -70,7 +70,7 @@ SettingsCategoryPage {
     }
 
     SettingsSection { title: qsTr("Reset") }
-    SettingsActionRow {
+    SettingsActionRow { objectName: "resetRow"
         label: qsTr("Run first-time setup again")
         description: qsTr("Shows the welcome and setup steps again. Your folders and settings are kept.")
         buttonText: qsTr("Start setup")
