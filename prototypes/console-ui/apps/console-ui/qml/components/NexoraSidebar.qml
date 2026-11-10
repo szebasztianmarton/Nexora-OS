@@ -101,6 +101,8 @@ FocusScope {
         spacing: Dimensions.spacingSm
 
         Row {
+            Accessible.role: Accessible.StaticText
+            Accessible.name: !Controllers.available ? qsTr("Controller support off") : Controllers.count > 0 ? qsTr("%n controller(s)", "", Controllers.count) : qsTr("No controller")
             spacing: Dimensions.spacingSm
             anchors.horizontalCenter: sidebar.compact ? parent.horizontalCenter : undefined
             Icon {
@@ -122,6 +124,8 @@ FocusScope {
         }
         Text {
             id: clock
+            Accessible.role: Accessible.Clock
+            Accessible.name: text
             anchors.horizontalCenter: sidebar.compact ? parent.horizontalCenter : undefined
             font.family: Typography.family
             font.pixelSize: sidebar.compact ? Typography.caption : Typography.secondary
