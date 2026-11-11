@@ -117,6 +117,9 @@ GridView {
 
             Accessible.role: Accessible.Button
             Accessible.name: cell.title
+            Accessible.description: (!cell.present ? "file missing, " : "") + (cell.available ? cell.emulatorName : cell.unavailableReason)
+                                    + (cell.favorite ? ", favorite" : "")
+            Accessible.onPressAction: { grid.currentIndex = cell.index; grid.forceActiveFocus() }
 
             Rectangle {
                 id: thumb

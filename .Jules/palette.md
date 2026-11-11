@@ -10,3 +10,6 @@
 ## 2024-10-13 - [Missing Accessible role and name for grouped status items in QML GameBar]
 **Learning:** Some custom UI groupings like the battery status in GameBar.qml display visual icons alongside text but lack grouping `Accessible` properties. Without `Accessible.role` and `Accessible.name` applied to the wrapper, screen readers skip or incorrectly read the information.
 **Action:** When creating custom grouped status indicators (like an icon plus a percentage text) in QML, attach `Accessible.role: Accessible.StaticText` and a dynamically bound `Accessible.name` to the wrapper (e.g., Row or Item) so screen readers read the aggregate status as a single, coherent element.
+## 2024-11-11 - QML List Mode Accessibility
+**Learning:** In QML grids and lists that switch to a compact list mode delegate when space is constrained, you need to ensure the compact delegate replicates the accessibility properties (`Accessible.description`, `Accessible.onPressAction`) of the main card delegate so screen readers have consistent context.
+**Action:** Always replicate `Accessible` properties when providing alternate compact view delegates for identical model data.
